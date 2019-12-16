@@ -1,9 +1,20 @@
 from glumpy import app, gl, glm, gloo
 from glumpy.app import configuration
 from glumpy.app.window import Window
+from functools import wraps # This convenience func preserves name and docstring
+
 from IPython import embed
 
-
+def add_method(cls):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            return func(*args, **kwargs)
+        setattr(cls, func.__name__, wrapper)
+        # Note we are not binding func, but wrapper which accepts self but does exactly the same as func
+        return func # returning func means func can still be used normally
+    return decorator
+#%
 class stiObj():
     def __init__(self, *args, **kwargs) :
         config = configuration.get_default()
@@ -13,9 +24,12 @@ class stiObj():
             kwargs['backend'] = "qt5"
         backendname = kwargs.pop('backend')
         self._backend = app.use(backendname)
-        self.window = self._backend.Window (*args, **kwargs)
+        self.window = app.Window(*args,**kwargs)
         self.window._buffer = {}
         self.window._program = []
+        self.on_draw = self.window.event(self.on_draw)
+        self.on_resize = self.window.on_resize
+        self.on_init = self.window.on_init
 
     @property
     def Program(self) :
@@ -37,6 +51,17 @@ class stiObj():
     def Buffer(self, arg_dict):
         self.window._buffer.update(arg_dict)
 
+    def on_draw(self,dt):
+        self.window.clear()
+        gl.glDisable (gl.GL_BLEND)
+        gl.glEnable (gl.GL_DEPTH_TEST)
+        print(dt)
+        motmat_x_R = self.window._buffer['motmat_ang'][0]
+        motmat_y_R = self.window._buffer['motmat_ang'][1]
+        motmat_R = cen2square (np.array ([motmat_x_R])[None, :], np.array ([motmat_y_R])[None, :],
+                               np.array ([motmat_y_R])[None, :] * 0).reshape ([-1, 2])
+        self.window._program[0]['texcoord'] += motmat_R[self.window._buffer["textface"]] / 300
+        self.window._program[0].draw (gl.GL_TRIANGLES, self.window._buffer['I'])
 # %
 import numpy as np
 from scipy import signal
@@ -108,20 +133,6 @@ def patchArray(imgsize=np.array ([1, 1]), startpoint=np.array ([[0, 0], [0, 1], 
 
     return vertices, filled, faces_t
 
-def on_draw(self) :
-    self.clear()
-    gl.glDisable (gl.GL_BLEND)
-    gl.glEnable (gl.GL_DEPTH_TEST)
-    motmat_x_R = self._buffer['motmat_ang'][0]
-    motmat_y_R = self._buffer['motmat_ang'][1]
-    motmat_R = cen2square (np.array ([motmat_x_R])[None, :], np.array ([motmat_y_R])[None, :],
-                           np.array ([motmat_y_R])[None, :] * 0).reshape ([-1, 2])
-    self._program[0]['texcoord'] += motmat_R[self._buffer["textface"]] / 300
-    self._program[0].draw (gl.GL_TRIANGLES, I)
-
-def custom_resize(sti_obj,width, height):
-    sti_obj._program[0]['projection'] = glm.perspective(45.0, width / float(height), 2.0, 100.0)
-
 patchArray_size = np.array ([1, 1])
 startpoint = cen2square (np.random.rand (patchArray_size.prod ()),
                          np.random.rand (patchArray_size.prod ()),
@@ -142,12 +153,17 @@ workingProgram['texture'] = np.uint8 (np.round ((np.random.rand (100, 100, 1) > 
 workingProgram['texture'].wrapping = gl.GL_REPEAT
 workingProgram['model'] = np.eye (4, dtype=np.float32)
 workingProgram['view'] = glm.translation (*patchArray_size * -.5, -2)
-# a.window.on_draw = a.window.event.(on_draw)
-# %%
-# a.window.dispatch_event("on_draw",a.window)
-#%%
+
 a.window.activate()
+a.on_init()
+a.on_resize(a.window.width,a.window.height)
+app.run()
+#%%
+a.window.on_resize(a.window.width,a.window.height)
+a.on_draw()
 a.window.dispatch_event("on_init")
+a.window.dispatch_event("on_resize",a.window.width,a.window.height)
+a.window.dispatch_event("on_draw",0.0)
 #%%
 @a.window.event
 def on_init():
