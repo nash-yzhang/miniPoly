@@ -142,7 +142,7 @@ motmat_x_R = motmat_ang[0]
 motmat_y_R = motmat_ang[1]
 V, I, textface = patchArray (patchArray_size, startpoint)
 #%
-a = stiObj()
+a = stiObj(width = 512, height = 512)
 a.Buffer = {"I" : I, "motmat_ang" : motmat_ang}
 a.Buffer = {"textface": textface}
 #%
@@ -153,14 +153,9 @@ workingProgram['texture'] = np.uint8 (np.round ((np.random.rand (100, 100, 1) > 
 workingProgram['texture'].wrapping = gl.GL_REPEAT
 workingProgram['model'] = np.eye (4, dtype=np.float32)
 workingProgram['view'] = glm.translation (*patchArray_size * -.5, -2)
-
-a.window.activate()
-a.on_init()
-a.on_resize(a.window.width,a.window.height)
 app.run()
 #%%
 a.window.on_resize(a.window.width,a.window.height)
-a.on_draw()
 a.window.dispatch_event("on_init")
 a.window.dispatch_event("on_resize",a.window.width,a.window.height)
 a.window.dispatch_event("on_draw",0.0)
