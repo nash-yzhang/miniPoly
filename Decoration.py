@@ -13,8 +13,15 @@ class _bugger(object):
     def __call__(self,*args,**kwargs):
         return self.func(self,*args,**kwargs)
 
-    def append(self,localvar):
-        self.varbuffer.insert(0,{key: value for key,value in localvar.items() if key in self.varname})
+    def add_method(self, cls):
+        def decorator(newMethod):
+            @wraps(newMethod)
+            def wrapper(self,*args,**kwargs):
+                return newMethod(*args,**kwargs)
+            setattr(cls,newMethod.__name__,wrapper)
+            return newMethod
+        return decorator
+
 
 def Bugger(varname,function = None):
     if function:
