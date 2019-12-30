@@ -1,17 +1,15 @@
 import multiprocessing as mp
-from queue import Queue
 from Decoration import Bugger
+from IPython import embed
+import time
 
-
-@Bugger(['t','a'])
 def f(api):
     t = 0
     a = 1
+    api.append(locals(),'a')
     while t<1000:
         t = t+1
-        print(t)
-        api.append(locals())
-
+        api.append(locals(),'t')
 
 def printf(q):
     while q.qsize()>0:
@@ -19,16 +17,32 @@ def printf(q):
 
 def get_f(f):
     return f()
-# f.__module__ = "__main__"
 
-q = Queue()
-q.put('Start Now')
-p1 = mp.Process(target = get_f, args = (f,))
-# p2 = mp.Process(target = printf, args = (q,))
-p1.start()
-# p2.start()
-p1.join()
-# p2.join()
+def main():
+    nf = Bugger(['t','a'],f)
+    pf = mp.Process(target = printf, args=(nf.varbuffer,))
+    nf.Process.start ()
+    pf.start()
+    while nf.Process.is_alive () :
+        pass
+    else :
+        nf.Process.terminate ()
+        nf.Process.join ()
+
+    while pf.is_alive () :
+        pass
+    else :
+        pf.terminate ()
+        pf.join ()
+
+    # while not nf.varbuffer.empty():
+    #     pass
+    # nf.Process.kill()
+    # pf.join()
+
+
+if __name__ == '__main__' :
+    main()
 #%%
 
 # mp.Process()
