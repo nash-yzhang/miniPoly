@@ -1,42 +1,73 @@
 import multiprocessing as mp
-from functools import wraps
-# from IPython import embed
+from IPython import embed
 # noinspection SpellCheckingInspection
 
-class _bugger (object) :
-    _func = None
-
-    def __init__(self, func, varname):
+class MPhandler (object) :
+    _core = None
+    def __init__(self, core_item, varname):
         self.varname = varname
-        self._func = func
-        self.varbuffer = mp.Queue()
-        self.Process = mp.Process (target=self._func, args=(self,))
+        self._core = core_item
+        self.tar_chn = []
+        self.src_chn  = []
+        self.buffer_in = {}
+        self.buffer_out = {}
+        for key in varname:
+            self.buffer_in[key] = []
+        self.Process = mp.Process(target=self._core, args=(self,))
 
-    def append(self, localvar, varname=None) :
-        if not varname :
+    def add_source(self,source_channel):
+        self.src_chn.append(source_channel)
+
+    def add_target(self,target_channel):
+        self.tar_chn.append(target_channel)
+
+    def put(self, localvar, varname=None) :
+        if not varname:
             varname = self.varname
-        tout = {}
         for key, value in localvar.items () :
-            if key in varname :
-                tout[key] = value
-        self.varbuffer.put (tout)
+            if not varname:
+                self.buffer_out[key] = value
+            else:
+                if key in varname :
+                    self.buffer_out[key] = value
 
-    def add_method(self, cls):
-        def decorator(newMethod):
-            @wraps(newMethod)
-            def wrapper(self,*args,**kwargs):
-                return newMethod(*args,**kwargs)
-            setattr(cls,newMethod.__name__,wrapper)
-            return newMethod
-        return decorator
+    def send(self,chn_idx,varname = None):
+        out_package = {}
+        for key, value in self.buffer_out.items():
+            if not varname:
+                out_package[key] = value
+            else:
+                if key in varname:
+                    out_package[key] = value
 
+        chn = self.tar_chn[chn_idx]
+        if isinstance(chn,type(mp.Queue())):
+            chn.put(out_package)
+        elif isinstance(chn,mp.connection.PipeConnection):
+            chn.send(out_package)
 
-def Bugger(varname, func=None) :
-    if func :
-        return _bugger (func, varname)
-    else :
-        @wraps (func)
-        def wrapper(func, **kwargs) :
-            return _bugger (func, varname)
+    # def start(self):
+    #     self.buffer_out['echo_fwd'] = 1
+    #     self.buffer_in['echo_bwd'] = 'echo'
+    #     dialed = 0
+    #     echoed = 0
+    #     for iterchn in range(len(self.tar_chn)):
+    #         self.send(iterchn, 'echo_fwd')
+    #     while dialed<len(self.src_chn):
+    #         for iterchn in range(len(self.src_chn)):
+    #             self.send(iterchn, 'echo_bwd')
+    #             self.get()
 
-        return wrapper
+    def get(self, chn_idx, varname=None) :
+        chn = self.src_chn[chn_idx]
+        if isinstance(chn, type(mp.Queue())):
+            tin = self.src_chn[chn_idx].get()
+        elif isinstance(chn, mp.connection.PipeConnection):
+            tin = self.src_chn[chn_idx].recv()
+
+        for key, value in tin.items():
+            if varname:
+                if key in varname:
+                    self.buffer_in[key] = value
+            else:
+                self.buffer_in[key] = value
