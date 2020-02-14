@@ -92,6 +92,9 @@ def on_init():
 def on_draw(dt):
     self.quad['u_model'] = glm.rotate(np.eye(4), self.azi, 0, 0, 1) @ glm.rotate(np.eye(4), self.elv, 0, 1, 0)
     self.quad['u_view'] = glm.translation(0,0,self.dist)
+    #TODO:
+    # Fix aspect problem in texture rendering
+
     # self._basic_program["position"] = (-self.height/self.width, -1), (-self.height/self.width, +1), (+self.height/self.width, -1), (+self.height/self.width, +1)
     # self.quad['u_pos_corr'] = np.array([(self._init_width-self.width)/self.width,(self._init_height-self.height)/self.height])
     # self.quad['u_scale_corr'] = 1/np.array([self.width/self._init_width,self.height/self._init_height])#/np.array([1,(wh*mw._init_width)/(ww*mw._init_height)])
