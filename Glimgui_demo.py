@@ -75,8 +75,6 @@ class test1(glimWindow):
         _, self.azi = imgui.slider_float("Elv", self.azi, 0, 360)
         _, self.dist = imgui.slider_float("Dist", self.dist, -2, -10)
         _, self.bgcolor = imgui.color_edit4('test', *self.bgcolor, True)
-        # if imgui.button('Restart'):
-        #     self.window_state[1] = True
         imgui.end()
 
         if self.window_state[1]:

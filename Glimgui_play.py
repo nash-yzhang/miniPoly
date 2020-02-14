@@ -58,6 +58,11 @@ def prepare():
     glimgui_win.quad.bind(V)
     texture = np.zeros((glimgui_win._init_height, glimgui_win._init_width, 4), np.float32).view(gloo.TextureFloat2D)
     depthbuffer = gloo.DepthBuffer(glimgui_win._init_width, glimgui_win._init_height)
+
+    io = imgui.get_io()
+    glimgui_win.font = io.fonts.add_font_from_file_ttf("C:\\Windows\Fonts\seguisb.ttf", 20)
+    glimgui_win.imgui_renderer.refresh_font_texture()
+
     glimgui_win.framebuffer = gloo.FrameBuffer(color=[texture], depth=depthbuffer)
     glimgui_win.window_state = [True, True]
 
@@ -72,12 +77,19 @@ def set_imgui_widgets():
                 glimgui_win.window_state[1] = True
             imgui.end_menu()
         imgui.end_main_menu_bar()
-    imgui.begin("Custom window", True)
+
+    imgui.set_next_window_position(10, 40)
+    imgui.set_next_window_size(250, 150)
+
+    imgui.begin("Controller", True)
     _, glimgui_win.elv = imgui.slider_float("Azi", glimgui_win.elv, 0, 360)
     _, glimgui_win.azi = imgui.slider_float("Elv", glimgui_win.azi, 0, 360)
     _, glimgui_win.dist = imgui.slider_float("Dist", glimgui_win.dist, -2, -10)
     _, glimgui_win.bgcolor = imgui.color_edit4('test', *glimgui_win.bgcolor, True)
+    imgui.text("FPS:%.1f Hz" % (1 / max(glimgui_win.dt, 1e-10)))
     imgui.end()
+
+
 
 
 
@@ -86,7 +98,7 @@ def set_imgui_widgets():
         ww, wh = imgui.get_window_size()
         winPos = imgui.get_cursor_screen_pos()
         glimgui_win.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
-        glimgui_win.dispatch_event("on_draw", .01)
+        glimgui_win.dispatch_event("on_draw", glimgui_win.dt)
 
         draw_list = imgui.get_window_draw_list()
         draw_list.add_image(glimgui_win.framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),

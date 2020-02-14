@@ -27,11 +27,11 @@ def prepare():
     inputazi_ptest[(d_range(inputazi_ptest,rangeaxis = 1)[:,None]*np.ones([1,3])>np.pi) & (inputazi_ptest<0)] = np.pi*2 - inputazi_ptest[(d_range(inputazi_ptest,rangeaxis = 1)[:,None]*np.ones([1,3])>np.pi) & (inputazi_ptest<0)]
     self.V["position"] = vecNormalize(self.inputV)
     self.I = np.arange(sphV[sphI.flatten(),:].shape[0]).astype(np.uint32)
-    startpoint = cen2tri(np.random.rand(np.int(self.I.size / 3)), np.random.rand(np.int(self.I.size / 3)), .05)
+    # startpoint = cen2tri(np.random.rand(np.int(self.I.size / 3)), np.random.rand(np.int(self.I.size / 3)), .05)
     self.V["texcoord"] = np.hstack([inputazi[:,None],inputelv[:,None]])/1 #startpoint.reshape([-1,2])
     self.V = self.V.view(gloo.VertexBuffer)
     self.I = self.I.view(gloo.IndexBuffer)
-    
+
     sp_sigma = np.pi*2  # spatial CR
     tp_sigma = 15  # temporal CR
 

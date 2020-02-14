@@ -49,9 +49,12 @@ def prepare():
     self.elv = 0
     self.dist = -5
     self.quad.bind(V)
-    texture = np.zeros((self._init_height, self._init_width, 4), np.float32).view(gloo.TextureFloat2D)
-    depthbuffer = gloo.DepthBuffer(self._init_width, self._init_height)
-    self.framebuffer = gloo.FrameBuffer(color=[texture], depth=depthbuffer)
+    self.texture = np.zeros((self._init_height, self._init_width, 4), np.float32).view(gloo.TextureFloat2D)
+    self.depthbuffer = gloo.DepthBuffer(self._init_width, self._init_height)
+    self.framebuffer = gloo.FrameBuffer(color=[self.texture], depth=self.depthbuffer)
+    self._basic_program = gloo.Program(self._texture_VS, self._texture_FS, count=4)
+    self._basic_program["position"] = (-1, -1), (-1, +1), (+1, -1), (+1, +1)
+    self._basic_program["texture"] = self.texture
     self.window_state = [True, True]
 
 def set_imgui_widgets():
@@ -75,11 +78,11 @@ def set_imgui_widgets():
         _, self.window_state[1] = imgui.begin("New window", True)
         ww, wh = imgui.get_window_size()
         winPos = imgui.get_cursor_screen_pos()
-        self.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
+        # self.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
         self.dispatch_event("on_draw", .01)
 
         draw_list = imgui.get_window_draw_list()
-        draw_list.add_image(self.framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
+        draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
                             (0, 1), (1, 0))
         imgui.end()
 
@@ -89,12 +92,17 @@ def on_init():
 def on_draw(dt):
     self.quad['u_model'] = glm.rotate(np.eye(4), self.azi, 0, 0, 1) @ glm.rotate(np.eye(4), self.elv, 0, 1, 0)
     self.quad['u_view'] = glm.translation(0,0,self.dist)
-    self.quad['u_pos_corr'] = np.array([(self._init_width-self.width)/self.width,(self._init_height-self.height)/self.height])
-    self.quad['u_scale_corr'] = 1/np.array([self.width/self._init_width,self.height/self._init_height])#/np.array([1,(wh*mw._init_width)/(ww*mw._init_height)])
+    # self._basic_program["position"] = (-self.height/self.width, -1), (-self.height/self.width, +1), (+self.height/self.width, -1), (+self.height/self.width, +1)
+    # self.quad['u_pos_corr'] = np.array([(self._init_width-self.width)/self.width,(self._init_height-self.height)/self.height])
+    # self.quad['u_scale_corr'] = 1/np.array([self.width/self._init_width,self.height/self._init_height])#/np.array([1,(wh*mw._init_width)/(ww*mw._init_height)])
     self.clear()
     gl.glEnable(gl.GL_DEPTH_TEST)
     self.framebuffer.activate()
     self.clear(self.bgcolor)
     self.quad.draw(gl.GL_TRIANGLES,self.I)
     self.framebuffer.deactivate()
+    self._framebuffer.activate()
+    self.clear((.2,.2,.1,1))
+    self._basic_program.draw(gl.GL_TRIANGLE_STRIP)
+    self._framebuffer.deactivate()
 #%%
