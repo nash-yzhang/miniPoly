@@ -78,12 +78,12 @@ def set_imgui_widgets():
         _, self.window_state[1] = imgui.begin("New window", True)
         ww, wh = imgui.get_window_size()
         winPos = imgui.get_cursor_screen_pos()
-        # self.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
+        self.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
         self.dispatch_event("on_draw", .01)
 
         draw_list = imgui.get_window_draw_list()
         draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
-                            (0, 1), (1, 0))
+                            (0, 0), (1, 1))
         imgui.end()
 
 def on_init():
@@ -96,8 +96,8 @@ def on_draw(dt):
     # Fix aspect problem in texture rendering
 
     # self._basic_program["position"] = (-self.height/self.width, -1), (-self.height/self.width, +1), (+self.height/self.width, -1), (+self.height/self.width, +1)
-    # self.quad['u_pos_corr'] = np.array([(self._init_width-self.width)/self.width,(self._init_height-self.height)/self.height])
-    # self.quad['u_scale_corr'] = 1/np.array([self.width/self._init_width,self.height/self._init_height])#/np.array([1,(wh*mw._init_width)/(ww*mw._init_height)])
+    self.quad['u_pos_corr'] = np.array([(self._init_width-self.width)/self.width,(self._init_height-self.height)/self.height])
+    self.quad['u_scale_corr'] = 1/np.array([self.width/self._init_width,self.height/self._init_height])#/np.array([1,(wh*mw._init_width)/(ww*mw._init_height)])
     self.clear()
     gl.glEnable(gl.GL_DEPTH_TEST)
     self.framebuffer.activate()
