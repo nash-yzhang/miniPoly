@@ -7,6 +7,7 @@ import imgui
 
 self = None
 def prepare():
+    self._clock.set_fps_limit(50)
     shader_folder = './shaderfile/'
     vertex_shader_fn = 'VS_tex_1511.glsl'
     frag_shader_fn = 'FS_tex_1511.glsl'
@@ -47,11 +48,11 @@ def prepare():
     self.Shape.bind(self.V)
     rotateMat = np.eye(4)#glm.rotate(np.eye(4), 0, 0, 0, 0)
     translateMat = glm.translation(0, 0, -0)
-    projectMat = glm.perspective(130.0,  1, 0.001, 1000.0)
+    projectMat = glm.perspective(130.0,  1, 0.01, 1000.0)
     self.Shape['u_transformation'] = rotateMat @ translateMat @ projectMat
     self.Shape['u_rotate'] = rotation2D(np.pi / 2)
     self.Shape['u_shift'] = np.array([.5, .5]) * 0
-    self.Shape['texture'] = np.uint8(np.random.randint(0, 2, [500, 50, 1]) * np.array([[[1, 1, 1]]]) * 255)
+    self.Shape['texture'] = np.uint8(np.random.randint(0, 2, [200, 20, 1]) * np.array([[[1, 1, 1]]]) * 255)
     self.Shape['texture'].wrapping = gl.GL_REPEAT
 
 
@@ -65,22 +66,22 @@ def on_draw(dt):
     temp_ptest = (d_range(temp_azi, rangeaxis=1)[:, None] * np.ones([1, 3]) > np.pi) & (temp_azi< 0) & (temp_azi > -np.pi)
     temp_azi[temp_ptest] += (np.pi * 2)
     temp_azi = temp_azi.flatten()
-    self.Shape['u_scale'] = 1, 1
-    self.V["texcoord"] = np.hstack ([temp_azi[:, None] * 40 / 2 / np.pi, temp_elv[:, None]]) / 10  - np.array([self.t,self.t])*10**-3*2
+    self.V["texcoord"] = np.hstack ([temp_azi[:, None] * 40 / 2 / np.pi, temp_elv[:, None]]) / 10  - np.array([self.t,self.t])*10**-3
 
     self.clear()
     gl.glEnable(gl.GL_DEPTH_TEST)
-    self.framebuffer.activate()
-    self.clear((0.1,0.1,0.1,1))
+    self._framebuffer.activate()
+    self.clear()
     self.Shape.draw(gl.GL_TRIANGLES, self.I)
-    self.framebuffer.deactivate()
+    self._framebuffer.deactivate()
 
 def set_imgui_widgets():
     imgui.begin("New window", True)
     ww, wh = imgui.get_window_size()
     winPos = imgui.get_cursor_screen_pos()
+    self.Shape['u_scale'] = wh/ww, 1
     self.dispatch_event("on_draw", .0)
     draw_list = imgui.get_window_draw_list()
-    draw_list.add_image(self.framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
+    draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
                         (0, 1), (1, 0))
     imgui.end()

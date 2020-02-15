@@ -1,9 +1,10 @@
 import imgui
-from glumpy import gloo, glm,gl
+from glumpy import app,gloo, glm,gl
 import numpy as np
 self = None
 
 def prepare():
+    self._clock.set_fps_limit(60)
     vertex = """
     uniform mat4   u_model;         // Model matrix
     uniform mat4   u_view;          // View matrix
@@ -49,12 +50,16 @@ def prepare():
     self.elv = 0
     self.dist = -5
     self.quad.bind(V)
-    self.texture = np.zeros((self._init_height, self._init_width, 4), np.float32).view(gloo.TextureFloat2D)
-    self.depthbuffer = gloo.DepthBuffer(self._init_width, self._init_height)
-    self.framebuffer = gloo.FrameBuffer(color=[self.texture], depth=self.depthbuffer)
-    self._basic_program = gloo.Program(self._texture_VS, self._texture_FS, count=4)
-    self._basic_program["position"] = (-1, -1), (-1, +1), (+1, -1), (+1, +1)
-    self._basic_program["texture"] = self.texture
+    # TODO: Finalize HERE to make window pop-able
+    appendWin = app.Window(512,512,color=(0,0,0,1))
+    appendWin.event(self.import_pkg.on_draw)
+    self._manager.register_windows(appendWin)
+    # self.texture = np.zeros((self.height, self.width, 4), np.float32).view(gloo.TextureFloat2D)
+    # self.depthbuffer = gloo.DepthBuffer(self.width, self.height)
+    # self.framebuffer = gloo.FrameBuffer(color=[self.texture], depth=self.depthbuffer)
+    # self._basic_program = gloo.Program(self._texture_VS, self._texture_FS, count=4)
+    # self._basic_program["position"] = (-1, -1), (-1, +1), (+1, -1), (+1, +1)
+    # self._basic_program["texture"] = self.texture
     self.window_state = [True, True]
 
 def set_imgui_widgets():
@@ -72,40 +77,46 @@ def set_imgui_widgets():
     _, self.azi = imgui.slider_float("Elv", self.azi, 0, 360)
     _, self.dist = imgui.slider_float("Dist", self.dist, -2, -10)
     _, self.bgcolor = imgui.color_edit4('test', *self.bgcolor, True)
+    imgui.text("FPS: %d"%(1/(self.dt+1e-5)))
     imgui.end()
+    # TODO: Finalize HERE to make window pop-able
+    # _, self.window_state[1] = imgui.begin("New window", True, flags = imgui.WINDOW_NO_TITLE_BAR)
+    # ww, wh = imgui.get_window_size()
+    # winPos = imgui.get_cursor_screen_pos()
+    # self.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
+    # self.dispatch_event("on_draw", .01)
+    #
+    # draw_list = imgui.get_window_draw_list()
+    # draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
+    #                     (0, 0), (1, 1))
+    # imgui.end()
+    #
+    #
+    # imgui.begin("New window2", True,)
+    #
+    # draw_list = imgui.get_window_draw_list()
+    # draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
+    #                     (0, 0), (1, 1))
+    # imgui.end()
 
-    if self.window_state[1]:
-        _, self.window_state[1] = imgui.begin("New window", True)
-        ww, wh = imgui.get_window_size()
-        winPos = imgui.get_cursor_screen_pos()
-        self.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
-        self.dispatch_event("on_draw", .01)
-
-        draw_list = imgui.get_window_draw_list()
-        draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
-                            (0, 0), (1, 1))
-        imgui.end()
 
 def on_init():
     gl.glEnable(gl.GL_DEPTH_TEST)
 
+# def on_resize(width,height):
+#     return 1
+    # self.framebuffer = gloo.FrameBuffer(color=[self.texture], depth=self.depthbuffer)
+    # print(1)
+    # pass
+
 def on_draw(dt):
     self.quad['u_model'] = glm.rotate(np.eye(4), self.azi, 0, 0, 1) @ glm.rotate(np.eye(4), self.elv, 0, 1, 0)
     self.quad['u_view'] = glm.translation(0,0,self.dist)
-    #TODO:
-    # Fix aspect problem in texture rendering
-
-    # self._basic_program["position"] = (-self.height/self.width, -1), (-self.height/self.width, +1), (+self.height/self.width, -1), (+self.height/self.width, +1)
-    self.quad['u_pos_corr'] = np.array([(self._init_width-self.width)/self.width,(self._init_height-self.height)/self.height])
-    self.quad['u_scale_corr'] = 1/np.array([self.width/self._init_width,self.height/self._init_height])#/np.array([1,(wh*mw._init_width)/(ww*mw._init_height)])
     self.clear()
     gl.glEnable(gl.GL_DEPTH_TEST)
-    self.framebuffer.activate()
+    # TODO: Finalize HERE to make window pop-able
+    # self._framebuffer.activate()
     self.clear(self.bgcolor)
     self.quad.draw(gl.GL_TRIANGLES,self.I)
-    self.framebuffer.deactivate()
-    self._framebuffer.activate()
-    self.clear((.2,.2,.1,1))
-    self._basic_program.draw(gl.GL_TRIANGLE_STRIP)
-    self._framebuffer.deactivate()
+    # self._framebuffer.deactivate()
 #%%
