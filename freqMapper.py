@@ -68,20 +68,33 @@ def on_draw(dt):
     temp_azi = temp_azi.flatten()
     self.V["texcoord"] = np.hstack ([temp_azi[:, None] * 40 / 2 / np.pi, temp_elv[:, None]]) / 10  - np.array([self.t,self.t])*10**-3
 
-    self.clear()
+
     gl.glEnable(gl.GL_DEPTH_TEST)
-    self._framebuffer.activate()
     self.clear()
     self.Shape.draw(gl.GL_TRIANGLES, self.I)
-    self._framebuffer.deactivate()
 
 def set_imgui_widgets():
-    imgui.begin("New window", True)
-    ww, wh = imgui.get_window_size()
-    winPos = imgui.get_cursor_screen_pos()
-    self.Shape['u_scale'] = wh/ww, 1
-    self.dispatch_event("on_draw", .0)
-    draw_list = imgui.get_window_draw_list()
-    draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
-                        (0, 1), (1, 0))
-    imgui.end()
+    if not self._has_pop:
+        imgui.begin("FreqMapper", True)
+        ww, wh = imgui.get_window_size()
+        winPos = imgui.get_cursor_screen_pos()
+        self.Shape['u_scale'] = wh/ww, 1
+        self.clear()
+        self._framebuffer.activate()
+        self.dispatch_event("on_draw", .0)
+        self._framebuffer.deactivate()
+        draw_list = imgui.get_window_draw_list()
+        draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
+                            (0, 1), (1, 0))
+
+        imgui.invisible_button("popup", max(ww - 30,1), max(wh - 50,1))
+        if imgui.begin_popup_context_item("Item Context Menu", mouse_button=0):
+            if imgui.selectable("Pop out")[1]:
+                self.pop(ww, wh, winPos[0], winPos[1], title='FreqMapper')
+            imgui.end_popup()
+        imgui.end()
+    else:
+        pass
+
+def pop_on_resize(width,height):
+    self.Shape['u_scale'] = height/width, 1

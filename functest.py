@@ -1,6 +1,7 @@
 import imgui
 from glumpy import app,gloo, glm,gl
 import numpy as np
+from GlImgui import adapted_glumpy_window
 self = None
 
 def prepare():
@@ -50,17 +51,9 @@ def prepare():
     self.elv = 0
     self.dist = -5
     self.quad.bind(V)
-    # TODO: Finalize HERE to make window pop-able
-    appendWin = app.Window(512,512,color=(0,0,0,1))
-    appendWin.event(self.import_pkg.on_draw)
-    self._manager.register_windows(appendWin)
-    # self.texture = np.zeros((self.height, self.width, 4), np.float32).view(gloo.TextureFloat2D)
-    # self.depthbuffer = gloo.DepthBuffer(self.width, self.height)
-    # self.framebuffer = gloo.FrameBuffer(color=[self.texture], depth=self.depthbuffer)
-    # self._basic_program = gloo.Program(self._texture_VS, self._texture_FS, count=4)
-    # self._basic_program["position"] = (-1, -1), (-1, +1), (+1, -1), (+1, +1)
-    # self._basic_program["texture"] = self.texture
     self.window_state = [True, True]
+    self._init_glwin = True
+    self._glwinpos = [0,0]
 
 def set_imgui_widgets():
     if imgui.begin_main_menu_bar():
@@ -79,44 +72,43 @@ def set_imgui_widgets():
     _, self.bgcolor = imgui.color_edit4('test', *self.bgcolor, True)
     imgui.text("FPS: %d"%(1/(self.dt+1e-5)))
     imgui.end()
-    # TODO: Finalize HERE to make window pop-able
-    # _, self.window_state[1] = imgui.begin("New window", True, flags = imgui.WINDOW_NO_TITLE_BAR)
-    # ww, wh = imgui.get_window_size()
-    # winPos = imgui.get_cursor_screen_pos()
-    # self.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
-    # self.dispatch_event("on_draw", .01)
-    #
-    # draw_list = imgui.get_window_draw_list()
-    # draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
-    #                     (0, 0), (1, 1))
-    # imgui.end()
-    #
-    #
-    # imgui.begin("New window2", True,)
-    #
-    # draw_list = imgui.get_window_draw_list()
-    # draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
-    #                     (0, 0), (1, 1))
-    # imgui.end()
+    self.quad['u_model'] = glm.rotate(np.eye(4), self.azi, 0, 0, 1) @ glm.rotate(np.eye(4), self.elv, 0, 1, 0)
+    self.quad['u_view'] = glm.translation(0, 0, self.dist)
+    if not self._has_pop:
+        if self._init_glwin == True:
+            imgui.set_next_window_position(100,100)
+            self._init_glwin = False
+        _, self.window_state[1] = imgui.begin("GLView", True)#, flags = imgui.WINDOW_NO_TITLE_BAR)
+        ww, wh = imgui.get_window_size()
+        winPos = imgui.get_cursor_screen_pos()
+        self.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
+        self.clear()
+        self._framebuffer.activate()
+        self.dispatch_event("on_draw", self.dt)
+        self._framebuffer.deactivate()
+        draw_list = imgui.get_window_draw_list()
+        draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
+                            (0, 0), (1, 1))
+        imgui.invisible_button("popup", ww-30, wh-50)
+        if imgui.begin_popup_context_item("Item Context Menu", mouse_button=0):
+            if imgui.selectable("Pop out")[1]:
+                self.pop(ww,wh,winPos[0],winPos[1],title = 'GLView')
+            imgui.end_popup()
+        imgui.end()
+    else:
+        pass
 
 
 def on_init():
     gl.glEnable(gl.GL_DEPTH_TEST)
 
-# def on_resize(width,height):
-#     return 1
-    # self.framebuffer = gloo.FrameBuffer(color=[self.texture], depth=self.depthbuffer)
-    # print(1)
-    # pass
+def pop_on_resize(width,height):
+    self.quad['u_projection'] = glm.perspective(45.0, max(width,1.) / max(height,1.), 2.0, 100.0)
 
 def on_draw(dt):
-    self.quad['u_model'] = glm.rotate(np.eye(4), self.azi, 0, 0, 1) @ glm.rotate(np.eye(4), self.elv, 0, 1, 0)
-    self.quad['u_view'] = glm.translation(0,0,self.dist)
-    self.clear()
-    gl.glEnable(gl.GL_DEPTH_TEST)
     # TODO: Finalize HERE to make window pop-able
     # self._framebuffer.activate()
     self.clear(self.bgcolor)
-    self.quad.draw(gl.GL_TRIANGLES,self.I)
+    gl.glEnable(gl.GL_DEPTH_TEST)
+    self.quad.draw(gl.GL_TRIANGLES, self.I)
     # self._framebuffer.deactivate()
-#%%
