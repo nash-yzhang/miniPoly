@@ -4,12 +4,13 @@ import imgui
 from imgui.integrations.glfw import GlfwRenderer
 from glumpy import app, gloo, gl, glm
 from glumpy.log import log
-from glumpy.app import configuration,parser,clock
+from glumpy.app import configuration, parser, clock
 from glumpy.app.window.backends import backend_glfw
 import sys, os
-from importlib import import_module,reload
+from importlib import import_module, reload
 import numpy as np
 from PIL import Image as pimg
+
 
 class adapted_glumpy_window(backend_glfw.Window):
     _backend = app.use('glfw')
@@ -38,6 +39,7 @@ class adapted_glumpy_window(backend_glfw.Window):
     _internal_draw_program = gloo.Program(_internal_VS, _internal_FS, count=4)
     _internal_draw_program["position"] = np.array([(+1., +1.), (+1., -1.), (-1., +1.), (-1., -1.)])
     _internal_draw_program['texcoord'] = np.array([(1., 1.), (1., 0.), (0., 1.), (0., 0.)])
+
     def __init__(self, win_name, *args, **kwargs):
         self.__name__ = win_name
         options = parser.get_options()
@@ -50,6 +52,7 @@ class adapted_glumpy_window(backend_glfw.Window):
         # self.imgui_context = imgui.get_current_context()
         # imgui.set_current_context(self.imgui_context)
         super().__init__(*args, **kwargs)
+        self._init_config = config
         config = configuration.gl_get_configuration()
         self._config = config
         self._clock = clock.Clock()
@@ -73,29 +76,29 @@ class adapted_glumpy_window(backend_glfw.Window):
         self._init_height = copy.copy(self.height)
         self.dt = 1e-10
 
-
     def process(self):
         self.dt = self._clock.tick()
         self.clear()
-        self.dispatch_event("on_draw",self.dt)
+        self.dispatch_event("on_draw", self.dt)
 
     def close(self):
         glfw.set_window_should_close(self._native_window, True)
 
+
 class glimWindow(adapted_glumpy_window):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        glfw.set_window_icon(self._native_window,1,pimg.open('MappApp.ico'))
+        glfw.set_window_icon(self._native_window, 1, pimg.open('MappApp.ico'))
         # Event dispatcher initialization
-        self.event_func_list = ['prepare','set_imgui_widgets','on_draw','on_init','on_resize']
+        self.event_func_list = ['prepare', 'set_imgui_widgets', 'on_draw', 'on_init', 'on_resize']
         self.register_event_type("prepare")
         self.register_event_type("set_imgui_widgets")
         self.register_event_type("pop")
 
-        self._texture_buffer = np.zeros((self.height, self.width, 4), np.float32).view(gloo.TextureFloat2D)
+        self._texture_buffer = np.zeros((self.height, self.width, 4), np.float32).view(gloo.Texture2D)
         self._depth_buffer = gloo.DepthBuffer(self.width, self.height)
         self._framebuffer = gloo.FrameBuffer(color=[self._texture_buffer], depth=self._depth_buffer)
-        self._internal_draw_program["texture"] = self._texture_buffer
+        # self._internal_draw_program["texture"] = self._texture_buffer
 
         # Imgui param init
         imgui.create_context()
@@ -106,14 +109,14 @@ class glimWindow(adapted_glumpy_window):
         self.selected = False
         self.fn_idx = 0
 
-        #custom param
+        # custom param
         self._pop_queue = []
         self._has_pop = False
 
-    def on_resize(self,width, height):
+    def on_resize(self, width, height):
         return None
 
-    def set_sti_module(self,sti_module_name):
+    def set_sti_module(self, sti_module_name):
         if hasattr(self, 'import_stipgm'):
             if sti_module_name == self.import_stipgm.__name__:
                 self.import_stipgm = reload(self.import_stipgm)
@@ -127,7 +130,7 @@ class glimWindow(adapted_glumpy_window):
                 getattr(self.import_stipgm, func).__globals__['self'] = self
                 self.event(getattr(self.import_stipgm, func))
         self.dispatch_event('prepare')
-    
+
     def set_basic_widgets(self):
         if imgui.begin_main_menu_bar():
             if imgui.begin_menu("File", True):
@@ -161,12 +164,15 @@ class glimWindow(adapted_glumpy_window):
                     self.open_dialog_state = False
                 imgui.end_popup()
 
-    def pop(self,width,height,pos_x,pos_y,title = 'GLWin'):
-        self._pop_queue.append([int(width),int(height),int(pos_x),int(pos_y),title])
+    def pop(self, width, height, pos_x, pos_y, title='GLWin'):
+        self._pop_queue.append([int(width), int(height), int(pos_x), int(pos_y), title])
 
-    def _pop(self,width,height,pos_x,pos_y,title):
-        popWin = adapted_glumpy_window('pop',width = width,height = height,color=(0,0,0,1),title= title)
-        popWin.set_position(pos_x,pos_y)
+    def _pop(self, width, height, pos_x, pos_y, title):
+        config = app.configuration.Configuration()
+        config.stencil_size = 8
+        popWin = adapted_glumpy_window('pop', width=width, height=height, color=(0, 0, 0, 1), title=title,
+                                       config=config)
+        popWin.set_position(pos_x, pos_y)
         # Every time create a new window requires reinitialize all programs and buffers
         self._texture_buffer = np.zeros((self.height, self.width, 4), np.float32).view(gloo.TextureFloat2D)
         self._depth_buffer = gloo.DepthBuffer(self.width, self.height)
@@ -183,15 +189,14 @@ class glimWindow(adapted_glumpy_window):
             self.import_stipgm.on_draw(self.dt)
 
         popWin.ori_pos = np.array([(+1., +1.), (+1., -1.), (-1., +1.), (-1., -1.)])
-        popWin.ori_ratio = self.width/self.height
+        popWin.ori_ratio = self.width / self.height
 
         @popWin.event
         def on_resize(width, height):
-            self.import_stipgm.pop_on_resize(width,height)
+            self.import_stipgm.pop_on_resize(width, height)
 
-        popWin.dispatch_event('on_resize',width,height)
+        popWin.dispatch_event('on_resize', width, height)
         self._manager.register_windows(popWin)
-
 
     def _dock(self):
         self._texture_buffer = np.zeros((self._init_height, self._init_width, 4), np.float32).view(gloo.TextureFloat2D)
@@ -208,7 +213,7 @@ class glimWindow(adapted_glumpy_window):
         self.dispatch_event("set_imgui_widgets")
         imgui.render()
         self.imgui_renderer.render(imgui.get_draw_data())
-        if len(self._pop_queue)>0:
+        if len(self._pop_queue) > 0:
             for win_param in self._pop_queue:
                 self._pop(*win_param)
                 self._pop_queue.remove(win_param)
@@ -216,7 +221,6 @@ class glimWindow(adapted_glumpy_window):
         if (len([x for x in self._manager.__windows__ if x.__name__ == 'pop']) == 0) and self._has_pop:
             self._has_pop = False
             self._dock()
-
 
     def close(self):
         if self._has_pop:
@@ -236,7 +240,7 @@ class glimManager:
     def __init__(self):
         glfw.init()
 
-    def register_windows(self,window:adapted_glumpy_window):
+    def register_windows(self, window: adapted_glumpy_window):
         window._manager = self
         self.__windows__.append(window)
 
@@ -244,7 +248,7 @@ class glimManager:
         glfw.poll_events()
         # TODO: FINALIZE HERE to make it behave like app.run
         for window in self.__windows__:
-            if isinstance(window,adapted_glumpy_window):
+            if isinstance(window, adapted_glumpy_window):
                 if glfw.window_should_close(window._native_window):
                     self.__windows__.remove(window)
                     self.__windows_to_remove__.append(window)
@@ -257,12 +261,7 @@ class glimManager:
             window.destroy()
             self.__windows_to_remove__.remove(window)
 
-
     def run(self):
-        while len(self.__windows__)+len(self.__windows_to_remove__)>0:
+        while len(self.__windows__) + len(self.__windows_to_remove__) > 0:
             self.execute()
         sys.exit()
-
-
-
-

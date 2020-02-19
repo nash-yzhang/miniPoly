@@ -7,7 +7,7 @@ import imgui
 
 self = None
 def prepare():
-    self._clock.set_fps_limit(50)
+    self._clock.set_fps_limit(70)
     shader_folder = './shaderfile/'
     vertex_shader_fn = 'VS_tex_1511.glsl'
     frag_shader_fn = 'FS_tex_1511.glsl'
@@ -74,6 +74,10 @@ def on_draw(dt):
     self.Shape.draw(gl.GL_TRIANGLES, self.I)
 
 def set_imgui_widgets():
+    imgui.begin('FPS')
+    imgui.text("Frame duration: %.2f ms" %(self.dt*1000))
+    imgui.text("FPS: %d Hz"%round(1/(self.dt+1e-8)))
+    imgui.end()
     if not self._has_pop:
         imgui.begin("FreqMapper", True)
         ww, wh = imgui.get_window_size()
