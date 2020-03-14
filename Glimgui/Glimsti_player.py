@@ -1,6 +1,6 @@
-from GlImgui import glimWindow,glimManager
+from Glimgui.GlImgui import glimWindow,glimManager
 from glumpy import app
-from importlib import import_module
+
 GIM = glimManager()
 config = app.configuration.Configuration()
 config.stencil_size = 8

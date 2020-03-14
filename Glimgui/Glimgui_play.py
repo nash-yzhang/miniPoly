@@ -1,8 +1,6 @@
-import glfw
 import imgui
-from imgui.integrations.glfw import GlfwRenderer
-from glumpy import app, gloo, glm,gl
-from GlImgui import glimWindow
+from glumpy import gloo, glm,gl
+from Glimgui.GlImgui import glimWindow
 import numpy as np
 
 vertex = """

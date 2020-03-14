@@ -1,5 +1,6 @@
 import numpy as np
-import Q_num as qn
+from Glimgui import Q_num as qn
+
 
 def UVsphere(azi, elv, azitile: int = 30, elvtile: int = 30):
     imgvertice = np.array([np.arange(azitile + 1)]).T + \

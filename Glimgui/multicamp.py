@@ -1,39 +1,40 @@
 import imgui
-from glumpy import app,gloo, glm,gl
+from glumpy import gloo, glm,gl
 import numpy as np
-from GlImgui import adapted_glumpy_window
+import threading
+import multiCam.tisgrabber.tisgrabber as IC
+import cv2 as cv
+import ctypes as C
+import time as time
+import pandas as pd
+
+
 self = None
 
 def prepare():
     self._clock.set_fps_limit(60)
     vertex = """
-    uniform mat4   u_model;         // Model matrix
-    uniform mat4   u_view;          // View matrix
-    uniform vec2   u_scale_corr;       // 2D position correction
-    uniform vec2   u_pos_corr;       // 2D position correction
-    uniform mat4   u_projection;    // Projection matrix
-    attribute vec4 a_color;         // Vertex color
-    attribute vec3 a_position;      // Vertex position
-    varying vec4   v_color;         // Interpolated fragment color (out)
+    attribute vec2   a_pos;         // Screen position
+    attribute vec2   a_texcoord;    // Texture coordinate
+    varying   vec2   v_texcoord;   // Interpolated fragment color (out)
     void main()
     {
-        v_color = a_color;
-        gl_Position = u_projection * u_view * u_model * vec4(a_position,1.0);
-        gl_Position.xy *= u_scale_corr;
-        gl_Position.xy += u_pos_corr*gl_Position.w;
+        v_texcoord = a_texcoord;
+        gl_Position = vec4 (a_pos, 0., 1.);
     } """
 
     fragment = """
-    varying vec4   v_color;         // Interpolated fragment color (in)
+    uniform sampler2D texture;    // Texture
+    varying   vec2 v_texcoord;  // output
     void main()
     {
-        gl_FragColor = v_color;
-    } """
-    self.quad = gloo.Program(vertex, fragment)
-    V = np.zeros(8, [("a_position", np.float32, 3),
-                     ("a_color", np.float32, 4)])
-    V["a_position"] = [[1, 1, 1], [-1, 1, 1], [-1, -1, 1], [1, -1, 1],
-                       [1, -1, -1], [1, 1, -1], [-1, 1, -1], [-1, -1, -1]]
+        // Final color
+        gl_FragColor = texture2D(texture, v_texcoord);
+    }"""
+
+    self.projector = gloo.Program(vertex, fragment)
+    V = np.zeros(8, [("a_position", np.float32, 3)])
+    V["a_position"] = [[-1.,1.],[1.,-1.],[1.,1.],[-1.,-1.]]
     V["a_color"] = [[0, 1, 1, 1], [0, 0, 1, 1], [0, 0, 0, 1], [0, 1, 0, 1],
                     [1, 1, 0, 1], [1, 1, 1, 1], [1, 0, 1, 1], [1, 0, 0, 1]]
     V = V.view(gloo.VertexBuffer)

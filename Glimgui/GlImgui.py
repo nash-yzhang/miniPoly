@@ -105,7 +105,7 @@ class glimWindow(adapted_glumpy_window):
         self.imgui_renderer = GlfwRenderer(self._native_window)
         self.io = imgui.get_io()
         self.open_dialog_state = False
-        self.sti_file_dir = "."
+        self.sti_file_dir = ".."
         self.selected = False
         self.fn_idx = 0
 

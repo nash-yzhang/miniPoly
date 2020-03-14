@@ -1,8 +1,6 @@
-import numpy as np
-from scipy import signal
 from scipy.ndimage import gaussian_filter
-from glarage import *
-from glumpy import app, gl, glm, gloo
+from Glimgui.glarage import *
+from glumpy import gl, glm, gloo
 import imgui
 
 self = None

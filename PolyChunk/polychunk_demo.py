@@ -1,7 +1,6 @@
 import multiprocessing as mp
-import PolyChunk as pc
-from IPython import embed
-import time
+from PolyChunk import PolyChunk as pc
+
 
 def f(api):
     t = 1
@@ -70,6 +69,3 @@ if __name__ == '__main__' :
             pass
         print("pf is dead")
     print("nf is dead")
-#%%
-
-# mp.Process()

@@ -4,11 +4,9 @@
 # Copyright (c) 2017, Nicolas P. Rougier
 # Distributed under the 2-Clause BSD License.
 # -----------------------------------------------------------------------------
-import numpy as np
 from scipy import signal
-import Q_num as qn
-from glarage import *
-from glumpy import app, gl, glm, gloo
+from Glimgui.glarage import *
+from glumpy import gl, glm, gloo
 self = None
 def prepare():
     self._clock.set_fps_limit(70)
