@@ -1,6 +1,5 @@
-import matplotlib.pyplot as plt
 import threading
-import multiCam.tisgrabber.tisgrabber as IC
+import Glimgui.tisgrabber.tisgrabber as IC
 import cv2 as cv
 import ctypes as C
 import time as time
@@ -49,7 +48,6 @@ c1.DevName = c1.GetDevices()[0].decode("utf-8")
 c1.open(c1.DevName)
 c1.SetVideoFormat("Y16 (640x480)")
 c1.SetFrameRate(30.0)
-
 c1.SetContinuousMode(0)
 Userdata1 = CallbackUserdata(c1)
 c1.SetFrameReadyCallback(Callbackfunc, Userdata1)
@@ -63,7 +61,7 @@ c2.SetContinuousMode(0)
 Userdata2 = CallbackUserdata(c2)
 c2.SetFrameReadyCallback(Callbackfunc, Userdata2)
 
-
+#%
 # %
 def c1loop():
     c1.StartLive(0)

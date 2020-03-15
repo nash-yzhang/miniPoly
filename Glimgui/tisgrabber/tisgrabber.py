@@ -14,6 +14,7 @@ from enum import Enum
 import ctypes as C
 import os
 os.environ['PATH'] += ';%s' % os.path.join(os.getcwd(), 'dlls')
+# os.environ['PATH'] += ';%s' % os.path.join(os.getcwd(), 'tisgrabber')
 import sys
 import numpy as np
 
