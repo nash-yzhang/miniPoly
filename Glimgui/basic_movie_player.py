@@ -43,6 +43,9 @@ def prepare():
     self.rec_button_text = 'Start'
     self._draw_second = False
 
+
+    self._framebuffer2 = gloo.FrameBuffer(color = self._buffer_frame.view(gloo.Texture2D))
+
 def on_draw(dt):
     # gl.glEnable(gl.GL_DEPTH_TEST)
     self.clear()
@@ -50,7 +53,7 @@ def on_draw(dt):
         self.mov_player['texture'] = self._buffer_frame
         self.mov_player.draw(gl.GL_TRIANGLE_STRIP)
     else:
-        self.mov_player2['texture'] = self._buffer_frame
+        self.mov_player2['texture'] = self._buffer_frame/2
         self.mov_player2.draw(gl.GL_TRIANGLE_STRIP)
     self._draw_second = not self._draw_second
 
@@ -147,12 +150,12 @@ def set_imgui_widgets():
     ww, wh = imgui.get_window_size()
     winPos = imgui.get_cursor_screen_pos()
     self.clear()
-    self._framebuffer.activate()
+    self._framebuffer2.activate()
     self.dispatch_event("on_draw", .0)
-    self._framebuffer.deactivate()
+    self._framebuffer2.deactivate()
     draw_list = imgui.get_window_draw_list()
 
-    draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
+    draw_list.add_image(self._framebuffer2.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
                         (0, 0), (1, 1))
     imgui.end_child()
     imgui.end()
