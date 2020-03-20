@@ -3,10 +3,9 @@ from glumpy import gl, gloo
 import imgui
 import cv2
 import Glimgui.tisgrabber.tisgrabber as IC
-import ctypes as C
-import time as time
-
 import numpy as np
+from pyfirmata import Arduino, util
+
 
 self = None
 
@@ -15,6 +14,14 @@ def prepare():
     vertex_shader_fn = 'VS_basic_tex.glsl'
     frag_shader_fn = 'FS_basic_tex.glsl'
 
+    self.arduino_board = Arduino('COM3')
+    self.arduino_iterator = util.Iterator(self.arduino_board)
+    self.arduino_iterator.start()
+
+    self.LED_pin  = self.arduino_board.get_pin('d:11:p')
+    self.LED_power = .1
+    # self.arduino_board.analog[0].enable_reporting()
+    # self.ardiuno_sig = [0.]
 
     self.camera1 = IC.TIS_CAM()
     self.camera1.DevName = self.camera1.GetDevices()[0].decode("utf-8")
@@ -65,6 +72,9 @@ def prepare():
     self.rec_button_text = 'Start'
     self._draw_second = False
 
+    self._framebuffer2 = gloo.FrameBuffer(color=np.zeros((self.height, self.width, 4), np.float32).view(gloo.Texture2D))
+
+
 def on_draw(dt):
     # gl.glEnable(gl.GL_DEPTH_TEST)
     self.clear()
@@ -80,7 +90,8 @@ def set_imgui_widgets():
     fps_min = 15.
     fps_max = 45.
     x_offset = 50.
-
+    # self.ardiuno_sig.append(self.arduino_board.analog[0].read())
+    # print(self.ardiuno_sig[-1])
     self.dtlist.append((len(self.dtlist),1/max([self.dt,0.0001])))
 
     imgui.begin("Video Recording")
@@ -100,20 +111,25 @@ def set_imgui_widgets():
             self.rec_on = True
             if self.rec_button_text == 'Start':
                 self.rec_timepoint = [len(self.dtlist),99999]
+                vidbuffer_shape = np.hstack([self.cam_buffer1,self.cam_buffer2]).shape
                 self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), 30.,
-                                                 (self.cam_buffer1.shape[1] * 2, self.cam_buffer1.shape[0]))
+                                                 (int(vidbuffer_shape[1]),int(vidbuffer_shape[0])))
                 self.rec_button_text = 'Stop'
-
+    _,self.LED_power = imgui.slider_float('LED power', self.LED_power, 0.0, 1.0, '%.2f', 1.0)
+    self.LED_pin.write(self.LED_power)
     imgui.begin_child("fps plot", 0.,0.)
     ww,wh = imgui.get_window_size()
     wh *=.7
     winPos = imgui.get_cursor_screen_pos()
     winPos = (winPos[0],winPos[1]+30)
-    line_st = int(max([len(self.dtlist)-ww,0]))
+    line_st = int(max([len(self.dtlist)-ww+x_offset,0]))
+
     dtlist_adapted = np.array(self.dtlist)[line_st:]
-    # dtlist_adapted[:,1] = (dtlist_adapted[:,1]-min(dtlist_adapted[:,1]))/(max(dtlist_adapted[:,1])-min(dtlist_adapted[:,1]))*wh
+    # dtlist_adapted[:, 0] -= line_st*2
     dtlist_adapted[:,1] = (1-(dtlist_adapted[:,1]-fps_min)/(fps_max-fps_min))*wh
     dtlist_adapted += winPos+np.array([-min(dtlist_adapted[:,0])+x_offset,0.])
+
+    # arduino_sig_adapted = np.array(self.ardiuno_sig)[line_st:] * wh + winPos[1]
 
     draw_list = imgui.get_window_draw_list()
     y_min = winPos[1]
@@ -127,6 +143,9 @@ def set_imgui_widgets():
             draw_list.add_rect_filled(rect_st, y_max, rect_ed, y_min, imgui.get_color_u32_rgba(1,1,0,.5))
     draw_list.add_polyline(dtlist_adapted.tolist(), imgui.get_color_u32_rgba(0., .5, 1, 1), closed=False,
                            thickness=3)
+    # from IPython import embed
+    # embed()
+    # draw_list.add_polyline(np.vstack([dtlist_adapted[:,0],arduino_sig_adapted]).T.tolist(), imgui.get_color_u32_rgba(.5, .5, 1, 1), closed=False, thickness=3)
     draw_list.add_polyline([(winPos[0]+x_offset, winPos[1]), (winPos[0]+x_offset, winPos[1]+wh)], imgui.get_color_u32_rgba(1., 1., 1., .5), closed=False,
                            thickness=4)
     draw_list.add_polyline([(winPos[0]+x_offset, winPos[1]+wh/2.), (winPos[0]+ww, winPos[1]+wh/2)], imgui.get_color_u32_rgba(1., 1., 1., .5), closed=False,
@@ -140,11 +159,18 @@ def set_imgui_widgets():
     imgui.end()
 
     # ret,self._buffer_frame = self.cam.read()
-    # if self.rec_on:
-    #     if ret == True:
-    #         self.vidwriter.write(np.hstack([self._buffer_frame,self._buffer_frame]))
     self.camera1.SnapImage()
-    self.cam_buffer1 = self.camera1.GetImage()/255.
+    self.cam_buffer1 = self.camera1.GetImage()
+    self.camera2.SnapImage()
+    self.cam_buffer2 = self.camera2.GetImage()
+    if self.rec_on:
+        self.vidwriter.write(np.hstack([self.cam_buffer1,self.cam_buffer2]))
+
+    self.cam_buffer1 = self.cam_buffer1/255.
+    self.cam_buffer2 =  self.cam_buffer2/255.
+
+
+
 
     # fbo_ratio = self._buffer_frame.shape[0]/self._buffer_frame.shape[1]
     # if not self._has_pop:
@@ -164,8 +190,6 @@ def set_imgui_widgets():
                         (0, 0), (1, 1))
     imgui.end_child()
 
-    self.camera2.SnapImage()
-    self.cam_buffer2 = self.camera2.GetImage()/255.
 
     imgui.same_line()
 
@@ -174,12 +198,12 @@ def set_imgui_widgets():
     ww, wh = imgui.get_window_size()
     winPos = imgui.get_cursor_screen_pos()
     self.clear()
-    self._framebuffer.activate()
+    self._framebuffer2.activate()
     self.dispatch_event("on_draw", .0)
-    self._framebuffer.deactivate()
+    self._framebuffer2.deactivate()
     draw_list = imgui.get_window_draw_list()
 
-    draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
+    draw_list.add_image(self._framebuffer2.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
                         (0, 0), (1, 1))
     imgui.end_child()
     imgui.end()

@@ -84,7 +84,6 @@ def set_imgui_widgets():
                 self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), 30.,
                                                  (self._buffer_frame.shape[1] * 2, self._buffer_frame.shape[0]))
                 self.rec_button_text = 'Stop'
-
     imgui.begin_child("fps plot", 0.,0.)
     ww,wh = imgui.get_window_size()
     wh *=.7
