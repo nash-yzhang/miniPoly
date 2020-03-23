@@ -86,7 +86,7 @@ def on_draw(dt):
         self.mov_player2.draw(gl.GL_TRIANGLE_STRIP)
     self._draw_second = not self._draw_second
 
-def set_imgui_widgets():
+def set_widgets():
     fps_min = 15.
     fps_max = 45.
     x_offset = 50.

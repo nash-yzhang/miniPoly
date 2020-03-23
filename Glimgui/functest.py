@@ -55,7 +55,7 @@ def prepare():
     self._init_glwin = True
     self._glwinpos = [0,0]
 
-def set_imgui_widgets():
+def set_widgets():
     if imgui.begin_main_menu_bar():
         if imgui.begin_menu("Command", True):
             clicked_restart, _ = imgui.menu_item(

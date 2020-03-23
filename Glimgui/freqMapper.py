@@ -71,7 +71,7 @@ def on_draw(dt):
     self.clear()
     self.Shape.draw(gl.GL_TRIANGLES, self.I)
 
-def set_imgui_widgets():
+def set_widgets():
     imgui.begin('FPS')
     imgui.text("Frame duration: %.2f ms" %(self.dt*1000))
     imgui.text("FPS: %d Hz"%round(1/(self.dt+1e-8)))

@@ -8,6 +8,7 @@ from glumpy.app import configuration, parser, clock
 from glumpy.app.window.backends import backend_glfw
 import sys, os
 from importlib import import_module, reload
+from inspect import getmembers, isfunction
 import numpy as np
 from PIL import Image as pimg
 
@@ -89,16 +90,10 @@ class glimWindow(adapted_glumpy_window):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         glfw.set_window_icon(self._native_window, 1, pimg.open('MappApp.ico'))
-        # Event dispatcher initialization
-        self.event_func_list = ['prepare', 'set_imgui_widgets', 'on_draw', 'on_init', 'on_resize']
-        self.register_event_type("prepare")
-        self.register_event_type("set_imgui_widgets")
-        self.register_event_type("pop")
 
         self._texture_buffer = np.zeros((self.height, self.width, 4), np.float32).view(gloo.Texture2D)
         self._depth_buffer = gloo.DepthBuffer(self.width, self.height)
         self._framebuffer = gloo.FrameBuffer(color=[self._texture_buffer], depth=self._depth_buffer)
-        # self._internal_draw_program["texture"] = self._texture_buffer
 
         # Imgui param init
         imgui.create_context()
@@ -117,19 +112,33 @@ class glimWindow(adapted_glumpy_window):
         return None
 
     def set_sti_module(self, sti_module_name):
-        if hasattr(self, 'import_stipgm'):
-            if sti_module_name == self.import_stipgm.__name__:
-                self.import_stipgm = reload(self.import_stipgm)
+        try:
+            if hasattr(self, 'import_stipgm'):
+                if sti_module_name == self.import_stipgm.__name__:
+                    self.import_stipgm = reload(self.import_stipgm)
+                else:
+                    self.import_stipgm = import_module(sti_module_name)
             else:
                 self.import_stipgm = import_module(sti_module_name)
-        else:
-            self.import_stipgm = import_module(sti_module_name)
 
-        for func in self.event_func_list:
-            if func in self.import_stipgm.__dict__:
+            # Event dispatcher initialization
+            import_func_list = [o for o in getmembers(self.import_stipgm) if isfunction(o[1])]
+            self.event_func_list = [o[0] for o in import_func_list if o[1].__module__ == self.import_stipgm.__name__]
+            essential_func_name = ['prepare', 'set_widgets']
+            assert all(func in self.event_func_list for func in essential_func_name), (
+                    'the following functions is not defined in the imported module: %s' % (
+                ', '.join(func for func in essential_func_name if func not in self.event_func_list)))
+
+            glumpy_func_list = ['on_init', 'on_draw', 'on_resize']
+            for func in self.event_func_list:
                 getattr(self.import_stipgm, func).__globals__['self'] = self
                 self.event(getattr(self.import_stipgm, func))
-        self.dispatch_event('prepare')
+                if func not in glumpy_func_list:
+                    self.register_event_type(func)
+
+            self.dispatch_event('prepare')
+        except:
+            print('\033[31m' + "ERROR: Fail to import the selected stimulus module")
 
     def set_basic_widgets(self):
         if imgui.begin_main_menu_bar():
@@ -178,10 +187,17 @@ class glimWindow(adapted_glumpy_window):
         self._depth_buffer = gloo.DepthBuffer(self.width, self.height)
         self._framebuffer = gloo.FrameBuffer(color=[self._texture_buffer], depth=self._depth_buffer)
         self._internal_draw_program["texture"] = self._texture_buffer
+        # for func in self.event_func_list:
+        #     if func in self.import_stipgm.__dict__:
+        #         getattr(self.import_stipgm, func).__globals__['self'] = self
+        #         self.event(getattr(self.import_stipgm, func))
+        glumpy_func_list = ['on_init', 'on_draw', 'on_resize']
         for func in self.event_func_list:
-            if func in self.import_stipgm.__dict__:
-                getattr(self.import_stipgm, func).__globals__['self'] = self
-                self.event(getattr(self.import_stipgm, func))
+            getattr(self.import_stipgm, func).__globals__['self'] = self
+            self.event(getattr(self.import_stipgm, func))
+            if func not in glumpy_func_list:
+                self.register_event_type(func)
+
         self.dispatch_event('prepare')
 
         @popWin.event
@@ -210,7 +226,7 @@ class glimWindow(adapted_glumpy_window):
         self.imgui_renderer.process_inputs()
         imgui.new_frame()
         self.set_basic_widgets()
-        self.dispatch_event("set_imgui_widgets")
+        self.dispatch_event("set_widgets")
         imgui.render()
         self.imgui_renderer.render(imgui.get_draw_data())
         if len(self._pop_queue) > 0:
@@ -223,6 +239,8 @@ class glimWindow(adapted_glumpy_window):
             self._dock()
 
     def close(self):
+        if "close" in self.event_func_list:
+            self.dispatch_event("close")
         if self._has_pop:
             for win in self._manager.__windows__[1:]:
                 win.close()
