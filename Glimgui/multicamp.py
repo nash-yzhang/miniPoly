@@ -14,7 +14,7 @@ def prepare():
     vertex_shader_fn = 'VS_basic_tex.glsl'
     frag_shader_fn = 'FS_basic_tex.glsl'
 
-    self.arduino_board = Arduino('COM3')
+    self.arduino_board = Arduino('COM7')
     self.arduino_iterator = util.Iterator(self.arduino_board)
     self.arduino_iterator.start()
 

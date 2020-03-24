@@ -112,33 +112,28 @@ class glimWindow(adapted_glumpy_window):
         return None
 
     def set_sti_module(self, sti_module_name):
-        try:
-            if hasattr(self, 'import_stipgm'):
-                if sti_module_name == self.import_stipgm.__name__:
-                    self.import_stipgm = reload(self.import_stipgm)
-                else:
-                    self.import_stipgm = import_module(sti_module_name)
+        if hasattr(self, 'import_stipgm'):
+            if sti_module_name == self.import_stipgm.__name__:
+                self.import_stipgm = reload(self.import_stipgm)
             else:
                 self.import_stipgm = import_module(sti_module_name)
+        else:
+            self.import_stipgm = import_module(sti_module_name)
 
-            # Event dispatcher initialization
-            import_func_list = [o for o in getmembers(self.import_stipgm) if isfunction(o[1])]
-            self.event_func_list = [o[0] for o in import_func_list if o[1].__module__ == self.import_stipgm.__name__]
-            essential_func_name = ['prepare', 'set_widgets']
-            assert all(func in self.event_func_list for func in essential_func_name), (
-                    'the following functions is not defined in the imported module: %s' % (
-                ', '.join(func for func in essential_func_name if func not in self.event_func_list)))
+        # Event dispatcher initialization
+        import_func_list = [o for o in getmembers(self.import_stipgm) if isfunction(o[1])]
+        self.event_func_list = [o[0] for o in import_func_list if o[1].__module__ == self.import_stipgm.__name__]
+        essential_func_name = ['prepare', 'set_widgets']
+        assert all(func in self.event_func_list for func in essential_func_name), ('\033[31m' + 'the following functions is not defined in the imported module: %s' % (', '.join(func for func in essential_func_name if func not in self.event_func_list)))
 
-            glumpy_func_list = ['on_init', 'on_draw', 'on_resize']
-            for func in self.event_func_list:
-                getattr(self.import_stipgm, func).__globals__['self'] = self
-                self.event(getattr(self.import_stipgm, func))
-                if func not in glumpy_func_list:
-                    self.register_event_type(func)
+        glumpy_func_list = ['on_init', 'on_draw', 'on_resize']
+        for func in self.event_func_list:
+            getattr(self.import_stipgm, func).__globals__['self'] = self
+            self.event(getattr(self.import_stipgm, func))
+            if func not in glumpy_func_list:
+                self.register_event_type(func)
 
-            self.dispatch_event('prepare')
-        except:
-            print('\033[31m' + "ERROR: Fail to import the selected stimulus module")
+        self.dispatch_event('prepare')
 
     def set_basic_widgets(self):
         if imgui.begin_main_menu_bar():

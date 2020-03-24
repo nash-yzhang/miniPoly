@@ -65,6 +65,8 @@ def set_widgets():
                 self.window_state[1] = True
             imgui.end_menu()
         imgui.end_main_menu_bar()
+
+
     imgui.begin("Custom window", True)
     _, self.elv = imgui.slider_float("Azi", self.elv, 0, 360)
     _, self.azi = imgui.slider_float("Elv", self.azi, 0, 360)

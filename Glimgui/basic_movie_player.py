@@ -3,7 +3,7 @@ from Glimgui.glarage import *
 from glumpy import gl, glm, gloo
 import imgui
 import cv2
-from array import array
+from IPython import embed
 
 self = None
 
@@ -31,9 +31,8 @@ def prepare():
 
     self.mov_player2 = gloo.Program(vertex, fragment)
     self.mov_player2['a_pos'] = [(-1,-1), (-1,+1), (+1,-1), (+1,+1)]
-    self.mov_player2['a_texcoord'] = [(0.,0.), (0.,1.), (1.,0.), (1.,1.)]
+    self.mov_player2['a_texcoord'] = [(1.,0.), (1.,1.), (0.,0.), (0.,1.)]
     self.mov_player2['texture'] = self._buffer_frame
-    self.dtlist = [(0.,0.)]
 
     self.vid_fn = './/Output1111.avi'
     self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), 30.,
@@ -45,6 +44,7 @@ def prepare():
 
 
     self._framebuffer2 = gloo.FrameBuffer(color = self._buffer_frame.view(gloo.Texture2D))
+    self.dtlist = [(0.,0.)]
 
 def on_draw(dt):
     # gl.glEnable(gl.GL_DEPTH_TEST)
@@ -57,11 +57,10 @@ def on_draw(dt):
         self.mov_player2.draw(gl.GL_TRIANGLE_STRIP)
     self._draw_second = not self._draw_second
 
-def set_imgui_widgets():
+def set_widgets():
     fps_min = 15.
     fps_max = 45.
     x_offset = 50.
-
     self.dtlist.append((len(self.dtlist),1/max([self.dt,0.0001])))
 
     imgui.begin("Video Recording")
