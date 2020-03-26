@@ -6,16 +6,20 @@ import Glimgui.tisgrabber.tisgrabber as IC
 import numpy as np
 from pyfirmata import Arduino, util
 import serial.tools.list_ports
-
+import time
 
 self = None
 
 class cam_config:
-    def __init__(self,fps = 30, exposure = -4, gain = 0.5):
-        self.fps = fps
+    def __init__(self, exposure = 10, gain = 10):
         self.exposure = exposure
         self.gain = gain
         self.toggle_on = False
+
+# class time_event:
+#     def __init__(self):
+#         self.event_name = []
+#         self.event_time =
 
 def prepare():
     shader_folder = './shaderfile/'
@@ -29,53 +33,58 @@ def prepare():
 
     self.LED_pin  = self.arduino_board.get_pin('d:11:p')
     self.LED_power = .1
-    # self.arduino_board.analog[0].enable_reporting()
-    # self.ardiuno_sig = [0.]
+    self.arduino_board.analog[0].enable_reporting()
+    # self.ardiuno_sig = 0.#[0.]
 
     # Create camera (list of tuple (cam_obj, boolean -> if cam is opened))
     self.camera = []
     self.camera_config = []
     self.camera_isalive = []
-    cam_openable = True
-    n_cam = 0
     self._cam_VS = load_shaderfile(shader_folder + vertex_shader_fn)
     self._cam_FS = load_shaderfile(shader_folder + frag_shader_fn)
 
-    unit_player = gloo.Program(self._cam_VS, self._cam_FS)
-    unit_player.cam_id = len(self.camera)
-    unit_player['a_pos'] = [(-1, -1), (-1, +1), (+1, -1), (+1, +1)]
-    unit_player['a_texcoord'] = [(0., 0.), (0., 1.), (1., 0.), (1., 1.)]
+
 
     self.mov_player = []
     self.cam_buffer = []
-    self._framebuffers = []
 
+    temp_cam = IC.TIS_CAM()
+    num_cam = len(temp_cam.GetDevices())
+    for iter in range(num_cam):
+        temp_cam = IC.TIS_CAM()
+        temp_cam.DevName = temp_cam.GetDevices()[iter].decode("utf-8")
+        temp_cam.open(temp_cam.DevName)
+        temp_cam.SetVideoFormat("Y16 (752x480)")
+        temp_cam.SetContinuousMode(0)
+        temp_cam.StartLive(0)
+        temp_cam.SetPropertySwitch("Exposure", "Auto", 0)
+        temp_cam.SetPropertySwitch("Gain", "Auto", 0)
+        temp_cam.SnapImage()
+        unit_player = gloo.Program(self._cam_VS, self._cam_FS)
+        unit_player.cam_id = len(self.camera)
+        unit_player['a_pos'] = [(-1, -1), (-1, +1), (+1, -1), (+1, +1)]
+        unit_player['a_texcoord'] = [(0., 0.), (0., 1.), (1., 0.), (1., 1.)]
+        unit_buffer = temp_cam.GetImage()
+        unit_player['texture'] = unit_buffer
+        unit_player['texture']._handle = iter
+        self.mov_player.append(unit_player)
+        self.cam_buffer.append(unit_buffer)
 
-    while cam_openable:
-        temp_cam = cv2.VideoCapture(n_cam)
-        cam_openable = temp_cam.read()[0]
-        n_cam += 1
-        if cam_openable:
-            _, unit_buffer = temp_cam.read()
-            unit_player['texture'] = unit_buffer
-            self.mov_player.append(unit_player)
-            self.cam_buffer.append(unit_buffer)
-            self._framebuffers.append(gloo.FrameBuffer(color=np.zeros((self.height, self.width, 4), np.float32).view(gloo.Texture2D)))
+        self.camera_config.append(cam_config())
+        if len(self.camera) > 0: #Display the default cam
+            self.camera.append([temp_cam,False])
+            temp_cam.StopLive()
+        else:
+            self.camera.append([temp_cam,True])
 
-            self.camera_config.append(cam_config())
-            if len(self.camera) > 0: #Display the default cam
-                self.camera.append([temp_cam,False])
-                temp_cam.release()
-            else:
-                self.camera.append([temp_cam,True])
-
-    self._clock.set_fps_limit(60)
-
-    self.dtlist = [(0.,0.)]
+    self.FPS = 60
+    self._clock.set_fps_limit(self.FPS)
+    self.ardiuno_sig = [self.arduino_board.analog[0].read()]
+    self.dtlist = [(0.,0.,time.time(),self.ardiuno_sig[-1])]
 
     self.vid_fn = './/Output1111.avi'
     vidbuffer_shape = np.hstack(self.cam_buffer).shape
-    self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), 30.,
+    self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
                                      (int(vidbuffer_shape[1]), int(vidbuffer_shape[0])))
     self.rec_timepoint = []
     self.rec_on = False
@@ -83,19 +92,13 @@ def prepare():
     self._draw_cam = 0
 
 
-def on_draw(dt):
-    # gl.glEnable(gl.GL_DEPTH_TEST)
-    self.clear()
-    self.mov_player[self._draw_cam]['texture'] = self.cam_buffer[self._draw_cam]
-    self.mov_player[self._draw_cam].draw(gl.GL_TRIANGLE_STRIP)
-
 def set_widgets():
-    fps_min = 15.
-    fps_max = 45.
+    fps_min = self.FPS - 15.
+    fps_max = self.FPS + 15.
     x_offset = 50.
-    # self.ardiuno_sig.append(self.arduino_board.analog[0].read())
+    self.ardiuno_sig.append(self.arduino_board.analog[0].read())
     # print(self.ardiuno_sig[-1])
-    self.dtlist.append((len(self.dtlist),1/max([self.dt,0.0001])))
+    self.dtlist.append((len(self.dtlist),1/max([self.dt,0.0001]),time.time(),self.ardiuno_sig[-1]))
 
     imgui.begin("Video Recording")
 
@@ -107,6 +110,7 @@ def set_widgets():
 
     if imgui.button(self.rec_button_text):
         if self.rec_on:
+            self.timeline_file.close()
             self.rec_button_text = 'Start'
             self.rec_timepoint[1] = len(self.dtlist)
             self.rec_on = False
@@ -115,10 +119,15 @@ def set_widgets():
             self.rec_on = True
             if self.rec_button_text == 'Start':
                 self.rec_timepoint = [len(self.dtlist),99999]
+                self.timeline_file = open(self.vid_fn[:-3]+'txt','w')
                 vidbuffer_shape = np.hstack(self.cam_buffer).shape
-                self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), 30.,
+                self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
                                                  (int(vidbuffer_shape[1]),int(vidbuffer_shape[0])))
                 self.rec_button_text = 'Stop'
+    _,buffer_FPS = imgui.slider_int('max FPS', self.FPS, 1, 100, '%d')
+    if buffer_FPS != self.FPS:
+        self._clock.set_fps_limit(buffer_FPS)
+        self.FPS = buffer_FPS
     _,self.LED_power = imgui.slider_float('LED power', self.LED_power, 0.0, 1.0, '%.2f', 1.0)
     self.LED_pin.write(self.LED_power)
 
@@ -126,11 +135,13 @@ def set_widgets():
 
     for idx in range(len(self.camera)):
         cam_idx = "Cam %d" % idx
-        _, self.camera[idx][1] = imgui.selectable(cam_idx, self.camera[idx][1])
-        if self.camera[idx][1] and not self.camera[idx][0].read()[0]:
-            self.camera[idx][0].open(idx)
-        elif self.camera[idx][0].read()[0] and not self.camera[idx][1]:
-            self.camera[idx][0].release()
+        _, shouldstart = imgui.selectable(cam_idx, self.camera[idx][1])
+        if shouldstart and not self.camera[idx][1]:
+            self.camera[idx][0].StartLive(0)
+            self.camera[idx][1] = shouldstart
+        elif self.camera[idx][1] and not shouldstart:
+            self.camera[idx][0].StopLive()
+            self.camera[idx][1] = shouldstart
 
     imgui.listbox_footer()
     imgui.same_line()
@@ -142,12 +153,12 @@ def set_widgets():
     winPos = (winPos[0],winPos[1]+30)
     line_st = int(max([len(self.dtlist)-ww+x_offset,0]))
 
-    dtlist_adapted = np.array(self.dtlist)[line_st:]
+    dtlist_adapted = np.array(self.dtlist)[line_st:,:2]
     # dtlist_adapted[:, 0] -= line_st*2
     dtlist_adapted[:,1] = (1-(dtlist_adapted[:,1]-fps_min)/(fps_max-fps_min))*wh
     dtlist_adapted += winPos+np.array([-min(dtlist_adapted[:,0])+x_offset,0.])
 
-    # arduino_sig_adapted = np.array(self.ardiuno_sig)[line_st:] * wh + winPos[1]
+    arduino_sig_adapted = np.array(self.ardiuno_sig)[line_st:] * wh + winPos[1]
 
     draw_list = imgui.get_window_draw_list()
     y_min = winPos[1]
@@ -163,12 +174,12 @@ def set_widgets():
                            thickness=3)
     # from IPython import embed
     # embed()
-    # draw_list.add_polyline(np.vstack([dtlist_adapted[:,0],arduino_sig_adapted]).T.tolist(), imgui.get_color_u32_rgba(.5, .5, 1, 1), closed=False, thickness=3)
+    draw_list.add_polyline(np.vstack([dtlist_adapted[:,0],arduino_sig_adapted]).T.tolist(), imgui.get_color_u32_rgba(.5, .5, 1, 1), closed=False, thickness=3)
     draw_list.add_polyline([(winPos[0]+x_offset, winPos[1]), (winPos[0]+x_offset, winPos[1]+wh)], imgui.get_color_u32_rgba(1., 1., 1., .5), closed=False,
                            thickness=4)
     draw_list.add_polyline([(winPos[0]+x_offset, winPos[1]+wh/2.), (winPos[0]+ww, winPos[1]+wh/2)], imgui.get_color_u32_rgba(1., 1., 1., .5), closed=False,
                            thickness=4)
-    draw_list.add_text(winPos[0],winPos[1]+wh/2-5,imgui.get_color_u32_rgba(1,1,0,1),'30 Hz')
+    draw_list.add_text(winPos[0],winPos[1]+wh/2-5,imgui.get_color_u32_rgba(1,1,0,1),'%d Hz'%self.FPS)
     draw_list.add_text(winPos[0], winPos[1] + wh-5,
                        imgui.get_color_u32_rgba(1, 1, 0, 1), '%g Hz'%fps_min )
     draw_list.add_text(winPos[0], winPos[1]-5,
@@ -176,8 +187,15 @@ def set_widgets():
     imgui.end_child()
     imgui.end()
 
+    for iter_idx, unit_player in enumerate(self.mov_player):
+        if self.camera[iter_idx][1]:
+            self.camera[iter_idx][0].SnapImage()
+            self.cam_buffer[iter_idx] = self.camera[iter_idx][0].GetImage()
+
     if self.rec_on:
         self.vidwriter.write(np.hstack(self.cam_buffer))
+        timeline_msg = '%d %.5f %.3f\n'%(self.dtlist[-1][0],self.dtlist[-1][2],self.dtlist[-1][3])
+        self.timeline_file.write(timeline_msg)
 
     self.dispatch_event("live_view")
 
@@ -185,23 +203,21 @@ def live_view():
     imgui.begin("Camera", True)
     draw_list = imgui.get_window_draw_list()
 
-    # TODO: Somehow the performace drop drasically after adding camera. Need to fix that
     for iter_idx, unit_player in enumerate(self.mov_player):
         if self.camera[iter_idx][1]:
-            _, self.cam_buffer[iter_idx] = self.camera[iter_idx][0].read()
             child_name = "cam %d" % iter_idx
-            imgui.begin_child(child_name, 480, 360)
+            imgui.begin_child(child_name, 500, 320)
             imgui.text(child_name)
             ww, wh = imgui.get_window_size()
             winPos = imgui.get_cursor_screen_pos()
             self._draw_cam = iter_idx
             self.clear()
-            self._framebuffers[iter_idx].activate()
-            self.dispatch_event("on_draw", .0)
-            self._framebuffers[iter_idx].deactivate()
-            draw_list.add_image(self._framebuffers[iter_idx].color[0]._handle, tuple(winPos),
+            self.mov_player[self._draw_cam]['texture'] = self.cam_buffer[self._draw_cam]
+            self.mov_player[self._draw_cam]['texture'].activate()
+            draw_list.add_image(self.mov_player[iter_idx]['texture']._handle, tuple(winPos),
                                 tuple([winPos[0] + ww, winPos[1] + wh]),
                                 (0, 0), (1, 1))
+            self.mov_player[self._draw_cam]['texture'].deactivate()
             imgui.end_child()
             imgui.same_line()
 
@@ -212,17 +228,16 @@ def live_view():
             config_name = "Config Cam %d" % iter_idx
             self.camera_config[iter_idx].toggle_on, _ = imgui.collapsing_header(config_name, True)
             if self.camera_config[iter_idx].toggle_on:
-                _, buffer_fps = imgui.slider_int('FPS', self.camera_config[iter_idx].fps, 1, 100, '%d')
-                if buffer_fps != self.camera_config[iter_idx].fps:
-                    self.camera[iter_idx][0].set(cv2.CAP_PROP_FPS, buffer_fps)
-                    self.camera_config[iter_idx].fps = buffer_fps
-                _, buffer_exposure = imgui.slider_int('Exposure Time', self.camera_config[iter_idx].exposure, -13, -1, '%d')
+                exp_name = "Exposure Time (ms, %s)" %config_name
+                _, buffer_exposure = imgui.slider_int(exp_name, self.camera_config[iter_idx].exposure, 1, 1000, '%d')
                 if buffer_exposure != self.camera_config[iter_idx].exposure:
-                    self.camera[iter_idx][0].set(cv2.CAP_PROP_EXPOSURE, buffer_exposure)
+                    self.camera[iter_idx][0].SetPropertyValue("Exposure", "Value", buffer_exposure)
                     self.camera_config[iter_idx].exposure = buffer_exposure
-                _, buffer_gain = imgui.slider_float('gain', self.camera_config[iter_idx].gain, 0., 1., '%.2f',1.0)
+
+                gain_name = "Gain (%s)" %config_name
+                _, buffer_gain = imgui.slider_int(gain_name, self.camera_config[iter_idx].gain, 1, 300, '%d')
                 if buffer_gain != self.camera_config[iter_idx].gain:
-                    self.camera[iter_idx][0].set(cv2.CAP_PROP_GAIN, buffer_gain)
+                    self.camera[iter_idx][0].SetPropertyValue("Gain", "Value", buffer_gain)
                     self.camera_config[iter_idx].gain = buffer_gain
 
 
