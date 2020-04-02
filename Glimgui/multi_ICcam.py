@@ -1,12 +1,15 @@
 from Glimgui.glarage import *
-from glumpy import gl, gloo
+from glumpy import gloo
 import imgui
 import cv2
 import Glimgui.tisgrabber.tisgrabber as IC
 import numpy as np
 from pyfirmata import Arduino, util
 import serial.tools.list_ports
-import time
+from datetime import datetime
+from time import time
+from os.path import isfile
+
 
 self = None
 
@@ -57,12 +60,19 @@ def prepare():
         temp_cam.SetVideoFormat("Y16 (752x480)")
         temp_cam.SetContinuousMode(0)
         temp_cam.StartLive(0)
-        temp_cam.SetPropertySwitch("Exposure", "Auto", 0)
-        temp_cam.SetPropertySwitch("Gain", "Auto", 0)
+        try:
+            temp_cam.SetPropertySwitch("Exposure", "Auto", 0)
+        except:
+            print("\033[1;31mERROR: \033[0;33mFail to switch off the automode for \033[0m[\033[1;31m Exposure Time \033[0m]")
+        try:
+            temp_cam.SetPropertySwitch("Gain", "Auto", 0)
+        except:
+            print("\033[1;31mERROR: \033[0;33mFail to switch off the automode for \033[0m[\033[1;31m Gain \033[0m]")
+
         temp_cam.SnapImage()
         unit_player = gloo.Program(self._cam_VS, self._cam_FS)
         unit_player.cam_id = len(self.camera)
-        unit_player['a_pos'] = [(-1, -1), (-1, +1), (+1, -1), (+1, +1)]
+        unit_player['a_pos'] = [(+1, -1), (+1, +1), (-1, -1), (-1, +1)]
         unit_player['a_texcoord'] = [(0., 0.), (0., 1.), (1., 0.), (1., 1.)]
         unit_buffer = temp_cam.GetImage()
         unit_player['texture'] = unit_buffer
@@ -79,10 +89,14 @@ def prepare():
 
     self.FPS = 60
     self._clock.set_fps_limit(self.FPS)
-    self.ardiuno_sig = [self.arduino_board.analog[0].read()]
-    self.dtlist = [(0.,0.,time.time(),self.ardiuno_sig[-1])]
+    # self.ardiuno_sig = [self.arduino_board.analog[0].read()]
+    self._frame_count = 0
+    self.dtlist = [(self._frame_count,0,time(),self.arduino_board.analog[0].read())]
 
-    self.vid_fn = './/Output1111.avi'
+    self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")
+    while isfile(self.vid_fn):
+        self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")
+
     vidbuffer_shape = np.hstack(self.cam_buffer).shape
     self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
                                      (int(vidbuffer_shape[1]), int(vidbuffer_shape[0])))
@@ -96,9 +110,9 @@ def set_widgets():
     fps_min = self.FPS - 15.
     fps_max = self.FPS + 15.
     x_offset = 50.
-    self.ardiuno_sig.append(self.arduino_board.analog[0].read())
-    # print(self.ardiuno_sig[-1])
-    self.dtlist.append((len(self.dtlist),1/max([self.dt,0.0001]),time.time(),self.ardiuno_sig[-1]))
+    # self.ardiuno_sig.append(self.arduino_board.analog[0].read())
+    self._frame_count += 1
+    self.dtlist.append((self._frame_count,int(1/max([self.dt,0.0001])),time(),self.arduino_board.analog[0].read()))
 
     imgui.begin("Video Recording")
 
@@ -112,13 +126,15 @@ def set_widgets():
         if self.rec_on:
             self.timeline_file.close()
             self.rec_button_text = 'Start'
-            self.rec_timepoint[1] = len(self.dtlist)
+            self.rec_timepoint[1] = self._frame_count
             self.rec_on = False
             self.vidwriter.release()
+            self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")
+            print(self.vid_fn)
         else:
             self.rec_on = True
             if self.rec_button_text == 'Start':
-                self.rec_timepoint = [len(self.dtlist),99999]
+                self.rec_timepoint = [self._frame_count,99999]
                 self.timeline_file = open(self.vid_fn[:-3]+'txt','w')
                 vidbuffer_shape = np.hstack(self.cam_buffer).shape
                 self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
@@ -148,23 +164,30 @@ def set_widgets():
 
     imgui.begin_child("fps plot", 0.,0.)
     ww,wh = imgui.get_window_size()
+    if len(self.dtlist)>max([ww-x_offset,1]):
+        self.dtlist.pop(0)
     wh *=.7
     winPos = imgui.get_cursor_screen_pos()
     winPos = (winPos[0],winPos[1]+30)
-    line_st = int(max([len(self.dtlist)-ww+x_offset,0]))
-
-    dtlist_adapted = np.array(self.dtlist)[line_st:,:2]
+    # if ww<2*x_offset:
+    #     line_st = int(max([self._frame_count - ww, 0]))
+    # else:
+    #     line_st = int(max([self._frame_count-ww+x_offset,0]))
     # dtlist_adapted[:, 0] -= line_st*2
+    dtlist_adapted = np.array(self.dtlist)[:,[0,1,-1]]
+    line_st = min(dtlist_adapted[:,0])
     dtlist_adapted[:,1] = (1-(dtlist_adapted[:,1]-fps_min)/(fps_max-fps_min))*wh
-    dtlist_adapted += winPos+np.array([-min(dtlist_adapted[:,0])+x_offset,0.])
+    dtlist_adapted += np.array(winPos)[[0,1,1]]+np.array([-min(dtlist_adapted[:,0])+x_offset,0.,0.])
 
-    arduino_sig_adapted = np.array(self.ardiuno_sig)[line_st:] * wh + winPos[1]
+    arduino_sig_adapted = dtlist_adapted[:,-1]#np.array(self.ardiuno_sig)[line_st:] * wh + winPos[1]
+    dtlist_adapted = dtlist_adapted[:,:-1]
 
     draw_list = imgui.get_window_draw_list()
     y_min = winPos[1]
     y_max = winPos[1]+wh
     x_min = min(dtlist_adapted[:,0])
     x_max = max(dtlist_adapted[:,0])
+
     if self.rec_timepoint:
         rect_st = x_min+max([self.rec_timepoint[0]-line_st,0])
         rect_ed = min([x_max,x_min+self.rec_timepoint[1]-line_st])
@@ -172,8 +195,7 @@ def set_widgets():
             draw_list.add_rect_filled(rect_st, y_max, rect_ed, y_min, imgui.get_color_u32_rgba(1,1,0,.5))
     draw_list.add_polyline(dtlist_adapted.tolist(), imgui.get_color_u32_rgba(0., .5, 1, 1), closed=False,
                            thickness=3)
-    # from IPython import embed
-    # embed()
+
     draw_list.add_polyline(np.vstack([dtlist_adapted[:,0],arduino_sig_adapted]).T.tolist(), imgui.get_color_u32_rgba(.5, .5, 1, 1), closed=False, thickness=3)
     draw_list.add_polyline([(winPos[0]+x_offset, winPos[1]), (winPos[0]+x_offset, winPos[1]+wh)], imgui.get_color_u32_rgba(1., 1., 1., .5), closed=False,
                            thickness=4)
@@ -216,8 +238,9 @@ def live_view():
             self.mov_player[self._draw_cam]['texture'].activate()
             draw_list.add_image(self.mov_player[iter_idx]['texture']._handle, tuple(winPos),
                                 tuple([winPos[0] + ww, winPos[1] + wh]),
-                                (0, 0), (1, 1))
+                                (0, 1), (1, 0))
             self.mov_player[self._draw_cam]['texture'].deactivate()
+
             imgui.end_child()
             imgui.same_line()
 
@@ -249,9 +272,16 @@ def config_cam(cam_id):
 
 
 def close():
-    self.arduino_board.exit()
-    for cam in [i for (i, v) in zip(self.camera, self.camera_isalive) if v]:
-        cam.release()
+    try:
+        self.arduino_board.exit()
+    except:
+        print("\033[1;31mERROR: \033[0;33m An error occurred when disconnecting \033[0m[\033[1;31m arduino_board \033[0m]")
+    try:
+        for cam in [i for (i, v) in zip(self.camera, self.camera_isalive) if v]:
+            cam.release()
+    except:
+        print("\033[1;31mERROR: \033[0;33m An error(s) occurred when disconnecting \033[0m[\033[1;31m camera(s) \033[0m]")
+
 
 
 def pop_on_resize(width, height):
