@@ -1,5 +1,5 @@
 import multiprocessing as mp
-from PolyChunk import PolyChunk as pc
+from minipoly import miniPoly as mnpl
 
 
 def f(api):
@@ -54,8 +54,8 @@ def printf(api):
 
 
 if __name__ == '__main__' :
-    nf = pc.Chunk(f, ['t', 'a'])
-    pf = pc.Chunk(printf, ['t'])
+    nf = mnpl.minion(f, ['t', 'a'])
+    pf = mnpl.minion(printf, ['t'])
     prt,chd = mp.Pipe()
     r_prt,r_chd = mp.Pipe()
     nf.add_target(chd)
