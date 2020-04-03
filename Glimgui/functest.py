@@ -5,7 +5,7 @@ import numpy as np
 self = None
 
 def prepare():
-    self._clock.set_fps_limit(60)
+    self._clock.set_fps_limit(50)
     vertex = """
     uniform mat4   u_model;         // Model matrix
     uniform mat4   u_view;          // View matrix
@@ -55,6 +55,10 @@ def prepare():
     self._init_glwin = True
     self._glwinpos = [0,0]
 
+    isalive = True
+    self.minion_plug.put(locals(),['isalive'])
+    self.minion_plug.give(0, ['isalive'])
+
 def set_widgets():
     if imgui.begin_main_menu_bar():
         if imgui.begin_menu("Command", True):
@@ -66,6 +70,8 @@ def set_widgets():
             imgui.end_menu()
         imgui.end_main_menu_bar()
 
+    self.minion_plug.put(self,['dt'])
+    self.minion_plug.give(0,['dt'])
 
     imgui.begin("Custom window", True)
     _, self.elv = imgui.slider_float("Azi", self.elv, 0, 360)
@@ -114,3 +120,8 @@ def on_draw(dt):
     gl.glEnable(gl.GL_DEPTH_TEST)
     self.quad.draw(gl.GL_TRIANGLES, self.I)
     # self._framebuffer.deactivate()
+
+def terminate():
+    isalive = False
+    self.minion_plug.put(locals(),['isalive'])
+    self.minion_plug.give(0, ['isalive'])

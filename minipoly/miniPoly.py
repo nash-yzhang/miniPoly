@@ -1,5 +1,5 @@
 import multiprocessing as mp
-from IPython import embed
+# from IPython import embed
 # noinspection SpellCheckingInspection
 
 class minion (object) :
@@ -21,41 +21,27 @@ class minion (object) :
     def add_target(self,target_channel):
         self._giveto.append(target_channel)
 
-    def put(self, localvar, varname=None) :
-        if not varname:
-            varname = self.varname
-        for key, value in localvar.items () :
-            if not varname:
-                self.outbox[key] = value
-            else:
-                if key in varname :
-                    self.outbox[key] = value
+    def put(self, var_pkg, varname) :
+        if type(var_pkg) == dict:
+            put_var = {k:var_pkg[k] for k in varname}
+        else:
+            put_var = {k:getattr(var_pkg,k) for k in varname}
+        self.outbox.update(put_var)
 
-    def give(self, chn_idx, varname = None):
-        out_package = {}
-        for key, value in self.outbox.items():
-            if not varname:
-                out_package[key] = value
-            else:
-                if key in varname:
-                    out_package[key] = value
-
+    def give(self, chn_idx, varname):
+        out_package = {k:self.outbox[k] for k in varname}
         chn = self._giveto[chn_idx]
         if isinstance(chn,type(mp.Queue())):
             chn.put(out_package)
         elif isinstance(chn,mp.connection.PipeConnection):
             chn.send(out_package)
 
-    def get(self, chn_idx, varname=None) :
+    def get(self, chn_idx, varname) :
         chn = self._getfrom[chn_idx]
-        if isinstance(chn, type(mp.Queue())):
-            tin = self._getfrom[chn_idx].get()
-        elif isinstance(chn, mp.connection.PipeConnection):
-            tin = self._getfrom[chn_idx].recv()
+        if chn.poll():
+            if isinstance(chn, type(mp.Queue())):
+                in_package = self._getfrom[chn_idx].get()
+            elif isinstance(chn, mp.connection.PipeConnection):
+                in_package = self._getfrom[chn_idx].recv()
 
-        for key, value in tin.items():
-            if varname:
-                if key in varname:
-                    self.inbox[key] = value
-            else:
-                self.inbox[key] = value
+            self.inbox.update({k:in_package[k] for k in set(in_package.keys())&set(varname)})

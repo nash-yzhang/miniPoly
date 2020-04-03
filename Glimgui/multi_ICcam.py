@@ -266,9 +266,9 @@ def live_view():
 
     imgui.end()
 
-def config_cam(cam_id):
-    imgui.begin('config window')
-    imgui.end()
+# def config_cam(cam_id):
+#     imgui.begin('config window')
+#     imgui.end()
 
 
 def close():

@@ -88,6 +88,10 @@ class adapted_glumpy_window(backend_glfw.Window):
 
 class glimWindow(adapted_glumpy_window):
     def __init__(self, *args, **kwargs):
+        if 'minion_plug' in kwargs.keys():
+            self.minion_plug = kwargs.pop('minion_plug')
+        else:
+            self.minion_plug = None
         super().__init__(*args, **kwargs)
         glfw.set_window_icon(self._native_window, 1, pimg.open('MappApp.ico'))
 
@@ -234,8 +238,8 @@ class glimWindow(adapted_glumpy_window):
             self._dock()
 
     def close(self):
-        if "close" in self.event_func_list:
-            self.dispatch_event("close")
+        if "terminate" in self.event_func_list:
+            self.dispatch_event("terminate")
         if self._has_pop:
             for win in self._manager.__windows__[1:]:
                 win.close()
