@@ -9,9 +9,9 @@ def f(api):
 
     while True:#api.src_chn[0].qsize()>0:
         t = int(myclock.tick() * 1000)
-        api.get(0, 't')
+        api.get('little brother', 't')
         api.put(locals(), 't')
-        api.give(0, 't')
+        api.give('little brother', 't')
         if 't' in api.inbox.keys():
             another_t = int(api.inbox['t'])
             print('Pf: %d' % t)
@@ -47,9 +47,9 @@ def printf(api):
 
     while True:#api.src_chn[0].qsize()>0:
         t = int(myclock2.tick() * 1000)
-        api.get(0, 't')
+        api.get("big brother", 't')
         api.put(locals(), 't')
-        api.give(0, 't')
+        api.give("big brother", 't')
         if 't' in api.inbox.keys():
             another_t = int(api.inbox['t'])
             print('mi0: %d, mi1: %d' % (another_t, t))
@@ -64,18 +64,13 @@ def printf(api):
 
 
 if __name__ == '__main__' :
-    nf = mnpl.minion(f, [])
-    pf = mnpl.minion(printf, [])
-    prt,chd = mp.Pipe()
-    r_prt,r_chd = mp.Pipe()
-    nf.add_target(chd)
-    nf.add_source(r_prt)
-    pf.add_target(r_chd)
-    pf.add_source(prt)
-    pf.Process.start()
-    nf.Process.start()
-    while nf.Process.is_alive():
-        while pf.Process.is_alive():
-            pass
-        print("pf is dead")
-    print("nf is dead")
+    minion_manager = mnpl.manager()
+    minion_manager.add_minion('big brother',f)
+    minion_manager.add_minion('little brother', printf)
+    minion_manager.add_connection("big brother<->little brother")
+    minion_manager.run('all')
+    # while nf.Process.is_alive():
+    #     while pf.Process.is_alive():
+    #         pass
+    #     print("pf is dead")
+    # print("nf is dead")

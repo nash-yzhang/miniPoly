@@ -164,6 +164,8 @@ class glimWindow(adapted_glumpy_window):
                 )
                 if imgui.button("Select"):
                     sys.path.insert(0, self.sti_file_dir)
+                    if "terminate" in self.event_func_list:
+                        self.dispatch_event("terminate")
                     self.set_sti_module((file_list[self.fn_idx].split('.')[0]))
                     self.open_dialog_state = False
 
