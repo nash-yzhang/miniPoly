@@ -21,7 +21,7 @@ def main(arduino_conn):
 
 def arduino_IO(glim_conn):
     myclock = clock.Clock()
-    myclock.set_fps_limit(100)
+    myclock.set_fps_limit(1000)
 
     ports = list(serial.tools.list_ports.comports())
     Arduino_COM_Name = [p[0] for p in ports if 'COM' in p.__str__()][0]
@@ -75,12 +75,10 @@ def arduino_IO(glim_conn):
                 timeline_file.close()
                 recording = False
 
-        print(myclock.tick()*1000)
         if recording:
             if timeline_file:
                 timeline_msg = '%d %d %d\n' % (internal_timestamp, stimulus_frame_n, analog_sig)
                 timeline_file.write(timeline_msg)
-                print(2)
             else:
                 print("ERROR: Cannot write timeline to non-existing file")
 
@@ -101,13 +99,5 @@ if __name__ == '__main__' :
     minion_manager = mnp.manager()
     minion_manager.add_minion('glim', main)
     minion_manager.add_minion('arduino_IO', arduino_IO)
-    minion_manager.add_connection('glim<->arduino_IO')
+    minion_manager.add_queue_connection('glim<->arduino_IO')
     minion_manager.run('all')
-
-    # mi0 = mnp.minion('glim',main)
-    # mi1 = mnp.minion('report',print_fps)
-    # prt,chd = mp.Pipe()
-    # mi0.add_target(chd)
-    # mi1.add_source(prt)
-    # mi0.Process.start()
-    # mi1.Process.start()

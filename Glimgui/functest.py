@@ -55,9 +55,9 @@ def prepare():
     self._init_glwin = True
     self._glwinpos = [0,0]
 
-    isalive = True
-    self.minion_plug.put(locals(),['isalive'])
-    self.minion_plug.give('report', ['isalive'])
+    # isalive = True
+    # self.minion_plug.put(locals(),['isalive'])
+    # self.minion_plug.give('report', ['isalive'])
 
 def set_widgets():
     if imgui.begin_main_menu_bar():
@@ -70,8 +70,8 @@ def set_widgets():
             imgui.end_menu()
         imgui.end_main_menu_bar()
 
-    self.minion_plug.put(self,['dt'])
-    self.minion_plug.give('report',['dt'])
+    # self.minion_plug.put(self,['dt'])
+    # self.minion_plug.give('report',['dt'])
 
     imgui.begin("Custom window", True)
     _, self.elv = imgui.slider_float("Azi", self.elv, 0, 360)
@@ -121,7 +121,7 @@ def on_draw(dt):
     self.quad.draw(gl.GL_TRIANGLES, self.I)
     # self._framebuffer.deactivate()
 
-def terminate():
-    isalive = False
-    self.minion_plug.put(locals(),['isalive'])
-    self.minion_plug.give('report', ['isalive'])
+# def terminate():
+#     isalive = False
+#     self.minion_plug.put(locals(),['isalive'])
+#     self.minion_plug.give('report', ['isalive'])

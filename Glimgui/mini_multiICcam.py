@@ -86,7 +86,7 @@ def prepare():
     if 'internal_timestamp' in self.minion_plug.inbox.keys():
         self.arduino_ts = self.minion_plug.inbox['internal_timestamp']/1000.
 
-    self._frame_count = 0
+    self._frame_count = 0.
     self.timeline_list = [(self._frame_count, 0, self.arduino_ts/1000., self.arduino_ai)]
 
     self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")

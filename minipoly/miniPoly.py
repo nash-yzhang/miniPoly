@@ -1,4 +1,5 @@
 import multiprocessing as mp
+import socket, pickle
 # from IPython import embed
 # noinspection SpellCheckingInspection
 
@@ -31,25 +32,37 @@ class minion (object) :
         out_package = {k:self.outbox[k] for k in varname}
         chn = self._giveto[minion_name]
         if isinstance(chn,type(mp.Queue())):
-            chn.put(out_package)
+            if not chn.full():
+                chn.put(out_package)
         elif isinstance(chn,mp.connection.PipeConnection):
             chn.send(out_package)
+        elif isinstance(chn, simpleSocket):
+            datastring = pickle.dumps(out_package)
+            chn.send(datastring)
 
     def get(self, minion_name, varname) :
         chn = self._getfrom[minion_name]
-        if chn.poll():
-            if isinstance(chn, type(mp.Queue())):
+        if isinstance(chn, type(mp.Queue())):
+            if not chn.empty():
                 in_package = self._getfrom[minion_name].get()
-            elif isinstance(chn, mp.connection.PipeConnection):
+                self.inbox.update({k: in_package[k] for k in set(in_package.keys()) & set(varname)})
+        elif isinstance(chn, mp.connection.PipeConnection):
+            if chn.poll():
                 in_package = self._getfrom[minion_name].recv()
-
-            self.inbox.update({k:in_package[k] for k in set(in_package.keys())&set(varname)})
+                self.inbox.update({k:in_package[k] for k in set(in_package.keys())&set(varname)})
+        elif isinstance(chn, simpleSocket):
+            data = chn.recv(4096)
+            if data:
+                in_package = pickle.loads(data)
+                self.inbox.update({k: in_package[k] for k in set(in_package.keys()) & set(varname)})
 
 
 class manager (object):
     def __init__(self):
         self.minions = {}
-        self.connections = []
+        self.pipes = {}
+        self.queue = {}
+        self.socket_conn = {}
 
     def add_minion(self, minion_name, task_method):
         if minion_name not in self.minions.keys():
@@ -57,7 +70,7 @@ class manager (object):
         else:
             print(f"{bcolors.bRED}ERROR: {bcolors.YELLOW}Name [{bcolors.bRESET}%s{bcolors.YELLOW}] already taken"%minion_name)
 
-    def add_connection(self,conn_exp_str):
+    def add_pipe_connection(self,conn_exp_str):
         if "->" in conn_exp_str:
             if "<->" in conn_exp_str:
                 [sn,tn] = conn_exp_str.split("<->")
@@ -70,13 +83,69 @@ class manager (object):
             self.minions[sn].add_target(tn,tar)
             self.minions[tn].add_source(sn,src)
 
+    def add_queue_connection(self,conn_exp_str,queue_size = 1):
+        if "->" in conn_exp_str:
+            if "<->" in conn_exp_str:
+                [sn,tn] = conn_exp_str.split("<->")
+                self.queue[sn+'<-'+tn] = mp.Queue(queue_size)
+                self.minions[sn].add_source(tn,self.queue[sn+'<-'+tn])
+                self.minions[tn].add_target(sn,self.queue[sn+'<-'+tn])
+            else:
+                [sn,tn] = conn_exp_str.split("->")
+            self.queue[sn + '->' + tn] = mp.Queue(queue_size)
+            self.minions[sn].add_target(tn, self.queue[sn + '->' + tn])
+            self.minions[tn].add_source(sn, self.queue[sn + '->' + tn])
+
+    def add_socket_connnection(self,conn_exp_str,skt):
+        if "->" in conn_exp_str:
+            if "<->" in conn_exp_str:
+                [sn,tn] = conn_exp_str.split("<->")
+                if skt.skt_type == "server":
+                    self.minions[sn].add_source(tn,skt)
+                    self.minions[sn].add_target(tn,skt)
+                elif skt.skt_type == "client":
+                    self.minions[tn].add_source(sn,skt)
+                    self.minions[tn].add_target(sn,skt)
+            else:
+                [sn,tn] = conn_exp_str.split("->")
+                if skt.skt_type == "server":
+                    self.minions[sn].add_target(tn, skt)
+                elif skt.skt_type == "client":
+                    self.minions[tn].add_source(sn, skt)
+
+
     def run(self,minion_name):
         if minion_name == "all":
             for mini in self.minions.values():
                 mini.Process.start()
         else:
             for mini in minion_name:
-                self.minions[mini].start()
+                self.minions[mini].Process.start()
+
+class simpleSocket:
+    def __init__(self,skt_type,host, port):
+        self.program = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.skt_type = skt_type
+        if skt_type == "server":
+            self.program.bind((host, port))
+            self.program.listen()
+            self.conn, self.addr = self.program.accept()
+        elif skt_type == "client":
+            self.program.connect((host, port))
+
+    def send(self,*args,**kwargs):
+        if self.skt_type == "server":
+            self.conn.send(*args,**kwargs)
+        elif self.skt_type == "client":
+            self.program.send(*args, **kwargs)
+
+    def recv(self,*args,**kwargs):
+        return self.program.recv(*args, **kwargs)
+        # if self.skt_type == "server":
+        #     self.conn.recv(*args,**kwargs)
+        # elif self.skt_type == "client":
+        #     self.program.recv(*args, **kwargs)
+
 
 class bcolors:
     RED     = '\033[31m'
