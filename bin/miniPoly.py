@@ -5,11 +5,13 @@ import socket, pickle
 
 class minion (object) :
     _task = None
-    def __init__(self, name, task_method):
+    def __init__(self, name, task_method, custom_var = {}):
+        self._manager = 'unknown'
         self._name = name
         self._task = task_method
         self._giveto = {}
         self._getfrom  = {}
+        self._pocket = custom_var
         self.inbox = {}
         self.outbox = {}
         self.Process = mp.Process(target=self._task, args=(self,))
@@ -20,6 +22,9 @@ class minion (object) :
 
     def add_target(self,target_minion_name,target_channel):
         self._giveto[target_minion_name] = target_channel
+
+    def get_pocket(self,varname):
+        return self._pocket[varname]
 
     def put(self, var_pkg, varname) :
         if type(var_pkg) == dict:
@@ -56,6 +61,14 @@ class minion (object) :
                 in_package = pickle.loads(data)
                 self.inbox.update({k: in_package[k] for k in set(in_package.keys()) & set(varname)})
 
+    # def take(self, var_pkg, varname):
+    #     nonempty_inbox_items = {k: self.inbox[k] for k in self.inbox.keys() if self.inbox[k]};
+    #     if type(var_pkg) == dict:
+    #         var_pkg.update(nonempty_inbox_items)
+    #     else:
+    #         var_pkg.__dict__.update(nonempty_inbox_items)
+    #     return var_pkg
+
 
 class manager (object):
     def __init__(self):
@@ -64,9 +77,10 @@ class manager (object):
         self.queue = {}
         self.socket_conn = {}
 
-    def add_minion(self, minion_name, task_method):
+    def add_minion(self, minion_name, task_method,**kwargs):
         if minion_name not in self.minions.keys():
-            self.minions[minion_name] = minion(minion_name,task_method)
+            self.minions[minion_name] = minion(minion_name,task_method,**kwargs)
+            self.minions[minion_name]._manager = self
         else:
             print(f"{bcolors.bRED}ERROR: {bcolors.YELLOW}Name [{bcolors.bRESET}%s{bcolors.YELLOW}] already taken"%minion_name)
 

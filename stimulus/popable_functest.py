@@ -55,10 +55,6 @@ def prepare():
     self._init_glwin = True
     self._glwinpos = [0,0]
 
-    # isalive = True
-    # self.minion_plug.put(locals(),['isalive'])
-    # self.minion_plug.give('report', ['isalive'])
-
 def set_widgets():
     if imgui.begin_main_menu_bar():
         if imgui.begin_menu("Command", True):
@@ -80,46 +76,45 @@ def set_widgets():
     _, self.bgcolor = imgui.color_edit4('test', *self.bgcolor, True)
     imgui.text("FPS: %d"%(1/(self.dt+1e-5)))
     imgui.end()
-    self.quad['u_model'] = glm.rotate(np.eye(4), self.azi, 0, 0, 1) @ glm.rotate(np.eye(4), self.elv, 0, 1, 0)
-    self.quad['u_view'] = glm.translation(0, 0, self.dist)
-    
-    if self._init_glwin == True:
-        imgui.set_next_window_position(100,100)
-        self._init_glwin = False
-    _, self.window_state[1] = imgui.begin("GLView", True)#, flags = imgui.WINDOW_NO_TITLE_BAR)
-    ww, wh = imgui.get_window_size()
-    winPos = imgui.get_cursor_screen_pos()
-    self.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
-    self.clear()
-    self._framebuffer.activate()
-    self.dispatch_event("on_draw", self.dt)
-    self._framebuffer.deactivate()
-    draw_list = imgui.get_window_draw_list()
-    draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
-                        (0, 0), (1, 1))
-    imgui.invisible_button("popup", ww-30, wh-50)
-    if imgui.begin_popup_context_item("Item Context Menu", mouse_button=0):
-        if imgui.selectable("Pop out")[1]:
-            self.pop(ww,wh,winPos[0],winPos[1],title = 'GLView')
-        imgui.end_popup()
-    imgui.end()
+
+    if not self._poped:
+        self.popable_opengl_component("GLView",'draw',pop_draw_func_name='pop_draw')
+    else:
+        self.minion_plug.put(self,['elv','azi','dist','bgcolor'])
+        self.minion_plug.give("GLView",['elv','azi','dist','bgcolor'])
+        # self.minion_plug.get("GLview",['isalive'])
+        # self._poped =
 
 
 def on_init():
     gl.glEnable(gl.GL_DEPTH_TEST)
 
-def pop_on_resize(width,height):
-    self.quad['u_projection'] = glm.perspective(45.0, max(width,1.) / max(height,1.), 2.0, 100.0)
 
-def on_draw(dt):
-    # TODO: Finalize HERE to make window pop-able
-    # self._framebuffer.activate()
+# def on_resize(width,height):
+#     self.quad['u_projection'] = glm.perspective(45.0, width / float(height), 2.0, 100.0)
+
+def draw():
+    ww, wh = imgui.get_window_size()
+    self.quad['u_projection'] = glm.perspective(45.0, ww / float(wh), 2.0, 100.0)
+    self.quad['u_model'] = glm.rotate(np.eye(4), self.azi, 0, 0, 1) @ glm.rotate(np.eye(4), self.elv, 0, 1, 0)
+    self.quad['u_view'] = glm.translation(0, 0, self.dist)
     self.clear(self.bgcolor)
     gl.glEnable(gl.GL_DEPTH_TEST)
     self.quad.draw(gl.GL_TRIANGLES, self.I)
-    # self._framebuffer.deactivate()
 
-# def terminate():
-#     isalive = False
-#     self.minion_plug.put(locals(),['isalive'])
-#     self.minion_plug.give('report', ['isalive'])
+def pop_draw():
+    self.minion_plug.get(self._parent,['elv','azi','dist','bgcolor'])
+    if 'elv' in self.minion_plug.inbox.keys():
+        self.elv = self.minion_plug.inbox['elv']
+    if 'azi' in self.minion_plug.inbox.keys():
+        self.azi = self.minion_plug.inbox['azi']
+    if 'dist' in self.minion_plug.inbox.keys():
+        self.dist = self.minion_plug.inbox['dist']
+    if 'bgcolor' in self.minion_plug.inbox.keys():
+        self.bgcolor = self.minion_plug.inbox['bgcolor']
+    self.quad['u_projection'] = glm.perspective(45.0, self._width / float(self._height), 2.0, 100.0)
+    self.quad['u_model'] = glm.rotate(np.eye(4), self.azi, 0, 0, 1) @ glm.rotate(np.eye(4), self.elv, 0, 1, 0)
+    self.quad['u_view'] = glm.translation(0, 0, self.dist)
+    self.clear(self.bgcolor)
+    gl.glEnable(gl.GL_DEPTH_TEST)
+    self.quad.draw(gl.GL_TRIANGLES, self.I)
