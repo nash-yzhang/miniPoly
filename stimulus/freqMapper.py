@@ -1,12 +1,12 @@
 from scipy.ndimage import gaussian_filter
-from Glimgui.glarage import *
+from bin.glarage import *
 from glumpy import gl, glm, gloo
 import imgui
 
 self = None
 def prepare():
     self._clock.set_fps_limit(70)
-    shader_folder = './shaderfile/'
+    shader_folder = '../bin/shaderfile/'
     vertex_shader_fn = 'VS_tex_1511.glsl'
     frag_shader_fn = 'FS_tex_1511.glsl'
 
@@ -53,8 +53,11 @@ def prepare():
     self.Shape['texture'] = np.uint8(np.random.randint(0, 2, [200, 20, 1]) * np.array([[[1, 1, 1]]]) * 255)
     self.Shape['texture'].wrapping = gl.GL_REPEAT
 
+def client_draw():
+    self.dispatch_event('draw',self._width,self._height)
 
-def on_draw(dt):
+def draw(ww,wh):
+    self.Shape['u_scale'] = wh / ww, 1
     def d_range(data, rangeaxis=0):
         return np.max(data, axis=rangeaxis) - np.min(data, axis=rangeaxis)
     self.t += 1
@@ -66,7 +69,6 @@ def on_draw(dt):
     temp_azi = temp_azi.flatten()
     self.V["texcoord"] = np.hstack ([temp_azi[:, None] * 40 / 2 / np.pi, temp_elv[:, None]]) / 10  - np.array([self.t,self.t])*10**-3
 
-
     gl.glEnable(gl.GL_DEPTH_TEST)
     self.clear()
     self.Shape.draw(gl.GL_TRIANGLES, self.I)
@@ -76,27 +78,14 @@ def set_widgets():
     imgui.text("Frame duration: %.2f ms" %(self.dt*1000))
     imgui.text("FPS: %d Hz"%round(1/(self.dt+1e-8)))
     imgui.end()
-    if not self._has_pop:
-        imgui.begin("FreqMapper", True)
-        ww, wh = imgui.get_window_size()
-        winPos = imgui.get_cursor_screen_pos()
-        self.Shape['u_scale'] = wh/ww, 1
-        self.clear()
-        self._framebuffer.activate()
-        self.dispatch_event("on_draw", .0)
-        self._framebuffer.deactivate()
-        draw_list = imgui.get_window_draw_list()
-        draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos), tuple([winPos[0] + ww, winPos[1] + wh]),
-                            (0, 1), (1, 0))
+    # if not self._has_pop:
+    self.pop_check()
+    if not self._poped:
+        self.popable_opengl_component("FreqMapper",'draw',pop_draw_func_name = 'client_draw')
 
-        imgui.invisible_button("popup", max(ww - 30,1), max(wh - 50,1))
-        if imgui.begin_popup_context_item("Item Context Menu", mouse_button=0):
-            if imgui.selectable("Pop out")[1]:
-                self.pop(ww, wh, winPos[0], winPos[1], title='FreqMapper')
-            imgui.end_popup()
-        imgui.end()
-    else:
-        pass
 
-def pop_on_resize(width,height):
-    self.Shape['u_scale'] = height/width, 1
+# def terminate():
+#     if not self._parent:
+#         self.minion_plug.put({'should_run':False})
+#         self.minion_plug.give('GLPop',['should_run'])
+#         self._poped = False

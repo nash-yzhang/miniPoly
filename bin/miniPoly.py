@@ -1,7 +1,23 @@
 import multiprocessing as mp
 import socket, pickle
-# from IPython import embed
+import sys
+from time import time,sleep
+
 # noinspection SpellCheckingInspection
+def task_wrapper(hook):
+    while hook._isalive:
+        if hook._isrunning:
+            hook.put({'isrunning':True})
+            hook.give('all',['isrunning'])
+            hook._task(hook)
+            hook._isrunning = False
+            print(hook._name+" is off")
+            hook.put({'isrunning': False})
+            hook.give('all', ['isrunning'])
+        else:
+            hook.comm()
+            sleep(0.01)
+    hook.shutdown()
 
 class minion (object) :
     _task = None
@@ -14,11 +30,13 @@ class minion (object) :
         self._pocket = custom_var
         self.inbox = {}
         self.outbox = {}
-        self.Process = mp.Process(target=self._task, args=(self,))
+        self._isalive = True
+        self._isrunning = True
+        self._timeout = None
+        self.Process = mp.Process(target=task_wrapper, args=(self,))
 
     def add_source(self,source_minion_name,source_channel):
         self._getfrom[source_minion_name] = source_channel
-        # self._getfrom.append(source_channel)
 
     def add_target(self,target_minion_name,target_channel):
         self._giveto[target_minion_name] = target_channel
@@ -26,48 +44,91 @@ class minion (object) :
     def get_pocket(self,varname):
         return self._pocket[varname]
 
-    def put(self, var_pkg, varname) :
+    def put(self, var_pkg, varname = '') :
         if type(var_pkg) == dict:
-            put_var = {k:var_pkg[k] for k in varname}
+            if varname:
+                put_var = {k:var_pkg[k] for k in varname}
+            else:
+                put_var = var_pkg
         else:
             put_var = {k:getattr(var_pkg,k) for k in varname}
         self.outbox.update(put_var)
 
-    def give(self, minion_name, varname):
-        out_package = {k:self.outbox[k] for k in varname}
-        chn = self._giveto[minion_name]
+    def _give(self,chn,out_pkg):
         if isinstance(chn,type(mp.Queue())):
             if not chn.full():
-                chn.put(out_package)
+                chn.put(out_pkg)
         elif isinstance(chn,mp.connection.PipeConnection):
-            chn.send(out_package)
+            chn.send(out_pkg)
         elif isinstance(chn, simpleSocket):
-            datastring = pickle.dumps(out_package)
+            datastring = pickle.dumps(out_pkg)
             chn.send(datastring)
 
-    def get(self, minion_name, varname) :
-        chn = self._getfrom[minion_name]
+    def give(self, minion_name, varname):
+        out_pkg = {k:self.outbox[k] for k in varname}
+        if minion_name == 'all':
+            for chn in self._giveto.values():
+                self._give(chn,out_pkg)
+        else:
+            self._give(self._giveto[minion_name],out_pkg)
+
+    def _get(self,chn):
         if isinstance(chn, type(mp.Queue())):
             if not chn.empty():
-                in_package = self._getfrom[minion_name].get()
-                self.inbox.update({k: in_package[k] for k in set(in_package.keys()) & set(varname)})
+                in_package = chn.get()
+                self.inbox.update(in_package)
         elif isinstance(chn, mp.connection.PipeConnection):
             if chn.poll():
-                in_package = self._getfrom[minion_name].recv()
-                self.inbox.update({k:in_package[k] for k in set(in_package.keys())&set(varname)})
+                in_package = chn.recv()
+                self.inbox.update(in_package)
         elif isinstance(chn, simpleSocket):
             data = chn.recv(4096)
             if data:
                 in_package = pickle.loads(data)
-                self.inbox.update({k: in_package[k] for k in set(in_package.keys()) & set(varname)})
+                # self.inbox.update({k: in_package[k] for k in set(in_package.keys()) & set(varname)})
+                self.inbox.update(in_package)
 
-    # def take(self, var_pkg, varname):
-    #     nonempty_inbox_items = {k: self.inbox[k] for k in self.inbox.keys() if self.inbox[k]};
-    #     if type(var_pkg) == dict:
-    #         var_pkg.update(nonempty_inbox_items)
-    #     else:
-    #         var_pkg.__dict__.update(nonempty_inbox_items)
-    #     return var_pkg
+    def get(self, minion_name) :
+        if minion_name == 'all':
+            for chn in self._getfrom.values():
+                self._get(chn)
+        else:
+            self._get(self._getfrom[minion_name])
+
+    def fetch(self,var_to_get):
+        if type(var_to_get) == list:
+            return {x: self.inbox[x] if x in self.inbox.keys() else None for x in var_to_get}
+        elif type(var_to_get) == dict:#var_dict = {inbox varname: local varname}
+            return {value:self.inbox[key] for key, value in var_to_get.items() if key in self.inbox.keys()}
+
+    def pop(self,var_to_get):
+        if type(var_to_get) == list:
+            return {x: self.inbox.pop(x) if x in self.inbox.keys() else None for x in var_to_get}
+        elif type(var_to_get) == dict:#var_dict = {inbox varname: local varname}
+            return {value:self.inbox.pop(key) for key, value in var_to_get.items() if key in self.inbox.keys()}
+
+    def comm(self):
+        self.get("all")
+        self.__dict__.update(self.pop({"should_run":"_isrunning"}))
+        self.__dict__.update(self.fetch({"should_live":"_isalive"}))
+        if not self._isalive:
+            self._isrunning = False
+            self.shutdown(1)
+
+    def shutdown(self,timeout = 0):
+        if not self._timeout:
+            self._timeout = time()
+        timepass = time()-self._timeout
+        self.put({'isalive': False})
+        self.give('all', ['isalive'])
+        sys.exit()
+
+    def remote_shutdown(self,target):
+        if target in self._giveto:
+            self.put({"should_live": False})
+            self.give(target, ['should_live'])
+        else:
+             print(f"{bcolors.bRED}ERROR: {bcolors.YELLOW}Target [{bcolors.bRESET}%s{bcolors.YELLOW}] not found" % target)
 
 
 class manager (object):

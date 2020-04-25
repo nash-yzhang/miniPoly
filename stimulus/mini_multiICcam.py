@@ -284,8 +284,8 @@ def live_view():
 
 def terminate():
     isalive = False
-    self.minion_plug.put(locals(),['isalive'])
-    self.minion_plug.give('arduino_IO', ['isalive'])
+    self.minion_plug.put(locals(),['_isalive'])
+    self.minion_plug.give('arduino_IO', ['_isalive'])
     try:
         for cam in [i for (i, v) in zip(self.camera, self.camera_isalive) if v]:
             cam.release()

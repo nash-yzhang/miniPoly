@@ -2,6 +2,7 @@ import copy
 import glfw
 import imgui
 from imgui.integrations.glfw import GlfwRenderer
+from bin.miniPoly import simpleSocket
 from glumpy import app, gloo, gl, glm
 from glumpy.log import log
 from glumpy.app import configuration, parser, clock
@@ -18,6 +19,7 @@ class magic_hat:
 
     def add(self,**kwargs):
         self.__dict__.update(kwargs)
+
 
 class adapted_glumpy_window(backend_glfw.Window):
     _backend = app.use('glfw')
@@ -56,14 +58,12 @@ class adapted_glumpy_window(backend_glfw.Window):
         if 'vsync' not in kwargs.keys():
             kwargs['vsync'] = options.vsync
 
-        # self.imgui_context = imgui.get_current_context()
-        # imgui.set_current_context(self.imgui_context)
         super().__init__(*args, **kwargs)
         self._init_config = config
         config = configuration.gl_get_configuration()
         self._config = config
         self._clock = clock.Clock()
-        self._should_close = False
+        self._isalive = True
 
         log.info("Using %s (%s %d.%d)" %
                  ('glfw', config.api,
@@ -84,6 +84,7 @@ class adapted_glumpy_window(backend_glfw.Window):
         self._init_height = copy.copy(self.height)
         self.dt = 1e-10
 
+
     def process(self):
         self.dt = self._clock.tick()
         self.clear()
@@ -92,16 +93,17 @@ class adapted_glumpy_window(backend_glfw.Window):
     def run(self):
         while True:
             glfw.poll_events()
-            if self._should_close:
-                break
-            else:
+            if self._isalive:
                 self.activate()
                 self.process()
                 self.swap()
+            else:
+                break
 
     def close(self):
-        self._should_close = True
+        self._isalive = False
         glfw.set_window_should_close(self._native_window, True)
+
 
 class glplayer(adapted_glumpy_window):
     def __init__(self, *args, **kwargs):
@@ -117,6 +119,9 @@ class glplayer(adapted_glumpy_window):
 
         super().__init__(*args, **kwargs)
         self._parent = None
+        self._children = None
+
+        self.event_func_list = []
 
     def import_sti_module(self,sti_module_name):
         if hasattr(self, 'import_stipgm'):
@@ -144,33 +149,62 @@ class glplayer(adapted_glumpy_window):
             self.event(getattr(self.import_stipgm, func))
             if func not in glumpy_default_func_list:
                 self.register_event_type(func)
-            # else
-            #     if func == self._draw_func_name:
-            #         self._draw_func_name = 'custom_'+self._draw_func_name
-            # else:
-            #     self._event_stack[0][func] = getattr(self.import_stipgm, func)
 
         self.dispatch_event('prepare')
 
-    # def on_resize(self, width, height):
-    #     # self.dispatch_event('on_resize',width,height)
-    #     return None
-
     def process(self):
+        if self.minion_plug:
+            self.minion_plug.comm()
+            if not (self.minion_plug._isalive and self.minion_plug._isrunning):
+                self.close()
+                return None
         self.dt = self._clock.tick()
         self.clear()
         self.dispatch_event(self._draw_func_name)
 
     def close(self):
-        self._should_close = True
+        self._isalive = False
         if "terminate" in self.event_func_list:
             self.dispatch_event("terminate")
+        if self._children:
+            self.minion_plug.remote_shutdown(self._children)
         glfw.set_window_should_close(self._native_window, True)
         self.destroy()
+
+class glimListener(glplayer):
+    def __init__(self,hook):
+        hook.get('all')
+        pocket = hook.fetch(['extent',  'parent_name','should_run'])
+        if pocket['extent']:
+            win_extent = [int(i) for i in pocket['extent']]
+        else:
+            win_extent = [500, 500, 1024, 720]
+        super().__init__(hook._name, width=win_extent[2], height=win_extent[3], config=app.configuration.Configuration(),
+                        minion_plug=hook)
+        self.set_position(win_extent[0],win_extent[1])
+        self._parent = pocket['parent_name']
+        self.update_sti_module()
+
+
+    def update_sti_module(self):
+        sti_mod_rel__varn = ['import_module_name','draw_func_name','sti_file_dir']
+        while True:
+            self.minion_plug.get(self._parent)
+            pocket = self.minion_plug.pop(sti_mod_rel__varn)
+            if all([pocket[v] for v in sti_mod_rel__varn]):
+                break
+        sys.path.insert(0, pocket['sti_file_dir'])
+        self.import_sti_module(pocket['import_module_name'])
+        self.set_sti_module(draw_func_name=pocket['draw_func_name'])
+
 
 class glimWindow(glplayer):
 
     def __init__(self, *args, **kwargs):
+        if 'start_with_pop_process' in kwargs.keys():
+            self._start_pop = kwargs.pop('start_with_pop_process')
+        else:
+            self._start_pop = False
         super().__init__(*args, **kwargs)
         glfw.set_window_icon(self._native_window, 1, pimg.open('MappApp.ico'))
 
@@ -183,22 +217,30 @@ class glimWindow(glplayer):
         self.imgui_renderer = GlfwRenderer(self._native_window)
         self.io = imgui.get_io()
         self.open_dialog_state = False
-        self.sti_file_dir = ".."
+        self.sti_file_dir = "../stimulus"
+        self.open_conn_state = False
+        self._connect_to = ''
         self.selected = False
         self.fn_idx = 0
 
         # custom param
         self._poped = False
+        self._should_pop = False
+        if self._start_pop:
+            self.init_pop_process()
 
+    def on_resize(self, width, height):
+        return None
 
     def set_basic_widgets(self):
         if imgui.begin_main_menu_bar():
             if imgui.begin_menu("File", True):
                 self.open_dialog_state, _ = imgui.menu_item("Open..", "", False, True)
-                self._should_close, _ = imgui.menu_item(
+                self.open_conn_state, _ = imgui.menu_item("Connect..", "", False, True)
+                should_close, _ = imgui.menu_item(
                     "Quit", 'Cmd+Q', False, True
                 )
-                if self._should_close:
+                if should_close:
                     self.close()
                 imgui.end_menu()
             imgui.end_main_menu_bar()
@@ -218,8 +260,17 @@ class glimWindow(glplayer):
                     sys.path.insert(0, self.sti_file_dir)
                     if "terminate" in self.event_func_list:
                         self.dispatch_event("terminate")
+                    self._terminate()
                     self.import_sti_module((file_list[self.fn_idx].split('.')[0]))
                     self.set_sti_module(essential_func_name= ['prepare','set_widgets'], draw_func_name = None)
+                    if self._children:
+                        srv_pocket = {'parent_name': self._name, "should_run": True}
+                        if hasattr(self, 'import_stipgm'):
+                            srv_pocket.update(
+                                {'import_module_name': self.import_stipgm.__name__, 'draw_func_name': 'client_draw',
+                                 'sti_file_dir': self.sti_file_dir})
+                        self.minion_plug.put(srv_pocket)
+                        self.minion_plug.give(self._children, srv_pocket.keys())
                     self.open_dialog_state = False
 
                 imgui.same_line()
@@ -227,32 +278,31 @@ class glimWindow(glplayer):
                     self.open_dialog_state = False
                 imgui.end_popup()
 
-    def popable_opengl_component(self,comp_name,draw_func_name, pop_draw_func_name = None):
-        if self.minion_manager:
-            # _, self.window_state[1] = imgui.begin(comp_name, True)  # , flags = imgui.WINDOW_NO_TITLE_BAR)
-            if not pop_draw_func_name:
-                pop_draw_func_name = draw_func_name
-            imgui.begin(comp_name, True)  # , flags = imgui.WINDOW_NO_TITLE_BAR)
-            self.clear()
-            self._framebuffer.activate()
-            self.dispatch_event(draw_func_name)
-            self._framebuffer.deactivate()
-            draw_list = imgui.get_window_draw_list()
-            ww, wh = imgui.get_window_size()
-            winPos = imgui.get_cursor_screen_pos()
-            draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos),
-                                tuple([winPos[0] + ww, winPos[1] + wh]),
-                                (0, 0), (1, 1))
-            imgui.invisible_button("pop", ww - 30, wh - 50)
-            if imgui.begin_popup_context_item("Item Context Menu", mouse_button=0):
-                if imgui.selectable("pop")[1]:
-                    pop_pocket = {'comp_name':comp_name,'import_module_name':self.import_stipgm.__name__,'draw_func_name':pop_draw_func_name,'parent_name': self._name}
-                    self.minion_manager.add_minion(comp_name, _popwin_frameworkfunc,custom_var = pop_pocket)
-                    self.minion_manager.add_queue_connection(self._name+'<->'+comp_name)
-                    self.minion_manager.run([comp_name])
-                    self._poped = True
+        if self.open_conn_state:
+            imgui.set_next_window_size(400, 400)
+            imgui.open_popup("Socket connection")
+            if imgui.begin_popup_modal("Socket connection")[0]:
+                _, self._connect_to = imgui.input_text(' ', self._connect_to, 128)
+                if imgui.button("Select"):
+                    try:
+                        HOST = '192.168.1.103'  # Standard loopback interface address (localhost)
+                        PORT = 65432
+                        cln = simpleSocket('client', HOST, PORT)
+                        self.minion_manager.add_socket_connnection(self._connect_to+'<->'+self._name, cln)
+                        self._children = self._connect_to
+                        srv_pocket = {'parent_name': self._name, "should_run": False}
+                        if hasattr(self,'import_stipgm'):
+                            srv_pocket.update({'import_module_name': self.import_stipgm.__name__,'draw_func_name': 'client_draw','sti_file_dir': self.sti_file_dir, "should_run": True})
+                        self.minion_plug.put(srv_pocket)
+                        self.minion_plug.give(self._children, srv_pocket.keys())
+                    except:
+                        print('ERROR: Socket connection failed/timeout')
+                    self.open_conn_state = False
+
+                imgui.same_line()
+                if imgui.button("Cancel"):
+                    self.open_conn_state = False
                 imgui.end_popup()
-            imgui.end()
 
     def process(self):
         self.dt = self._clock.tick()
@@ -260,39 +310,98 @@ class glimWindow(glplayer):
         self.imgui_renderer.process_inputs()
         imgui.new_frame()
         self.set_basic_widgets()
-        self.dispatch_event("set_widgets")
+        if hasattr(self, 'import_stipgm'):
+            self.dispatch_event("set_widgets")
         imgui.render()
         self.imgui_renderer.render(imgui.get_draw_data())
-        # if len(self._pop_queue) > 0:
-        #     for win_param in self._pop_queue:
-        #         self._pop(*win_param)
-        #         self._pop_queue.remove(win_param)
-        #     self._has_pop = True
-        # if (len([x for x in self._manager.__windows__ if x._name == 'pop']) == 0) and self._has_pop:
-        #     self._has_pop = False
-        #     self._dock()
+
+    def _terminate(self):
+        if not self._parent and self._children:
+            self.minion_plug.put({'should_run': False})
+            self.minion_plug.give(self._children, ['should_run'])
+            self._should_pop = self._poped
+            self._poped = False
+
+    # def connect_to
+
+    def pop_check(self):
+        if self._children: #"GLPop" in self.minion_plug._getfrom.keys():
+            self.minion_plug.get(self._children)
+            self.__dict__.update(self.minion_plug.fetch({'isrunning': '_poped'}))
+        else:
+            self._poped = False
+
+    def init_pop_process(self):
+        if not self._children:
+            self._children = 'GLPop'
+            self.minion_manager.add_minion(self._children, _popwin_frameworkfunc)
+            self.minion_manager.add_queue_connection(self._name + '<->' + self._children)
+            self.minion_manager.minions[self._children]._isrunning = False
+            self.minion_manager.run([self._children])
+
+    def popable_opengl_component(self,comp_name,draw_func_name, pop_draw_func_name = None):
+        if self.minion_manager:
+            if not pop_draw_func_name:
+                pop_draw_func_name = draw_func_name
+            init_pop = False
+            if self._should_pop and not self._poped:
+                init_pop = True
+                pop_pocket = {'import_module_name': self.import_stipgm.__name__,
+                              'draw_func_name': pop_draw_func_name,'sti_file_dir': self.sti_file_dir,
+                              'parent_name': self._name, "should_run": True}
+                self._should_pop = False
+            else:
+                imgui.begin(comp_name, True)  # , flags = imgui.WINDOW_NO_TITLE_BAR)
+                ww, wh = imgui.get_window_size()
+                winPos = imgui.get_cursor_screen_pos()
+                self.clear()
+                self._framebuffer.activate()
+                self.dispatch_event(draw_func_name,ww,wh)
+                self._framebuffer.deactivate()
+                draw_list = imgui.get_window_draw_list()
+                draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos),
+                                    tuple([winPos[0] + ww, winPos[1] + wh]),
+                                    (0, 1), (1, 0))
+                imgui.invisible_button("pop", ww - 30, wh - 50)
+                if imgui.begin_popup_context_item("Item Context Menu", mouse_button=0):
+                    if imgui.selectable("pop")[1]:
+                        init_pop = True
+                        pop_pocket = {'import_module_name': self.import_stipgm.__name__,
+                                      'extent': [winPos[0], winPos[1], ww, wh], 'draw_func_name': pop_draw_func_name,
+                                      'sti_file_dir': self.sti_file_dir, 'parent_name': self._name, "should_run": True}
+                    imgui.end_popup()
+                imgui.end()
+
+            if init_pop:
+                  # 'GLPop' not in self.minion_manager.minions.keys():
+                self.init_pop_process()
+                self.minion_plug.put(pop_pocket)
+                self.minion_plug.give(self._children, ['sti_file_dir', 'import_module_name', 'extent',
+                                                       'draw_func_name', 'parent_name', 'should_run'])
+                self._poped = True
 
 
-    def close(self):
-        self._should_close = True
-        if "terminate" in self.event_func_list:
-            self.dispatch_event("terminate")
-        # if self._has_pop:
-        #     for win in self._manager.__windows__[1:]:
-        #         win.close()
-        # else:
-        #     pass
-        self.imgui_renderer.shutdown()
-        glfw.set_window_should_close(self._native_window, True)
 
 def _popwin_frameworkfunc(hook):
-    glplayer_win = glplayer(hook.get_pocket('comp_name'), 1024, 720, config=app.configuration.Configuration(),
-                            minion_plug=hook)
-    glplayer_win._parent = hook.get_pocket('parent_name')
-    glplayer_win.import_sti_module(hook.get_pocket('import_module_name'))
-    glplayer_win.set_sti_module(draw_func_name=hook.get_pocket('draw_func_name'))
+    glplayer_win = glimListener(hook)
     glplayer_win.run()
-    sys.exit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ############## Legacy code ##############
     # def pop(self, width, height, pos_x, pos_y, title='GLWin'): # methods of glimwin
     #     self._pop_queue.append([int(width), int(height), int(pos_x), int(pos_y), title])

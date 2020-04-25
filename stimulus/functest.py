@@ -55,9 +55,9 @@ def prepare():
     self._init_glwin = True
     self._glwinpos = [0,0]
 
-    # isalive = True
-    # self.minion_plug.put(locals(),['isalive'])
-    # self.minion_plug.give('report', ['isalive'])
+    # _isalive = True
+    # self.minion_plug.put(locals(),['_isalive'])
+    # self.minion_plug.give('report', ['_isalive'])
 
 def set_widgets():
     if imgui.begin_main_menu_bar():
@@ -120,6 +120,6 @@ def on_draw(dt):
     # self._framebuffer.deactivate()
 
 # def terminate():
-#     isalive = False
-#     self.minion_plug.put(locals(),['isalive'])
-#     self.minion_plug.give('report', ['isalive'])
+#     _isalive = False
+#     self.minion_plug.put(locals(),['_isalive'])
+#     self.minion_plug.give('report', ['_isalive'])

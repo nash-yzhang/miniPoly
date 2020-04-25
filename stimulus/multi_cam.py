@@ -1,10 +1,10 @@
-from Glimgui.glarage import *
+from bin.glarage import *
 from glumpy import gl, gloo
 import imgui
 import cv2
-import Glimgui.tisgrabber.tisgrabber as IC
+# import bin.tisgrabber.tisgrabber as IC
 import numpy as np
-from pyfirmata import Arduino, util
+# from pyfirmata import Arduino, util
 import serial.tools.list_ports
 
 
@@ -18,17 +18,17 @@ class cam_config:
         self.toggle_on = False
 
 def prepare():
-    shader_folder = './shaderfile/'
+    shader_folder = '../bin/shaderfile/'
     vertex_shader_fn = 'VS_basic_tex.glsl'
     frag_shader_fn = 'FS_basic_tex.glsl'
     ports = list(serial.tools.list_ports.comports())
-    Arduino_COM_Name = [p[0] for p in ports if 'Arduino' in p.__str__()][0]
-    self.arduino_board = Arduino(Arduino_COM_Name)
-    self.arduino_iterator = util.Iterator(self.arduino_board)
-    self.arduino_iterator.start()
+    # Arduino_COM_Name = [p[0] for p in ports if 'Arduino' in p.__str__()][0]
+    # self.arduino_board = Arduino(Arduino_COM_Name)
+    # self.arduino_iterator = util.Iterator(self.arduino_board)
+    # self.arduino_iterator.start()
 
-    self.LED_pin  = self.arduino_board.get_pin('d:11:p')
-    self.LED_power = .1
+    # self.LED_pin  = self.arduino_board.get_pin('d:11:p')
+    # self.LED_power = .1
     # self.arduino_board.analog[0].enable_reporting()
     # self.ardiuno_sig = [0.]
 
@@ -119,8 +119,8 @@ def set_widgets():
                 self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), 30.,
                                                  (int(vidbuffer_shape[1]),int(vidbuffer_shape[0])))
                 self.rec_button_text = 'Stop'
-    _,self.LED_power = imgui.slider_float('LED power', self.LED_power, 0.0, 1.0, '%.2f', 1.0)
-    self.LED_pin.write(self.LED_power)
+    # _,self.LED_power = imgui.slider_float('LED power', self.LED_power, 0.0, 1.0, '%.2f', 1.0)
+    # self.LED_pin.write(self.LED_power)
 
     imgui.listbox_header("", 200, 100)
 
@@ -140,11 +140,12 @@ def set_widgets():
     wh *=.7
     winPos = imgui.get_cursor_screen_pos()
     winPos = (winPos[0],winPos[1]+30)
-    line_st = int(max([len(self.dtlist)-ww+x_offset,0]))
+    line_st = int(min(max([len(self.dtlist)-ww+x_offset,0]),len(self.dtlist)-1))
 
     dtlist_adapted = np.array(self.dtlist)[line_st:]
     # dtlist_adapted[:, 0] -= line_st*2
     dtlist_adapted[:,1] = (1-(dtlist_adapted[:,1]-fps_min)/(fps_max-fps_min))*wh
+    # try:
     dtlist_adapted += winPos+np.array([-min(dtlist_adapted[:,0])+x_offset,0.])
 
     # arduino_sig_adapted = np.array(self.ardiuno_sig)[line_st:] * wh + winPos[1]
@@ -233,8 +234,8 @@ def config_cam(cam_id):
     imgui.end()
 
 
-def close():
-    self.arduino_board.exit()
+def terminate():
+    # self.arduino_board.exit()
     for cam in [i for (i, v) in zip(self.camera, self.camera_isalive) if v]:
         cam.release()
 

@@ -54,6 +54,7 @@ def prepare():
     self.window_state = [True, True]
     self._init_glwin = True
     self._glwinpos = [0,0]
+    self._active_child = False
 
 def set_widgets():
     if imgui.begin_main_menu_bar():
@@ -74,12 +75,22 @@ def set_widgets():
     imgui.text("FPS: %d"%(1/(self.dt+1e-5)))
     imgui.end()
 
-    self.pop_check()
-    if not self._poped:
-        self.popable_opengl_component("GLView",'draw',pop_draw_func_name='client_draw')
-    else:
-        self.minion_plug.put(self,['elv','azi','dist','bgcolor'])
-        self.minion_plug.give(self._children,['elv','azi','dist','bgcolor'])
+    # self.pop_check()
+    if self._children:
+    # if self._active_child:
+        self.minion_plug.put(self, ['elv', 'azi', 'dist', 'bgcolor'])
+        self.minion_plug.give(self._children, ['elv', 'azi', 'dist', 'bgcolor'])
+        # else:
+        #     self.minion_plug.put({'should_run',True})
+        #     self.minion_plug.give(self._children,['should_run'])
+        #     while not self._active_child:
+        #         self.minion_plug.get(self._children)
+        #         self.__dict__.update(self.minion_plug.fetch({"isalive":"_active_children"}))
+
+    # if not self._poped:
+    #     self.popable_opengl_component("GLView",'draw',pop_draw_func_name='client_draw')
+    # else:
+
 
 
 def on_init():
