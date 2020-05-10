@@ -53,7 +53,11 @@ def prepare():
     self.Shape['texture'] = np.uint8(np.random.randint(0, 2, [200, 20, 1]) * np.array([[[1, 1, 1]]]) * 255)
     self.Shape['texture'].wrapping = gl.GL_REPEAT
 
+    self.texscale = 1
+
 def client_draw():
+    self.minion_plug.get(self._parent)
+    self.__dict__.update(self.minion_plug.fetch({'texscale': 'texscale'}))
     self.dispatch_event('draw',self._width,self._height)
 
 def draw(ww,wh):
@@ -67,7 +71,7 @@ def draw(ww,wh):
     temp_ptest = (d_range(temp_azi, rangeaxis=1)[:, None] * np.ones([1, 3]) > np.pi) & (temp_azi< 0) & (temp_azi > -np.pi)
     temp_azi[temp_ptest] += (np.pi * 2)
     temp_azi = temp_azi.flatten()
-    self.V["texcoord"] = np.hstack ([temp_azi[:, None] * 40 / 2 / np.pi, temp_elv[:, None]]) / 10  - np.array([self.t,self.t])*10**-3
+    self.V["texcoord"] = np.hstack ([temp_azi[:, None] * 40 / 2 / np.pi, temp_elv[:, None]]) / 10 * self.texscale  - np.array([self.t,self.t])*10**-3
 
     gl.glEnable(gl.GL_DEPTH_TEST)
     self.clear()
@@ -77,12 +81,15 @@ def set_widgets():
     imgui.begin('FPS')
     imgui.text("Frame duration: %.2f ms" %(self.dt*1000))
     imgui.text("FPS: %d Hz"%round(1/(self.dt+1e-8)))
+    _, self.texscale = imgui.slider_float("Texture scale", self.texscale, 0.01, 20)
     imgui.end()
     # if not self._has_pop:
     self.pop_check()
     if not self._poped:
         self.popable_opengl_component("FreqMapper",'draw',pop_draw_func_name = 'client_draw')
-
+    else:
+        self.minion_plug.put(self,['texscale'])
+        self.minion_plug.give(self._children,['texscale'])
 
 # def terminate():
 #     if not self._parent:
