@@ -24,7 +24,7 @@ if __name__ == '__main__' :
     minion_manager = mnp.manager()
     minion_manager.add_minion('controller', functest_controller)
     minion_manager.add_minion('display', functest_display)
-    HOST = '192.168.1.103'  # Standard loopback interface address (localhost)
+    HOST = '192.168.1.106'  # Standard loopback interface address (localhost)
     PORT = 65432
     print(minion_manager.minions.keys())
     srv = mnp.simpleSocket('server',HOST,PORT)

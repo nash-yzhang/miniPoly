@@ -1,6 +1,6 @@
 import os
 import sys
-sys.path.insert(1,os.getcwd())
+sys.path.insert(0,os.getcwd())
 from bin.GlImgui import glimWindow,glimListener
 from glumpy import app
 config = app.configuration.Configuration()
