@@ -132,8 +132,13 @@ class glplayer(adapted_glumpy_window):
         else:
             self.import_stipgm = import_module(sti_module_name)
 
-    def set_sti_module(self, essential_func_name = [], draw_func_name = "draw_main"):
+
+
+    def set_sti_module(self, essential_func_name = [], draw_func_name = "draw_main", static_func_name = []):
         # Event dispatcher initialization
+        if 'static_func_name' in self.import_stipgm.__dict__:
+            static_func_name = self.import_stipgm.__dict__['static_func_name']
+            locals().update({k: v for k, v in self.import_stipgm.__dict__.items() if k in static_func_name})
         import_func_list = [o for o in getmembers(self.import_stipgm) if isfunction(o[1])]
         self.event_func_list = [o[0] for o in import_func_list if o[1].__module__ == self.import_stipgm.__name__]
         if draw_func_name:
@@ -206,7 +211,7 @@ class glimWindow(glplayer):
         else:
             self._start_pop = False
         super().__init__(*args, **kwargs)
-        glfw.set_window_icon(self._native_window, 1, pimg.open('MappApp.ico'))
+        glfw.set_window_icon(self._native_window, 1, pimg.open('../bin/MappApp.ico'))
 
         self._texture_buffer = np.zeros((self.height, self.width, 4), np.float32).view(gloo.Texture2D)
         self._depth_buffer = gloo.DepthBuffer(self.width, self.height)
@@ -217,7 +222,7 @@ class glimWindow(glplayer):
         self.imgui_renderer = GlfwRenderer(self._native_window)
         self.io = imgui.get_io()
         self.open_dialog_state = False
-        self.sti_file_dir = "../stimulus"
+        self.sti_file_dir = "stimulus"
         self.open_conn_state = False
         self._connect_to = ''
         self.selected = False
@@ -285,9 +290,8 @@ class glimWindow(glplayer):
                 _, self._connect_to = imgui.input_text(' ', self._connect_to, 128)
                 if imgui.button("Select"):
                     try:
-                        HOST = '192.168.1.103'  # Standard loopback interface address (localhost)
-                        PORT = 65432
-                        cln = simpleSocket('client', HOST, PORT)
+                        HOST,PORT = self._connect_to.split(':')
+                        cln = simpleSocket('client', HOST, int(PORT))
                         self.minion_manager.add_socket_connnection(self._connect_to+'<->'+self._name, cln)
                         self._children = self._connect_to
                         srv_pocket = {'parent_name': self._name, "should_run": False}
