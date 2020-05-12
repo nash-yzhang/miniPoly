@@ -2,7 +2,7 @@ import multiprocessing as mp
 import socket, pickle
 import sys
 from time import time,sleep
-
+import functools
 # noinspection SpellCheckingInspection
 def task_wrapper(hook):
     while hook._isalive:
@@ -19,17 +19,19 @@ def task_wrapper(hook):
             sleep(0.01)
     hook.shutdown()
 
+
+
 class minion (object) :
     _task = None
     def __init__(self, name, task_method, custom_var = {}):
         self._manager = 'unknown'
         self._name = name
-        self._task = task_method
         self._giveto = {}
         self._getfrom  = {}
         self._pocket = custom_var
         self.inbox = {}
         self.outbox = {}
+        self._task = task_method
         self._isalive = True
         self._isrunning = True
         self._timeout = None
@@ -141,7 +143,7 @@ class manager (object):
     def add_minion(self, minion_name, task_method,**kwargs):
         if minion_name not in self.minions.keys():
             self.minions[minion_name] = minion(minion_name,task_method,**kwargs)
-            self.minions[minion_name]._manager = self
+            # self.minions[minion_name]._manager = self
         else:
             print(f"{bcolors.bRED}ERROR: {bcolors.YELLOW}Name [{bcolors.bRESET}%s{bcolors.YELLOW}] already taken"%minion_name)
 
