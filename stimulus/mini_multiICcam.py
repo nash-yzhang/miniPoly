@@ -297,6 +297,7 @@ def terminate():
     except:
         print(
             "\033[1;31mERROR: \033[0;33m An error(s) occurred when disconnecting \033[0m[\033[1;31m camera(s) \033[0m]")
+    self.minion_plug._isalive = False
 
 
 def pop_on_resize(width, height):
