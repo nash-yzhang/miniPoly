@@ -1,6 +1,6 @@
 import os, sys
 
-__rootpath__ = os.getcwd().strip('\\player')
+__rootpath__ = os.getcwd().replace('\\player','')
 os.chdir(__rootpath__)
 dll_path = __rootpath__ + '\\dll'
 os.environ['PATH'] = dll_path + os.pathsep + os.environ['PATH']
@@ -98,7 +98,6 @@ def arduino_io(hook):
 
 
 def functest1(hook):
-    #     # GIM = glimManager()
     config = app.configuration.Configuration()
     glimgui_win = glimWindow(hook._name, 1024, 720, config=config, minion_plug=hook)
     glimgui_win.import_sti_module('stimulus.mini_multiICcam')

@@ -19,8 +19,6 @@ def task_wrapper(hook):
             sleep(0.01)
     hook.shutdown()
 
-
-
 class minion (object) :
     _task = None
     def __init__(self, name, task_method, custom_var = {}):
@@ -136,14 +134,14 @@ class minion (object) :
 class manager (object):
     def __init__(self):
         self.minions = {}
-        self.pipes = {}
         self.queue = {}
-        self.socket_conn = {}
+
 
     def add_minion(self, minion_name, task_method,**kwargs):
         if minion_name not in self.minions.keys():
             self.minions[minion_name] = minion(minion_name,task_method,**kwargs)
-            # self.minions[minion_name]._manager = self
+            self.minions[minion_name]._manager = manager() #fake copy of manager
+            self.minions[minion_name]._manager.minions[minion_name] = self.minions[minion_name]
         else:
             print(f"{bcolors.bRED}ERROR: {bcolors.YELLOW}Name [{bcolors.bRESET}%s{bcolors.YELLOW}] already taken"%minion_name)
 
