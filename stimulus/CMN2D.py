@@ -54,8 +54,6 @@ def patchArray(imgsize=np.array([1, 1]), startpoint=np.array([[0, 0], [0, 1], [1
 def prepare():
     self._clock.set_fps_limit(50)
     vertex = """
-    uniform mat4   model;      // Model matrix
-    uniform mat4   view;       // View matrix
     //uniform mat4   projection; // Projection matrix
     attribute vec2 position;   // Vertex position
     attribute vec2 texcoord;   // Vertex texture coordinates red
@@ -67,7 +65,7 @@ def prepare():
         v_texcoord  = texcoord;
     
         // Final position
-        gl_Position = view * model * vec4(position,0.0,1.0);
+        gl_Position = vec4(position,0.0,1.0);
     }
     """
 
@@ -101,11 +99,9 @@ def prepare():
     self.patchMat.bind(self.V)
     self.patchMat['texture'] = np.uint8(np.round((np.random.rand(100, 100, 1) > .9) * 155 + 100) * np.array([[[1, 1, 1]]]))
     self.patchMat['texture'].wrapping = gl.GL_REPEAT
-    self.patchMat['model'] = np.eye(4, dtype=np.float32)
     self.time = 0
     self.logspeed = 0
     self.texscale = 1
-    self.patchMat['view'] = glm.translation(0.,0.,0.)
     self.arc_texcoord = self.V['texcoord'];
 
 def draw(ww,wh):

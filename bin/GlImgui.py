@@ -177,7 +177,7 @@ class glplayer(adapted_glumpy_window):
         self.destroy()
 
 class glimListener(glplayer):
-    def __init__(self,hook):
+    def __init__(self,hook,fullscreen = False):
         hook.get('all')
         pocket = hook.fetch(['extent',  'parent_name','should_run'])
         if pocket['extent']:
@@ -185,7 +185,7 @@ class glimListener(glplayer):
         else:
             win_extent = [500, 500, 1024, 720]
         super().__init__(hook._name, width=win_extent[2], height=win_extent[3], config=app.configuration.Configuration(),
-                        minion_plug=hook)
+                        minion_plug=hook,fullscreen = fullscreen)
         self.set_position(win_extent[0],win_extent[1])
         self._parent = pocket['parent_name']
         self.update_sti_module()

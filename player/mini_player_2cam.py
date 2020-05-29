@@ -20,7 +20,7 @@ def arduino_io(hook):
     myclock.set_fps_limit(1000)
 
     ports = list(serial.tools.list_ports.comports())
-    Arduino_COM_Name = [p[0] for p in ports if 'COM' in p.__str__()][0]
+    Arduino_COM_Name = [p[0] for p in ports if 'Arduino' in p.__str__()][0]
     arduino_board = Arduino(Arduino_COM_Name)
     arduino_iterator = util.Iterator(arduino_board)
     arduino_iterator.start()
