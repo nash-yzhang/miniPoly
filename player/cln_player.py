@@ -11,7 +11,7 @@ def functest_controller(hook):
     glimgui_win.run()
 
 def functest_display(hook):
-    glimgui_win = glimListener(hook)
+    glimgui_win = glimListener(hook,fullscreen=True)
     glimgui_win.run()
 
 if __name__ == '__main__' :
