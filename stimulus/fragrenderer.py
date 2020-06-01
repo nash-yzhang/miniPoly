@@ -25,6 +25,7 @@ def prepare():
     self.frag_fn_idx = 0
     self.load_shader_win = False
     self._poped = False
+    self._setpoped = False
     self._changespeed = 0.1
 
 
@@ -81,18 +82,53 @@ def set_widgets():
                 elif u[1] == gl.GL_FLOAT_VEC2:
                     _,self._frag_render_program[u[0]] = imgui.drag_float2(u[0], *self._frag_render_program[u[0]],self._changespeed)
         imgui.end()
+
         self.pop_check()
         if not self._poped:
             self.popable_opengl_component("GLView", 'draw', pop_draw_func_name='client_draw')
         else:
-            varlist = [u[0] for u in self._frag_render_program.all_uniforms if u[0] not in ['u_time','u_resolution']]
-            self.minion_plug.put({v:self._frag_render_program[v] for v in varlist})
-            self.minion_plug.give(self._children,varlist)
+            self.minion_plug.get(self._children)
+            if 'waiting' in self.minion_plug.inbox.keys():
+                if self.minion_plug.inbox['waiting']:
+                    self.minion_plug.put({'frag_fn': self._shader_folder + self._frag_shader_fn, 'vertex_shader': self._vertex})
+                    self.minion_plug.give(self._children, ['frag_fn', 'vertex_shader'])
+                else:
+                    varlist = [u[0] for u in self._frag_render_program.all_uniforms if
+                               u[0] not in ['u_time', 'u_resolution']]
+                    self.minion_plug.put({v: self._frag_render_program[v] for v in varlist})
+                    self.minion_plug.give(self._children, varlist)
+            else:
+                self.minion_plug.put({'frag_fn': self._shader_folder + self._frag_shader_fn, 'vertex_shader': self._vertex})
+                self.minion_plug.give(self._children, ['frag_fn', 'vertex_shader'])
+
+
+
 def client_draw():
     self.minion_plug.get(self._parent)
-    self.__dict__.update(self.minion_plug.fetch({'elv': 'elv', 'azi': 'azi', 'dist': 'dist', 'bgcolor': 'bgcolor', }))
-    ww, wh = self._width, self._height
-    self.dispatch_event('draw', ww, wh)
+    if self._frag_render_program != None:
+        self.__dict__.update(self.minion_plug.fetch(self._fetchlist))
+        try:
+            for val in self._fetchlist.values():
+                if val not in ['u_time', 'u_resolution']:
+                    self._frag_render_program[val] = getattr(self,val)
+            ww, wh = self._width, self._height
+            self.dispatch_event('draw', ww, wh)
+        except:
+            pass
+    else:
+        self.__dict__.update(self.minion_plug.fetch({'frag_fn': 'frag_fn', 'vertex_shader': '_vertex'}))
+        try:
+            self._frag = load_shaderfile(self.frag_fn)
+            self._frag_render_program = gloo.Program(self._vertex, self._frag)
+            self._fetchlist = {u[0]: u[0] for u in self._frag_render_program.all_uniforms}
+            self._frag_render_program['position'] = self._default_param_val['position']
+            self.minion_plug.put({'waiting': False})
+            self.minion_plug.give(self._parent, ['waiting'])
+        except:
+            self.minion_plug.put({'waiting': True})
+            self.minion_plug.give(self._parent, ['waiting'])
+
+
 
 
 def draw(ww, wh):
