@@ -75,9 +75,6 @@ def set_widgets():
             )
             imgui.end_menu()
         imgui.end_main_menu_bar()
-
-
-
     if self.load_shader_win:
         imgui.set_next_window_size(400, 300)
         imgui.open_popup("Select file")
