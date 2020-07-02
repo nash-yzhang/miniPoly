@@ -98,6 +98,8 @@ def arduino_io(hook):
 
 
 def functest1(hook):
+    myclock = clock.Clock()
+    myclock.set_fps_limit(500)
     config = app.configuration.Configuration()
     glimgui_win = glimWindow(hook._name, 1024, 720, config=config, minion_plug=hook)
     glimgui_win.import_sti_module('stimulus.mini_multiICcam')
