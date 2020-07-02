@@ -2,13 +2,12 @@
 // http://patriciogonzalezvivo.com
 
 #ifdef GL_ES
-precision highp float;
+precision mediump float;
 #endif
 
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
-uniform float scalefac;
 
 float random (in vec2 st) {
     return fract(sin(dot(st.xy,
@@ -46,28 +45,19 @@ float fbm (in vec2 st) {
     for (int i = 0; i < OCTAVES; i++) {
         value += amplitude * noise(st);
         st *= 2.;
-        amplitude *= .5;
+        amplitude *= .6;
     }
     return value;
 }
 
 #define pi 3.141592653
-#define supsamp 4
 void main() {
     vec2 st = gl_FragCoord.xy/u_resolution.xy;
     st.x *= u_resolution.x/u_resolution.y;
 
     vec3 color = vec3(0.0);
-    float speed = 2.;
-    float vf = fbm(st*scalefac)+u_time/10.;
-    for (int ix = 0; ix < supsamp; ix++) {
-        for (int iy = 0; iy<supsamp;iy++) {
-            vec2 st1 = st+vec2(float(ix)/float(supsamp),float(iy)/float(supsamp))/u_resolution;
-            color += fbm(st1*14.+0.3*vec2(sin(vf*speed*2.*pi),cos(vf*speed*2.*pi)))/pow(float(supsamp),2.);
-        }
-    }
-
-
+    float vf = fbm(st)+u_time/10.;
+    color += fbm(st+1.020*vec2(sin(vf*12.*pi),cos(vf*12.*pi)));
 
     gl_FragColor = vec4(color,1.0);
 }

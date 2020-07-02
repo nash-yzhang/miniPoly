@@ -27,7 +27,7 @@ def prepare():
     self._poped = False
     self._setpoped = False
     self._changespeed = 0.1
-
+    self._refresh_on = False
 
 def set_widgets():
     if imgui.begin_main_menu_bar():
@@ -64,6 +64,7 @@ def set_widgets():
                     elif u[0] == 'u_resolution':
                         self._frag_render_program[u[0]] = self._default_param_val['u_resolution']
                 self._frag_render_program['position'] = self._default_param_val['position']
+                self._refresh_on = True
                 self.load_shader_win = False
             imgui.same_line()
             if imgui.button("Cancel"):
@@ -88,11 +89,12 @@ def set_widgets():
             self.popable_opengl_component("GLView", 'draw', pop_draw_func_name='client_draw')
         else:
             self.minion_plug.get(self._children)
-            if 'waiting' in self.minion_plug.inbox.keys():
+            if 'waiting' in self.minion_plug.inbox.keys() or self._refresh_on:
                 if self.minion_plug.inbox['waiting']:
                     self.minion_plug.put({'frag_fn': self._shader_folder + self._frag_shader_fn, 'vertex_shader': self._vertex})
                     self.minion_plug.give(self._children, ['frag_fn', 'vertex_shader'])
                 else:
+                    self._refresh_on = False
                     varlist = [u[0] for u in self._frag_render_program.all_uniforms if
                                u[0] not in ['u_time', 'u_resolution']]
                     self.minion_plug.put({v: self._frag_render_program[v] for v in varlist})
