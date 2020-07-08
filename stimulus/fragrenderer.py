@@ -2,13 +2,17 @@ from scipy.ndimage import gaussian_filter
 from bin.glarage import *
 from glumpy import gl, gloo
 import imgui, os, sys
+import cv2
+from datetime import datetime
+from os.path import isfile
 from PIL import Image
 
 self = None
 
 
 def prepare():
-    self._clock.set_fps_limit(70)
+    self.FPS = 60
+    self._clock.set_fps_limit(self.FPS)
     self._vertex = """
     precision highp float;
     precision highp int;
@@ -33,6 +37,14 @@ def prepare():
     self._changespeed = 0.1
     self._refresh_on = False
 
+
+    self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")
+    while isfile(self.vid_fn):
+        self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")
+
+    self.vidwriter = None
+    self.rec_button_text = 'Start'
+    self.rec_on = False
 
 def set_widgets():
     if imgui.begin_main_menu_bar():
@@ -109,9 +121,37 @@ def set_widgets():
                         self._frag_render_program[u[0]] = temp.astype(np.float32).view(gloo.TextureFloat2D)
                         self._frag_render_program[u[0]].wrapping = gl.GL_REPEAT
         imgui.end()
-
         self.pop_check()
+
         if not self._poped:
+            # if not self.vid_writer:
+            #     self.vid_writer = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
+            #                     (int(self._framebuffer.height), int(self._framebuffer.width)))
+
+            imgui.begin("Video Recording")
+            _, vid_fn = imgui.input_text('', self.vid_fn, 1024)
+            if vid_fn != self.vid_fn:
+                self.vid_fn = vid_fn
+                self.vidwriter.release()
+            imgui.same_line()
+            if imgui.button(self.rec_button_text):
+                if self.rec_on:
+                    self.rec_button_text = 'Start'
+                    self.rec_on = False
+                    self.vidwriter.release()
+                    self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")
+                    print(self.vid_fn)
+                else:
+                    self.rec_on = True
+                    if self.rec_button_text == 'Start':
+                        self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
+                                                         (self._framebuffer.width, self._framebuffer.height))
+                        self.rec_button_text = 'Stop'
+            imgui.end()
+            if self.rec_on:
+                data = (cv2.cvtColor(self._framebuffer.color[0].get(), cv2.COLOR_RGBA2RGB) * 255).astype(np.uint8)
+                self.vidwriter.write(data)
+
             self.popable_opengl_component("GLView", 'draw', pop_draw_func_name='client_draw')
         else:
             self.minion_plug.get(self._children)
