@@ -4,7 +4,7 @@
 precision mediump float;
 #endif
 uniform vec2 u_resolution;
-uniform vec2 u_mouse;
+uniform sampler2D u_tex;
 uniform float u_time;
 float random1 (in float val){
     return fract(sin(val*43758.5453123));
@@ -76,7 +76,7 @@ float fbm_supsamp (in vec2 st) {
 }
 
 #define pi 3.141592653
-#define overlay 20
+#define overlay 10
 void main() {
     vec2 st = gl_FragCoord.xy/u_resolution.xy;
     st.x *= u_resolution.x/u_resolution.y;
@@ -84,10 +84,12 @@ void main() {
     float total_i = float(overlay);
     float ii = 0.;
     float cycle_period = 1.;
-    float speed = 5.;
-    float vf_angle = fbm_supsamp((st-.5)*10.)*pi*2.;
-    vec2 vf = vec2(sin(vf_angle),cos(vf_angle));
+    float speed = 10.;
+//    float vf_angle = *pi*2.;
+    float vf_angle = texture2D(u_tex,st).r*2.*pi;
+    vec2 vf = vec2(sin(vf_angle),cos(vf_angle));;
     for (int i = 0; i<overlay;i++){
+//        color += texture2D(u_tex,st+0.11*vf*fract(u_time/cycle_period+ii/total_i)).rgb*length(sin(fract(u_time/cycle_period+ii/total_i)*pi))/total_i;
    		color += fbm_supsamp((st*7. + random1(random1(ii))*150.+.05*speed*vf*fract(u_time/cycle_period+ii/total_i))*5.)*length(sin(fract(u_time/cycle_period+ii/total_i)*pi))/total_i*1.5;
        ii += 1.;
     }

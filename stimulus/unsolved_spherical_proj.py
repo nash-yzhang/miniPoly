@@ -67,6 +67,6 @@ program['u_time'] = 0.
 iframe = 0
 
 program['texture'] = T.astype(np.float32).view(gloo.TextureFloat2D)
-# program['texture'].wrapping = gl.GL_CLAMP_TO_BORDER
+program['texture'].wrapping = gl.GL_REPEAT
 
 app.run()

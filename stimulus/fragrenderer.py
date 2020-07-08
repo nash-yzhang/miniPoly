@@ -23,8 +23,8 @@ def prepare():
     self._texture_fn = None
     self._frag = None
     self._frag_render_program = None
-    self._default_param_val = {'float':1.,'vec2': (1.,1.),'u_time':0.,'u_resolution':(512,512),
-                               'position':[[-1,-1],[1,-1],[-1,1],[1,1]],'texture':np.ones([10,10])}
+    self._default_param_val = {'float': 1., 'vec2': (1., 1.), 'u_time': 0., 'u_resolution': (512, 512),
+                               'position': [[-1, -1], [1, -1], [-1, 1], [1, 1]], 'texture': np.ones([10, 10])}
     self.frag_fn_idx = 0
     self.texture_fn_idx = 0
     self.load_shader_win = False
@@ -32,6 +32,7 @@ def prepare():
     self._setpoped = False
     self._changespeed = 0.1
     self._refresh_on = False
+
 
 def set_widgets():
     if imgui.begin_main_menu_bar():
@@ -57,7 +58,7 @@ def set_widgets():
                 sys.path.insert(0, self._shader_folder)
                 self._frag_shader_fn = file_list[self.frag_fn_idx]
                 self._frag = load_shaderfile(self._shader_folder + self._frag_shader_fn)
-                self._frag_render_program = gloo.Program(self._vertex,self._frag)
+                self._frag_render_program = gloo.Program(self._vertex, self._frag)
                 for u in self._frag_render_program.all_uniforms:
                     if u[1] == gl.GL_FLOAT:
                         self._frag_render_program[u[0]] = self._default_param_val['float']
@@ -81,31 +82,32 @@ def set_widgets():
     if self._frag_render_program != None:
         imgui.begin("Param Space")
         if imgui.begin_popup_context_window(mouse_button=0):
-            _,self._changespeed = imgui.drag_float('Change precision',self._changespeed,0.1)
+            _, self._changespeed = imgui.drag_float('Change precision', self._changespeed, 0.1)
             imgui.end_popup()
         for u in self._frag_render_program.all_uniforms:
-            if u[0] not in ['u_time','u_resolution']:
+            if u[0] not in ['u_time', 'u_resolution']:
                 if u[1] == gl.GL_FLOAT:
-                    _,self._frag_render_program[u[0]] = imgui.drag_float(u[0],self._frag_render_program[u[0]],self._changespeed)
+                    _, self._frag_render_program[u[0]] = imgui.drag_float(u[0], self._frag_render_program[u[0]],
+                                                                          self._changespeed)
                 elif u[1] == gl.GL_FLOAT_VEC2:
-                    _,self._frag_render_program[u[0]] = imgui.drag_float2(u[0], *self._frag_render_program[u[0]],self._changespeed)
+                    _, self._frag_render_program[u[0]] = imgui.drag_float2(u[0], *self._frag_render_program[u[0]],
+                                                                           self._changespeed)
                 elif u[1] == gl.GL_SAMPLER_2D:
-                        _, self._texture_folder = imgui.input_text(' ', self._texture_folder, 256)
-                        if os.path.isdir(self._texture_folder):
-                            file_list = [file for file in os.listdir(self._shader_folder) if file.endswith((".png",
-                                                                                                            ".jpg",
-                                                                                                            "jpeg",
-                                                                                                            ".bmp"))]
-                        else:
-                            file_list = []
-                        _, self.texture_fn_idx = imgui.combo(
-                            "", self.texture_fn_idx, file_list
-                        )
-                        if imgui.button("Select"):
-                            sys.path.insert(0, self._texture_folder)
-                            self._texture_fn = file_list[self.texture_fn_idx]
-                            temp = np.array(Image.open(self._texture_folder+self._texture_fn))/256
-                            self._frag_render_program[u[0]] = temp.astype(np.float32).view(gloo.TextureFloat2D)
+                    _, self._texture_folder = imgui.input_text(' ', self._texture_folder, 256)
+                    if os.path.isdir(self._texture_folder):
+                        file_list = [file for file in os.listdir(self._texture_folder)
+                                     if file.endswith((".png", ".jpg", "jpeg", ".jfif", ".bmp"))]
+                    else:
+                        file_list = []
+                    _, self.texture_fn_idx = imgui.combo(
+                        "", self.texture_fn_idx, file_list
+                    )
+                    if imgui.button("Select"):
+                        sys.path.insert(0, self._texture_folder)
+                        self._texture_fn = file_list[self.texture_fn_idx]
+                        temp = np.array(Image.open(self._texture_folder + self._texture_fn)) / 256
+                        self._frag_render_program[u[0]] = temp.astype(np.float32).view(gloo.TextureFloat2D)
+                        self._frag_render_program[u[0]].wrapping = gl.GL_REPEAT
         imgui.end()
 
         self.pop_check()
@@ -115,7 +117,8 @@ def set_widgets():
             self.minion_plug.get(self._children)
             if 'waiting' in self.minion_plug.inbox.keys() or self._refresh_on:
                 if self.minion_plug.inbox['waiting']:
-                    self.minion_plug.put({'frag_fn': self._shader_folder + self._frag_shader_fn, 'vertex_shader': self._vertex})
+                    self.minion_plug.put(
+                        {'frag_fn': self._shader_folder + self._frag_shader_fn, 'vertex_shader': self._vertex})
                     self.minion_plug.give(self._children, ['frag_fn', 'vertex_shader'])
                 else:
                     self._refresh_on = False
@@ -124,9 +127,9 @@ def set_widgets():
                     self.minion_plug.put({v: self._frag_render_program[v] for v in varlist})
                     self.minion_plug.give(self._children, varlist)
             else:
-                self.minion_plug.put({'frag_fn': self._shader_folder + self._frag_shader_fn, 'vertex_shader': self._vertex})
+                self.minion_plug.put(
+                    {'frag_fn': self._shader_folder + self._frag_shader_fn, 'vertex_shader': self._vertex})
                 self.minion_plug.give(self._children, ['frag_fn', 'vertex_shader'])
-
 
 
 def client_draw():
@@ -136,7 +139,7 @@ def client_draw():
         try:
             for val in self._fetchlist.values():
                 if val not in ['u_time', 'u_resolution']:
-                    self._frag_render_program[val] = getattr(self,val)
+                    self._frag_render_program[val] = getattr(self, val)
             ww, wh = self._width, self._height
             self.dispatch_event('draw', ww, wh)
         except:
@@ -155,13 +158,11 @@ def client_draw():
             self.minion_plug.give(self._parent, ['waiting'])
 
 
-
-
 def draw(ww, wh):
     self.clear()
     gl.glEnable(gl.GL_BLEND)
     try:
-        self._frag_render_program['u_resolution'] = (wh,ww)
+        self._frag_render_program['u_resolution'] = (wh, ww)
         self._frag_render_program['u_time'] += self.dt
         self._frag_render_program.draw(gl.GL_TRIANGLE_STRIP)
     except:
