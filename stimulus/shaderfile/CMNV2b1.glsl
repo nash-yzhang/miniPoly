@@ -49,20 +49,17 @@ float noise (in vec2 st) {
 //    return val/supsampF/supsampF;
 //}
 
-#define OCTAVES 4
+#define OCTAVES 6
 float fbm (in vec2 st) {
     // Initial values
     float value = 0.0;
-    float amplitude = .5;
-    float octave = float(OCTAVES);
-    float amp_incr = .5;
-    float scale_incr = 2.;
-    float amp_sum = (1-pow(amp_incr,OCTAVES+1))/(1-amp_incr);
+    float frequency = 0.;
+    //
     // Loop of octaves
+    st /= 9.;
     for (int i = 0; i < OCTAVES; i++) {
-        value += amplitude * noise(st) / amp_sum;
-        st *= scale_incr ;
-        amplitude *= amp_incr;
+        value += noise(st) * noise(st) / float(OCTAVES) / 2.;
+        st *= 3.;
     }
     return value;
 }
@@ -84,21 +81,21 @@ float fbm_supsamp (in vec2 st) {
 }
 
 #define pi 3.141592653
-#define overlay 10
+#define overlay 8
 void main() {
-    vec2 st = gl_FragCoord.xy/u_resolution.xy/4.;
-    st.x *= u_resolution.x/u_resolution.y;
+    vec2 st = gl_FragCoord.xy/u_resolution.yx;
+//    st.x *= u_resolution.y/u_resolution.x;
     st.y = -st.y;
+    st -= .5;
+//    st *= 10.;
     vec3 color = vec3(0.0);
     float total_i = float(overlay);
     float ii = 0.;
-//    float vf_angle = *pi*2.;
     float vf_angle = texture2D(u_tex,st/1.5).r*4*pi;
     vec2 vf = vec2(sin(vf_angle),cos(vf_angle));;
     for (int i = 0; i<overlay;i++){
-//        color += texture2D(u_tex,st+0.11*vf*fract(u_time/cycle_period+ii/total_i)).rgb*length(sin(fract(u_time/cycle_period+ii/total_i)*pi))/total_i;
-        vec2 buffer_pos = (st*40. + random1(ii*ii)*30. +vf*fract(u_time*u_speed+ii/total_i));
-   		color += fbm_supsamp(buffer_pos)*length(sin(fract(u_time*u_speed+ii/total_i)*pi))/total_i*1.5;
+        vec2 buffer_pos = (st*40. + (ii/total_i-.5)*300. + vf*fract(u_time*u_speed+(ii+1)/total_i));
+   		color += fbm_supsamp(buffer_pos)*length(sin(fract(u_time*u_speed+(ii+1)/total_i)*pi))/total_i*1.5;
        ii += 1.;
     }
     gl_FragColor = vec4(color,1.0);
