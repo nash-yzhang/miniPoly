@@ -16,7 +16,7 @@ vertex = """
 
 fragment = load_shaderfile('C:\\Users\\yzhang\\Documents\\GitHub\\miniPoly\\stimulus\\shaderfile\\CMNV2b1.glsl')
 
-v = pims.Video('C:\\Users\\yzhang\\Documents\\GitHub\\miniPoly\\stimulus\\720_ANSEL_Kissed_AUG_15.mov')
+v = pims.Video('C:\\Users\\yzhang\\Documents\\GitHub\\miniPoly\\stimulus\\noise.avi')
 total_frames = v.__len__()
 T = v[0][:,:,1] / 256
 # T = np.array(Image.open("C:\\Users\\yzhang\\Documents\\GitHub\\miniPoly\\stimulus\\download2.png"))/256
@@ -32,8 +32,7 @@ def on_draw(dt):
     iframe += 1
 
     program['u_time'] += dt
-
-    T = v[iframe % total_frames][:,:,1]/ 256
+    T = v[iframe  % total_frames][::-1,:,1]/ 256
     program['u_tex'] = T.astype(np.float32).view(gloo.TextureFloat2D)
     program['u_tex'].wrapping = gl.GL_REPEAT
     program.draw(gl.GL_TRIANGLE_STRIP)
@@ -43,9 +42,12 @@ program = gloo.Program(vertex, fragment, count=4)
 program['position'] = [(-1, -1), (-1, +1), (+1, -1), (+1, +1)]
 program['u_resolution'] = u_resolution
 program['u_time'] = 0.
+program['u_speed'] = 4.
 iframe = 0
 
 program['u_tex'] = T.astype(np.float32).view(gloo.TextureFloat2D)
 program['u_tex'].wrapping = gl.GL_REPEAT
 
 app.run()
+
+

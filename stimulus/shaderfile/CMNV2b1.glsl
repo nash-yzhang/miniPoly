@@ -1,22 +1,25 @@
 // Author @patriciogv - 2015
 // http://patriciogonzalezvivo.com
 #ifdef GL_ES
-precision mediump float;
+precision highp float;
 #endif
 uniform vec2 u_resolution;
 uniform sampler2D u_tex;
 uniform float u_time;
+uniform float u_speed;
 float random1 (in float val){
     return fract(sin(val*43758.5453123));
 }
 
 float random (in vec2 st) {
     return fract(sin(dot(st.xy,
-                         vec2(12.9898,78.233)))*
-        43759.929);
+                         vec2(12.9898,78.233))*100.)*
+        439.929);
 }
 // Based on Morgan McGuire @morgan3d
 // https://www.shadertoy.com/view/4dS3Wd
+
+
 float noise (in vec2 st) {
     vec2 i = floor(st);
     vec2 f = fract(st);
@@ -31,30 +34,35 @@ float noise (in vec2 st) {
             (d - b) * u.x * u.y;
 }
 
-vec2 noise_vec (in vec2 st) {
-    vec2 i = floor(st);
-    vec2 f = fract(st);
-    // Four corners in 2D of a tile
-    vec2 a = vec2(random1(i.x),random1(i.y));
-    vec2 b = vec2(random1(i.x+1.),random1(i.y));
-    vec2 c = vec2(random1(i.x),random1(i.y+1.));
-    vec2 d = vec2(random1(i.x+1.),random1(i.y+1.));
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return vec2(mix(mix(a.x, b.x, i.x),mix(c.x,d.x,i.x),i.y),
-            mix(mix(a.y, b.y, i.y),mix(c.y,d.y,i.y),i.x));
-}
+//#define supsamp 3
+//float noise_supsamp (in vec2 st) {
+//    float val = 0.;
+//    float supsampF = float(supsamp);
+//    for (int ix = 0; ix < supsamp; ix++) {
+//        for (int iy = 0; iy < supsamp; iy++) {
+//            float fix = float(ix)/supsampF;
+//            float fiy = float(iy)/supsampF;
+//        	vec2 st1 = st+vec2(fix,fiy)/u_resolution;
+//        	val+=noise(st1);
+//        }
+//    }
+//    return val/supsampF/supsampF;
+//}
 
 #define OCTAVES 4
 float fbm (in vec2 st) {
     // Initial values
     float value = 0.0;
     float amplitude = .5;
-
+    float octave = float(OCTAVES);
+    float amp_incr = .5;
+    float scale_incr = 2.;
+    float amp_sum = (1-pow(amp_incr,OCTAVES+1))/(1-amp_incr);
     // Loop of octaves
     for (int i = 0; i < OCTAVES; i++) {
-        value += amplitude * noise(st);
-        st *= 2. ;
-        amplitude *= 0.5;
+        value += amplitude * noise(st) / amp_sum;
+        st *= scale_incr ;
+        amplitude *= amp_incr;
     }
     return value;
 }
@@ -72,25 +80,25 @@ float fbm_supsamp (in vec2 st) {
         	val+=fbm(st1);
         }
     }
-    return val/supsampF/supsampF;
+    return val/supsampF;
 }
 
 #define pi 3.141592653
 #define overlay 10
 void main() {
-    vec2 st = gl_FragCoord.xy/u_resolution.xy;
+    vec2 st = gl_FragCoord.xy/u_resolution.xy/4.;
     st.x *= u_resolution.x/u_resolution.y;
+    st.y = -st.y;
     vec3 color = vec3(0.0);
     float total_i = float(overlay);
     float ii = 0.;
-    float cycle_period = 1.;
-    float speed = 10.;
 //    float vf_angle = *pi*2.;
-    float vf_angle = texture2D(u_tex,st).r*2.*pi;
+    float vf_angle = texture2D(u_tex,st/1.5).r*4*pi;
     vec2 vf = vec2(sin(vf_angle),cos(vf_angle));;
     for (int i = 0; i<overlay;i++){
 //        color += texture2D(u_tex,st+0.11*vf*fract(u_time/cycle_period+ii/total_i)).rgb*length(sin(fract(u_time/cycle_period+ii/total_i)*pi))/total_i;
-   		color += fbm_supsamp((st*7. + random1(random1(ii))*150.+.05*speed*vf*fract(u_time/cycle_period+ii/total_i))*5.)*length(sin(fract(u_time/cycle_period+ii/total_i)*pi))/total_i*1.5;
+        vec2 buffer_pos = (st*40. + random1(ii*ii)*30. +vf*fract(u_time*u_speed+ii/total_i));
+   		color += fbm_supsamp(buffer_pos)*length(sin(fract(u_time*u_speed+ii/total_i)*pi))/total_i*1.5;
        ii += 1.;
     }
     gl_FragColor = vec4(color,1.0);
