@@ -42,6 +42,25 @@ def prepare():
     self.rec_button_text = 'Start'
     self.rec_on = False
 
+def setup_shader():
+    self._frag = load_shaderfile(self._shader_folder + self._frag_shader_fn)
+    self._frag_render_program = gloo.Program(self._vertex, self._frag)
+    for u in self._frag_render_program.all_uniforms:
+        if u[1] == gl.GL_FLOAT:
+            self._frag_render_program[u[0]] = self._default_param_val['float']
+        elif u[1] == gl.GL_FLOAT_VEC2:
+            self._frag_render_program[u[0]] = self._default_param_val['vec2']
+        elif u[1] == gl.GL_SAMPLER_2D:
+            self._frag_render_program[u[0]] = self._default_param_val['texture']
+        if u[0] == 'u_time':
+            self._frag_render_program[u[0]] = self._default_param_val['u_time']
+        elif u[0] == 'u_resolution':
+            self._frag_render_program[u[0]] = self._default_param_val['u_resolution']
+
+    self._frag_render_program['position'] = self._default_param_val['position']
+    self._refresh_on = True
+    self.load_shader_win = False
+
 def set_widgets():
     if imgui.begin_main_menu_bar():
         if imgui.begin_menu("FragShader", True):
@@ -50,6 +69,9 @@ def set_widgets():
             )
             imgui.end_menu()
         imgui.end_main_menu_bar()
+
+
+
     if self.load_shader_win:
         imgui.set_next_window_size(400, 300)
         imgui.open_popup("Select file")
@@ -65,84 +87,73 @@ def set_widgets():
             if imgui.button("Select"):
                 sys.path.insert(0, self._shader_folder)
                 self._frag_shader_fn = file_list[self.frag_fn_idx]
-                self._frag = load_shaderfile(self._shader_folder + self._frag_shader_fn)
-                self._frag_render_program = gloo.Program(self._vertex, self._frag)
-                for u in self._frag_render_program.all_uniforms:
-                    if u[1] == gl.GL_FLOAT:
-                        self._frag_render_program[u[0]] = self._default_param_val['float']
-                    elif u[1] == gl.GL_FLOAT_VEC2:
-                        self._frag_render_program[u[0]] = self._default_param_val['vec2']
-                    elif u[1] == gl.GL_SAMPLER_2D:
-                        self._frag_render_program[u[0]] = self._default_param_val['texture']
-                    if u[0] == 'u_time':
-                        self._frag_render_program[u[0]] = self._default_param_val['u_time']
-                    elif u[0] == 'u_resolution':
-                        self._frag_render_program[u[0]] = self._default_param_val['u_resolution']
-
-                self._frag_render_program['position'] = self._default_param_val['position']
-                self._refresh_on = True
-                self.load_shader_win = False
+                setup_shader()
             imgui.same_line()
             if imgui.button("Cancel"):
                 self.load_shader_win = False
             imgui.end_popup()
 
     if self._frag_render_program != None:
-        imgui.begin("Param Space")
-        if imgui.begin_popup_context_window(mouse_button=0):
-            _, self._changespeed = imgui.drag_float('Change precision', self._changespeed, 0.1)
-            imgui.end_popup()
-        for u in self._frag_render_program.all_uniforms:
-            if u[0] not in ['u_time', 'u_resolution']:
-                if u[1] == gl.GL_FLOAT:
-                    _, self._frag_render_program[u[0]] = imgui.drag_float(u[0], self._frag_render_program[u[0]],
-                                                                          self._changespeed)
-                elif u[1] == gl.GL_FLOAT_VEC2:
-                    _, self._frag_render_program[u[0]] = imgui.drag_float2(u[0], *self._frag_render_program[u[0]],
-                                                                           self._changespeed)
-                elif u[1] == gl.GL_SAMPLER_2D:
-                    _, self._texture_folder = imgui.input_text(' ', self._texture_folder, 256)
-                    if os.path.isdir(self._texture_folder):
-                        file_list = [file for file in os.listdir(self._texture_folder)
-                                     if file.endswith((".png", ".jpg", "jpeg", ".jfif", ".bmp"))]
-                    else:
-                        file_list = []
-                    _, self.texture_fn_idx = imgui.combo(
-                        "", self.texture_fn_idx, file_list
-                    )
-                    if imgui.button("Select"):
-                        sys.path.insert(0, self._texture_folder)
-                        self._texture_fn = file_list[self.texture_fn_idx]
-                        temp = np.array(Image.open(self._texture_folder + self._texture_fn)) / 256
-                        self._frag_render_program[u[0]] = temp.astype(np.float32).view(gloo.TextureFloat2D)
-                        self._frag_render_program[u[0]].wrapping = gl.GL_REPEAT
-        imgui.end()
+        imgui.begin("Control")
+        if imgui.button("Reload", 120,20):
+            setup_shader()
+        imgui.new_line()
+        expanded,_ = imgui.collapsing_header("Param Space", True)
+        if expanded:
+            if imgui.begin_popup_context_window(mouse_button=0):
+                _, self._changespeed = imgui.drag_float('Change precision', self._changespeed, 0.1)
+                imgui.end_popup()
+            for u in self._frag_render_program.all_uniforms:
+                if u[0] not in ['u_time', 'u_resolution']:
+                    if u[1] == gl.GL_FLOAT:
+                        _, self._frag_render_program[u[0]] = imgui.drag_float(u[0], self._frag_render_program[u[0]],
+                                                                              self._changespeed)
+                    elif u[1] == gl.GL_FLOAT_VEC2:
+                        _, self._frag_render_program[u[0]] = imgui.drag_float2(u[0]+'folder', *self._frag_render_program[u[0]],
+                                                                               self._changespeed)
+                    elif u[1] == gl.GL_SAMPLER_2D:
+                        _, self._texture_folder = imgui.input_text(u[0], self._texture_folder, 256)
+                        if os.path.isdir(self._texture_folder):
+                            file_list = [file for file in os.listdir(self._texture_folder)
+                                         if file.endswith((".png", ".jpg", "jpeg", ".jfif", ".bmp"))]
+                        else:
+                            file_list = []
+                        _, self.texture_fn_idx = imgui.combo(
+                            "Select texture", self.texture_fn_idx, file_list
+                        )
+                        if imgui.button("Select"):
+                            sys.path.insert(0, self._texture_folder)
+                            self._texture_fn = file_list[self.texture_fn_idx]
+                            temp = np.array(Image.open(self._texture_folder + self._texture_fn)) / 256
+                            self._frag_render_program[u[0]] = temp.astype(np.float32).view(gloo.TextureFloat2D)
+                            self._frag_render_program[u[0]].wrapping = gl.GL_REPEAT
         self.pop_check()
 
         if not self._poped:
             # if not self.vid_writer:
             #     self.vid_writer = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
             #                     (int(self._framebuffer.height), int(self._framebuffer.width)))
-
-            imgui.begin("Video Recording")
-            _, vid_fn = imgui.input_text('', self.vid_fn, 1024)
-            if vid_fn != self.vid_fn:
-                self.vid_fn = vid_fn
-                self.vidwriter.release()
-            imgui.same_line()
-            if imgui.button(self.rec_button_text):
-                if self.rec_on:
-                    self.rec_button_text = 'Start'
-                    self.rec_on = False
+            imgui.new_line()
+            expanded2,_ = imgui.collapsing_header("Video Recording", True)
+            if expanded2:
+                _, vid_fn = imgui.input_text('', self.vid_fn, 1024)
+                if vid_fn != self.vid_fn:
+                    self.vid_fn = vid_fn
                     self.vidwriter.release()
-                    self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")
-                    print(self.vid_fn)
-                else:
-                    self.rec_on = True
-                    if self.rec_button_text == 'Start':
-                        self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
-                                                         (self._framebuffer.width, self._framebuffer.height))
-                        self.rec_button_text = 'Stop'
+                imgui.same_line()
+                if imgui.button(self.rec_button_text):
+                    if self.rec_on:
+                        self.rec_button_text = 'Start'
+                        self.rec_on = False
+                        self.vidwriter.release()
+                        self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")
+                        print(self.vid_fn)
+                    else:
+                        self.rec_on = True
+                        if self.rec_button_text == 'Start':
+                            self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
+                                                             (self._framebuffer.width, self._framebuffer.height))
+                            self.rec_button_text = 'Stop'
             imgui.end()
             if self.rec_on:
                 data = (cv2.cvtColor(self._framebuffer.color[0].get(), cv2.COLOR_RGBA2RGB) * 255).astype(np.uint8)
@@ -150,6 +161,7 @@ def set_widgets():
 
             self.popable_opengl_component("GLView", 'draw', pop_draw_func_name='client_draw')
         else:
+            imgui.end()
             self.minion_plug.get(self._children)
             if 'waiting' in self.minion_plug.inbox.keys() or self._refresh_on:
                 if self.minion_plug.inbox['waiting']:
@@ -198,7 +210,7 @@ def draw(ww, wh):
     self.clear()
     gl.glEnable(gl.GL_BLEND)
     try:
-        self._frag_render_program['u_resolution'] = (wh, ww)
+        self._frag_render_program['u_resolution'] = (ww, wh)
         self._frag_render_program['u_time'] += self.dt
         self._frag_render_program.draw(gl.GL_TRIANGLE_STRIP)
     except:
