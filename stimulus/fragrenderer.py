@@ -27,7 +27,7 @@ def prepare():
     self._texture_fn = None
     self._frag = None
     self._frag_render_program = None
-    self._default_param_val = {'float': 1., 'vec2': (1., 1.), 'u_time': 0., 'u_resolution': (512, 512),
+    self._default_param_val = {'float': 1., 'vec2': (1., 1.), 'u_time': 0., 'u_resolution': (512, 512), 'u_mouse':(0.,0.),
                                'position': [[-1, -1], [1, -1], [-1, 1], [1, 1]], 'texture': np.ones([10, 10])}
     self.frag_fn_idx = 0
     self.texture_fn_idx = 0
@@ -58,11 +58,13 @@ def setup_shader():
             self._frag_render_program[u[0]] = self._default_param_val['texture']
         if u[0] == 'u_time':
             self._frag_render_program[u[0]] = self._default_param_val['u_time']
+        elif u[0] == 'u_mouse':
+            self._frag_render_program[u[0]] = self._default_param_val['u_mouse']
         elif u[0] == 'u_resolution':
             self._frag_render_program[u[0]] = self._default_param_val['u_resolution']
 
     self._frag_render_program['position'] = self._default_param_val['position']
-    self._refresh_on = True
+    # self._refresh_on = True
     self.load_shader_win = False
 
 def set_widgets():
@@ -108,7 +110,7 @@ def set_widgets():
                 _, self._changespeed = imgui.drag_float('Change precision', self._changespeed, 0.1)
                 imgui.end_popup()
             for u in self._frag_render_program.all_uniforms:
-                if u[0] not in ['u_time', 'u_resolution']:
+                if u[0] not in ['u_time', 'u_resolution','u_mouse']:
                     if u[1] == gl.GL_FLOAT:
                         _, self._frag_render_program[u[0]] = imgui.drag_float(u[0], self._frag_render_program[u[0]],
                                                                               self._changespeed)
@@ -159,6 +161,8 @@ def set_widgets():
                                                              (self._framebuffer.width, self._framebuffer.height))
                             self.rec_button_text = 'Stop'
             imgui.end()
+            x, y = imgui.get_mouse_pos()
+            self._frag_render_program['u_mouse'] = (x, y)
             if self.rec_on:
                 data = (cv2.cvtColor(self._framebuffer.color[0].get(), cv2.COLOR_RGBA2RGB) * 255).astype(np.uint8)
                 self.vidwriter.write(data)
@@ -167,21 +171,28 @@ def set_widgets():
         else:
             imgui.end()
             self.minion_plug.get(self._children)
-            if 'waiting' in self.minion_plug.inbox.keys() or self._refresh_on:
+            # if self._refresh_on:
+            if 'waiting' in self.minion_plug.inbox.keys():
                 if self.minion_plug.inbox['waiting']:
                     self.minion_plug.put(
                         {'frag_fn': self._shader_folder + self._frag_shader_fn, 'vertex_shader': self._vertex})
                     self.minion_plug.give(self._children, ['frag_fn', 'vertex_shader'])
                 else:
-                    self._refresh_on = False
+                    # self._refresh_on = False
                     varlist = [u[0] for u in self._frag_render_program.all_uniforms if
-                               u[0] not in ['u_time', 'u_resolution']]
+                               u[0] not in ['u_time', 'u_resolution', 'u_mouse']]
                     self.minion_plug.put({v: self._frag_render_program[v] for v in varlist})
                     self.minion_plug.give(self._children, varlist)
             else:
-                self.minion_plug.put(
-                    {'frag_fn': self._shader_folder + self._frag_shader_fn, 'vertex_shader': self._vertex})
-                self.minion_plug.give(self._children, ['frag_fn', 'vertex_shader'])
+                # self._refresh_on = False
+                varlist = [u[0] for u in self._frag_render_program.all_uniforms if
+                           u[0] not in ['u_time', 'u_resolution','u_mouse']]
+                self.minion_plug.put({v: self._frag_render_program[v] for v in varlist})
+                self.minion_plug.give(self._children, varlist)
+            # else:
+            #     self.minion_plug.put(
+            #         {'frag_fn': self._shader_folder + self._frag_shader_fn, 'vertex_shader': self._vertex})
+            #     self.minion_plug.give(self._children, ['frag_fn', 'vertex_shader'])
 
 
 def client_draw():
@@ -189,8 +200,9 @@ def client_draw():
     if self._frag_render_program != None:
         self.__dict__.update(self.minion_plug.fetch(self._fetchlist))
         try:
+            self._frag_render_program['u_mouse'] = self._mouse_x,self._mouse_y
             for val in self._fetchlist.values():
-                if val not in ['u_time', 'u_resolution']:
+                if val not in ['u_time', 'u_resolution','u_mouse']:
                     self._frag_render_program[val] = getattr(self, val)
             ww, wh = self._width, self._height
             self.dispatch_event('draw', ww, wh)
@@ -219,3 +231,9 @@ def draw(ww, wh):
         self._frag_render_program.draw(gl.GL_TRIANGLE_STRIP)
     except:
         self._frag_render_program = None
+
+# def get_mouse_pos():
+#     'The mouse was moved with no buttons held down.'
+#     x,y,_,_ = self.dispatch_event('on_mouse_motion')
+#     self._frag_render_program['u_mouse'] = (x,y)
+#     print(x)

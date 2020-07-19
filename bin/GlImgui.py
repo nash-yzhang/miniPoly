@@ -147,7 +147,7 @@ class glplayer(adapted_glumpy_window):
             essential_func_name.append(draw_func_name)
         assert all(func in self.event_func_list for func in essential_func_name), ('\033[31m' + 'the following functions is not defined in the imported module: %s' % (', '.join(func for func in essential_func_name if func not in self.event_func_list)))
 
-        glumpy_default_func_list = ['on_init', 'on_draw', 'on_resize']
+        glumpy_default_func_list = ['on_init', 'on_draw', 'on_resize','on_mouse_motion']
 
         for func in self.event_func_list:
             getattr(self.import_stipgm, func).__globals__['self'] = self
@@ -188,7 +188,11 @@ class glimListener(glplayer):
                         minion_plug=hook,fullscreen = fullscreen)
         self.set_position(win_extent[0],win_extent[1])
         self._parent = pocket['parent_name']
+        self._mouse_x,self._mouse_y,self._mouse_dx,self._mouse_dy = 0.,0.,0.,0.
         self.update_sti_module()
+
+    def on_mouse_motion(self,x,y,dx,dy):
+        self._mouse_x,self._mouse_y,self._mouse_dx,self._mouse_dy = x,y,dx,dy
 
 
     def update_sti_module(self):
@@ -236,6 +240,9 @@ class glimWindow(glplayer):
 
     def on_resize(self, width, height):
         return None
+
+    # def on_mouse_motion(self,x,y,dx,dy):
+    #     return x,y,dx,dy
 
     def set_basic_widgets(self):
         if imgui.begin_main_menu_bar():
