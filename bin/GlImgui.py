@@ -215,7 +215,7 @@ class glimWindow(glplayer):
         else:
             self._start_pop = False
         super().__init__(*args, **kwargs)
-        glfw.set_window_icon(self._native_window, 1, pimg.open('bin/MappApp.ico'))
+        glfw.set_window_icon(self._native_window, 1, pimg.open('bin/minipoly.ico'))
 
         self._texture_buffer = np.zeros((self.height, self.width, 4), np.float32).view(gloo.Texture2D)
         self._depth_buffer = gloo.DepthBuffer(self.width, self.height)

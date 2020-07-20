@@ -42,7 +42,7 @@ float noise (in vec2 st) {
 //        for (int iy = 0; iy < supsamp; iy++) {
 //            float fix = float(ix)/supsampF;
 //            float fiy = float(iy)/supsampF;
-//        	vec2 st1 = st+vec2(fix,fiy)/u_resolution;
+//        	vec2 st1 = st+vec2(fix,fiy)/u_resolution;s
 //        	val+=noise(st1);
 //        }
 //    }
