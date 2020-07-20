@@ -157,8 +157,9 @@ def set_widgets():
                                                              (self._framebuffer.width, self._framebuffer.height))
                             self.rec_button_text = 'Stop'
             imgui.end()
-            x, y = imgui.get_mouse_pos()
-            self._frag_render_program['u_mouse'] = (x, y)
+            if hasattr(self._frag_render_program,'u_mouse'):
+                x, y = imgui.get_mouse_pos()
+                self._frag_render_program['u_mouse'] = (x, y)
             if self.rec_on:
                 data = (cv2.cvtColor(self._framebuffer.color[0].get(), cv2.COLOR_RGBA2RGB) * 255).astype(np.uint8)
                 self.vidwriter.write(data)
