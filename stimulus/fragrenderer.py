@@ -141,7 +141,8 @@ def set_widgets():
                 _, vid_fn = imgui.input_text('', self.vid_fn, 1024)
                 if vid_fn != self.vid_fn:
                     self.vid_fn = vid_fn
-                    self.vidwriter.release()
+                    if self.vidwriter:
+                        self.vidwriter.release()
                 imgui.same_line()
                 if imgui.button(self.rec_button_text):
                     if self.rec_on:
@@ -153,7 +154,7 @@ def set_widgets():
                     else:
                         self.rec_on = True
                         if self.rec_button_text == 'Start':
-                            self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
+                            self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'DIVX'), self.FPS,
                                                              (self._framebuffer.width, self._framebuffer.height))
                             self.rec_button_text = 'Stop'
             imgui.end()
@@ -161,7 +162,7 @@ def set_widgets():
                 x, y = imgui.get_mouse_pos()
                 self._frag_render_program['u_mouse'] = (x, y)
             if self.rec_on:
-                data = (cv2.cvtColor(self._framebuffer.color[0].get(), cv2.COLOR_RGBA2RGB) * 255).astype(np.uint8)
+                data = (cv2.cvtColor(self._framebuffer.color[0].get(), cv2.COLOR_RGBA2RGB) * 255).astype(np.uint8)[:,:,::-1]
                 self.vidwriter.write(data)
 
             self.popable_opengl_component("GLView", 'draw', pop_draw_func_name='client_draw')
