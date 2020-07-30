@@ -154,7 +154,7 @@ def set_widgets():
                     else:
                         self.rec_on = True
                         if self.rec_button_text == 'Start':
-                            self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'DIVX'), self.FPS,
+                            self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
                                                              (self._framebuffer.width, self._framebuffer.height))
                             self.rec_button_text = 'Stop'
             imgui.end()
