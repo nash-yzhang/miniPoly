@@ -18,8 +18,8 @@ def prepare():
         gl_Position = vec4(position, 0.0, 1.0 );
     }
     """
-    self._shader_folder = 'stimulus/shaderfile/'
-    self._texture_folder = 'stimulus/shaderfile/'
+    self._shader_folder = '../stimulus/shaderfile/'
+    self._texture_folder = '../stimulus/shaderfile/'
     self._frag_shader_fn = None
     self._texture_fn = None
     self._frag = None

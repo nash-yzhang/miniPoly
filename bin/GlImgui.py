@@ -148,12 +148,7 @@ class glplayer(adapted_glumpy_window):
                     '\033[31m' + 'the following functions is not defined in the imported module: %s' % (
                 ', '.join(func for func in essential_func_name if func not in self.event_func_list)))
 
-<<<<<<< Updated upstream
         glumpy_default_func_list = ['on_init', 'on_draw', 'on_resize']
-=======
-        glumpy_default_func_list = ['on_init', 'on_draw', 'on_resize', 'on_mouse_motion']
->>>>>>> Stashed changes
-
         for func in self.event_func_list:
             getattr(self.import_stipgm, func).__globals__['self'] = self
             self.event(getattr(self.import_stipgm, func))
@@ -188,36 +183,19 @@ class glplayer(adapted_glumpy_window):
 
 
 class glimListener(glplayer):
-<<<<<<< Updated upstream
     def __init__(self,hook):
-=======
-    def __init__(self, hook, fullscreen=False):
->>>>>>> Stashed changes
         hook.get('all')
         pocket = hook.fetch(['extent', 'parent_name', 'should_run'])
         if pocket['extent']:
             win_extent = [int(i) for i in pocket['extent']]
         else:
             win_extent = [500, 500, 1024, 720]
-<<<<<<< Updated upstream
+
         super().__init__(hook._name, width=win_extent[2], height=win_extent[3], config=app.configuration.Configuration(),
                         minion_plug=hook)
         self.set_position(win_extent[0],win_extent[1])
         self._parent = pocket['parent_name']
         self.update_sti_module()
-
-=======
-        super().__init__(hook._name, width=win_extent[2], height=win_extent[3],
-                         config=app.configuration.Configuration(),
-                         minion_plug=hook, fullscreen=fullscreen)
-        self.set_position(win_extent[0], win_extent[1])
-        self._parent = pocket['parent_name']
-        self._mouse_x, self._mouse_y, self._mouse_dx, self._mouse_dy = 0., 0., 0., 0.
-        self.update_sti_module()
-
-    def on_mouse_motion(self, x, y, dx, dy):
-        self._mouse_x, self._mouse_y, self._mouse_dx, self._mouse_dy = x, y, dx, dy
->>>>>>> Stashed changes
 
     def update_sti_module(self):
         sti_mod_rel__varn = ['import_module_name', 'draw_func_name', 'sti_file_dir']
@@ -250,7 +228,7 @@ class glimWindow(glplayer):
         self.imgui_renderer = GlfwRenderer(self._native_window)
         self.io = imgui.get_io()
         self.open_dialog_state = False
-        self.sti_file_dir = "stimulus"
+        self.sti_file_dir = "../stimulus"
         self.open_conn_state = False
         self._connect_to = ''
         self.selected = False

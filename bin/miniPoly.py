@@ -2,10 +2,7 @@ import multiprocessing as mp
 import socket, pickle
 import sys
 from time import time,sleep
-<<<<<<< Updated upstream
 
-=======
->>>>>>> Stashed changes
 # noinspection SpellCheckingInspection
 
 def task_wrapper(hook):

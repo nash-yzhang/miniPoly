@@ -11,8 +11,8 @@ self = None
 
 def prepare():
     self.FPS = 60
-    self._shader_folder = 'stimulus/shaderfile/' # frag shader dir
-    self._texture_folder = 'stimulus/shaderfile/' # texture used in frag shader
+    self._shader_folder = '../stimulus/shaderfile/' # frag shader dir
+    self._texture_folder = '../stimulus/shaderfile/' # texture used in frag shader
     self._frag_shader_fn = None # frag shader file name
     self._texture_fn = None # texture file name
     self._frag = None # fragment shader
