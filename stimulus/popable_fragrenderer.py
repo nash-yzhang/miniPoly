@@ -103,6 +103,11 @@ def set_widgets():
                 sys.path.insert(0, self._shader_folder)
                 self._frag_shader_fn = file_list[self.frag_fn_idx]
                 setup_shader()
+                if self._children and self._poped:
+                    self.minion_plug.remote_shutdown(self._children)
+                    self._children = None
+                    self._should_pop = self._poped
+                    self._poped = False
             imgui.same_line()
             if imgui.button("Cancel"):
                 self.load_shader_win = False
