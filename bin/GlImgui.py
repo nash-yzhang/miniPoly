@@ -13,11 +13,12 @@ from inspect import getmembers, isfunction
 import numpy as np
 from PIL import Image as pimg
 
+
 class magic_hat:
-    def __init__(self,**kwargs):
+    def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
-    def add(self,**kwargs):
+    def add(self, **kwargs):
         self.__dict__.update(kwargs)
 
 
@@ -84,7 +85,6 @@ class adapted_glumpy_window(backend_glfw.Window):
         self._init_height = copy.copy(self.height)
         self.dt = 1e-10
 
-
     def process(self):
         self.dt = self._clock.tick()
         self.clear()
@@ -123,7 +123,7 @@ class glplayer(adapted_glumpy_window):
 
         self.event_func_list = []
 
-    def import_sti_module(self,sti_module_name):
+    def import_sti_module(self, sti_module_name):
         if hasattr(self, 'import_stipgm'):
             if sti_module_name == self.import_stipgm.__name__:
                 self.import_stipgm = reload(self.import_stipgm)
@@ -132,9 +132,7 @@ class glplayer(adapted_glumpy_window):
         else:
             self.import_stipgm = import_module(sti_module_name)
 
-
-
-    def set_sti_module(self, essential_func_name = [], draw_func_name = "draw_main", static_func_name = []):
+    def set_sti_module(self, essential_func_name=[], draw_func_name="draw_main", static_func_name=[]):
         # Event dispatcher initialization
         if 'static_func_name' in self.import_stipgm.__dict__:
             static_func_name = self.import_stipgm.__dict__['static_func_name']
@@ -142,12 +140,19 @@ class glplayer(adapted_glumpy_window):
         import_func_list = [o for o in getmembers(self.import_stipgm) if isfunction(o[1])]
         self.event_func_list = [o[0] for o in import_func_list if o[1].__module__ == self.import_stipgm.__name__]
         if draw_func_name:
-            assert (draw_func_name != 'on_draw'), ('\033[31mDraw function name cannot be the same as the buitin function \'on_draw\'')
+            assert (draw_func_name != 'on_draw'), (
+                '\033[31mDraw function name cannot be the same as the buitin function \'on_draw\'')
             self._draw_func_name = draw_func_name
             essential_func_name.append(draw_func_name)
-        assert all(func in self.event_func_list for func in essential_func_name), ('\033[31m' + 'the following functions is not defined in the imported module: %s' % (', '.join(func for func in essential_func_name if func not in self.event_func_list)))
+        assert all(func in self.event_func_list for func in essential_func_name), (
+                    '\033[31m' + 'the following functions is not defined in the imported module: %s' % (
+                ', '.join(func for func in essential_func_name if func not in self.event_func_list)))
 
+<<<<<<< Updated upstream
         glumpy_default_func_list = ['on_init', 'on_draw', 'on_resize']
+=======
+        glumpy_default_func_list = ['on_init', 'on_draw', 'on_resize', 'on_mouse_motion']
+>>>>>>> Stashed changes
 
         for func in self.event_func_list:
             getattr(self.import_stipgm, func).__globals__['self'] = self
@@ -163,6 +168,11 @@ class glplayer(adapted_glumpy_window):
             if not (self.minion_plug._isalive and self.minion_plug._isrunning):
                 self.close()
                 return None
+            self.minion_plug.put({'wfi': 1})
+            if self._children:
+                self.minion_plug.give(self._children, ['wfi'])
+            if self._parent:
+                self.minion_plug.give(self._parent, ['wfi'])
         self.dt = self._clock.tick()
         self.clear()
         self.dispatch_event(self._draw_func_name)
@@ -176,23 +186,41 @@ class glplayer(adapted_glumpy_window):
         glfw.set_window_should_close(self._native_window, True)
         self.destroy()
 
+
 class glimListener(glplayer):
+<<<<<<< Updated upstream
     def __init__(self,hook):
+=======
+    def __init__(self, hook, fullscreen=False):
+>>>>>>> Stashed changes
         hook.get('all')
-        pocket = hook.fetch(['extent',  'parent_name','should_run'])
+        pocket = hook.fetch(['extent', 'parent_name', 'should_run'])
         if pocket['extent']:
             win_extent = [int(i) for i in pocket['extent']]
         else:
             win_extent = [500, 500, 1024, 720]
+<<<<<<< Updated upstream
         super().__init__(hook._name, width=win_extent[2], height=win_extent[3], config=app.configuration.Configuration(),
                         minion_plug=hook)
         self.set_position(win_extent[0],win_extent[1])
         self._parent = pocket['parent_name']
         self.update_sti_module()
 
+=======
+        super().__init__(hook._name, width=win_extent[2], height=win_extent[3],
+                         config=app.configuration.Configuration(),
+                         minion_plug=hook, fullscreen=fullscreen)
+        self.set_position(win_extent[0], win_extent[1])
+        self._parent = pocket['parent_name']
+        self._mouse_x, self._mouse_y, self._mouse_dx, self._mouse_dy = 0., 0., 0., 0.
+        self.update_sti_module()
+
+    def on_mouse_motion(self, x, y, dx, dy):
+        self._mouse_x, self._mouse_y, self._mouse_dx, self._mouse_dy = x, y, dx, dy
+>>>>>>> Stashed changes
 
     def update_sti_module(self):
-        sti_mod_rel__varn = ['import_module_name','draw_func_name','sti_file_dir']
+        sti_mod_rel__varn = ['import_module_name', 'draw_func_name', 'sti_file_dir']
         while True:
             self.minion_plug.get(self._parent)
             pocket = self.minion_plug.pop(sti_mod_rel__varn)
@@ -267,7 +295,7 @@ class glimWindow(glplayer):
                         self.dispatch_event("terminate")
                     self._terminate()
                     self.import_sti_module((file_list[self.fn_idx].split('.')[0]))
-                    self.set_sti_module(essential_func_name= ['prepare','set_widgets'], draw_func_name = None)
+                    self.set_sti_module(essential_func_name=['prepare', 'set_widgets'], draw_func_name=None)
                     if self._children:
                         srv_pocket = {'parent_name': self._name, "should_run": True}
                         if hasattr(self, 'import_stipgm'):
@@ -290,13 +318,15 @@ class glimWindow(glplayer):
                 _, self._connect_to = imgui.input_text(' ', self._connect_to, 128)
                 if imgui.button("Select"):
                     try:
-                        HOST,PORT = self._connect_to.split(':')
+                        HOST, PORT = self._connect_to.split(':')
                         cln = simpleSocket('client', HOST, int(PORT))
-                        self.minion_manager.add_socket_connnection(self._connect_to+'<->'+self._name, cln)
+                        self.minion_manager.add_socket_connnection(self._connect_to + '<->' + self._name, cln)
                         self._children = self._connect_to
                         srv_pocket = {'parent_name': self._name, "should_run": False}
-                        if hasattr(self,'import_stipgm'):
-                            srv_pocket.update({'import_module_name': self.import_stipgm.__name__,'draw_func_name': 'client_draw','sti_file_dir': self.sti_file_dir, "should_run": True})
+                        if hasattr(self, 'import_stipgm'):
+                            srv_pocket.update(
+                                {'import_module_name': self.import_stipgm.__name__, 'draw_func_name': 'client_draw',
+                                 'sti_file_dir': self.sti_file_dir, "should_run": True})
                         self.minion_plug.put(srv_pocket)
                         self.minion_plug.give(self._children, srv_pocket.keys())
                     except:
@@ -326,10 +356,8 @@ class glimWindow(glplayer):
             self._should_pop = self._poped
             self._poped = False
 
-    # def connect_to
-
     def pop_check(self):
-        if self._children: #"GLPop" in self.minion_plug._getfrom.keys():
+        if self._children:  # "GLPop" in self.minion_plug._getfrom.keys():
             self.minion_plug.get(self._children)
             self.__dict__.update(self.minion_plug.fetch({'isrunning': '_poped'}))
         else:
@@ -343,7 +371,7 @@ class glimWindow(glplayer):
             self.minion_manager.minions[self._children]._isrunning = False
             self.minion_manager.run([self._children])
 
-    def popable_opengl_component(self,comp_name,draw_func_name, pop_draw_func_name = None):
+    def popable_opengl_component(self, comp_name, draw_func_name, pop_draw_func_name=None):
         if self.minion_manager:
             if not pop_draw_func_name:
                 pop_draw_func_name = draw_func_name
@@ -351,7 +379,7 @@ class glimWindow(glplayer):
             if self._should_pop and not self._poped:
                 init_pop = True
                 pop_pocket = {'import_module_name': self.import_stipgm.__name__,
-                              'draw_func_name': pop_draw_func_name,'sti_file_dir': self.sti_file_dir,
+                              'draw_func_name': pop_draw_func_name, 'sti_file_dir': self.sti_file_dir,
                               'parent_name': self._name, "should_run": True}
                 self._should_pop = False
             else:
@@ -360,7 +388,7 @@ class glimWindow(glplayer):
                 winPos = imgui.get_cursor_screen_pos()
                 self.clear()
                 self._framebuffer.activate()
-                self.dispatch_event(draw_func_name,ww,wh)
+                self.dispatch_event(draw_func_name, ww, wh)
                 self._framebuffer.deactivate()
                 draw_list = imgui.get_window_draw_list()
                 draw_list.add_image(self._framebuffer.color[0]._handle, tuple(winPos),
@@ -377,7 +405,7 @@ class glimWindow(glplayer):
                 imgui.end()
 
             if init_pop:
-                  # 'GLPop' not in self.minion_manager.minions.keys():
+                # 'GLPop' not in self.minion_manager.minions.keys():
                 self.init_pop_process()
                 self.minion_plug.put(pop_pocket)
                 self.minion_plug.give(self._children, ['sti_file_dir', 'import_module_name', 'extent',
@@ -385,77 +413,57 @@ class glimWindow(glplayer):
                 self._poped = True
 
 
-
 def _popwin_frameworkfunc(hook):
     glplayer_win = glimListener(hook)
     glplayer_win.run()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ############## Legacy code ##############
-    # def pop(self, width, height, pos_x, pos_y, title='GLWin'): # methods of glimwin
-    #     self._pop_queue.append([int(width), int(height), int(pos_x), int(pos_y), title])
-    #
-    # def _pop(self, width, height, pos_x, pos_y, title):
-    #     config = app.configuration.Configuration()
-    #     config.stencil_size = 8
-    #     popWin = adapted_glumpy_window('pop', width=width, height=height, color=(0, 0, 0, 1), title=title,
-    #                                    config=config)
-    #     popWin.set_position(pos_x, pos_y)
-    #     # Every time create a new window requires reinitialize all programs and buffers
-    #     self._texture_buffer = np.zeros((self.height, self.width, 4), np.float32).view(gloo.TextureFloat2D)
-    #     self._depth_buffer = gloo.DepthBuffer(self.width, self.height)
-    #     self._framebuffer = gloo.FrameBuffer(color=[self._texture_buffer], depth=self._depth_buffer)
-    #     self._internal_draw_program["texture"] = self._texture_buffer
-    #     # for func in self.event_func_list:
-    #     #     if func in self.import_stipgm.__dict__:
-    #     #         getattr(self.import_stipgm, func).__globals__['self'] = self
-    #     #         self.event(getattr(self.import_stipgm, func))
-    #     glumpy_func_list = ['on_init', 'on_draw', 'on_resize']
-    #     for func in self.event_func_list:
-    #         getattr(self.import_stipgm, func).__globals__['self'] = self
-    #         self.event(getattr(self.import_stipgm, func))
-    #         if func not in glumpy_func_list:
-    #             self.register_event_type(func)
-    #
-    #     self.dispatch_event('prepare')
-    #
-    #     @popWin.event
-    #     def on_draw(dt):
-    #         self.import_stipgm.on_draw(self.dt)
-    #
-    #     popWin.ori_pos = np.array([(+1., +1.), (+1., -1.), (-1., +1.), (-1., -1.)])
-    #     popWin.ori_ratio = self.width / self.height
-    #
-    #     @popWin.event
-    #     def on_resize(width, height):
-    #         self.import_stipgm.pop_on_resize(width, height)
-    #
-    #     popWin.dispatch_event('on_resize', width, height)
-    #     self._manager.register_windows(popWin)
-    #
-    # def _dock(self):
-    #     self._texture_buffer = np.zeros((self._init_height, self._init_width, 4), np.float32).view(gloo.TextureFloat2D)
-    #     self._depth_buffer = gloo.DepthBuffer(self._init_width, self._init_height)
-    #     self._framebuffer = gloo.FrameBuffer(color=[self._texture_buffer], depth=self._depth_buffer)
-    #     self.dispatch_event('prepare')
-
-
-
+# def pop(self, width, height, pos_x, pos_y, title='GLWin'): # methods of glimwin
+#     self._pop_queue.append([int(width), int(height), int(pos_x), int(pos_y), title])
+#
+# def _pop(self, width, height, pos_x, pos_y, title):
+#     config = app.configuration.Configuration()
+#     config.stencil_size = 8
+#     popWin = adapted_glumpy_window('pop', width=width, height=height, color=(0, 0, 0, 1), title=title,
+#                                    config=config)
+#     popWin.set_position(pos_x, pos_y)
+#     # Every time create a new window requires reinitialize all programs and buffers
+#     self._texture_buffer = np.zeros((self.height, self.width, 4), np.float32).view(gloo.TextureFloat2D)
+#     self._depth_buffer = gloo.DepthBuffer(self.width, self.height)
+#     self._framebuffer = gloo.FrameBuffer(color=[self._texture_buffer], depth=self._depth_buffer)
+#     self._internal_draw_program["texture"] = self._texture_buffer
+#     # for func in self.event_func_list:
+#     #     if func in self.import_stipgm.__dict__:
+#     #         getattr(self.import_stipgm, func).__globals__['self'] = self
+#     #         self.event(getattr(self.import_stipgm, func))
+#     glumpy_func_list = ['on_init', 'on_draw', 'on_resize']
+#     for func in self.event_func_list:
+#         getattr(self.import_stipgm, func).__globals__['self'] = self
+#         self.event(getattr(self.import_stipgm, func))
+#         if func not in glumpy_func_list:
+#             self.register_event_type(func)
+#
+#     self.dispatch_event('prepare')
+#
+#     @popWin.event
+#     def on_draw(dt):
+#         self.import_stipgm.on_draw(self.dt)
+#
+#     popWin.ori_pos = np.array([(+1., +1.), (+1., -1.), (-1., +1.), (-1., -1.)])
+#     popWin.ori_ratio = self.width / self.height
+#
+#     @popWin.event
+#     def on_resize(width, height):
+#         self.import_stipgm.pop_on_resize(width, height)
+#
+#     popWin.dispatch_event('on_resize', width, height)
+#     self._manager.register_windows(popWin)
+#
+# def _dock(self):
+#     self._texture_buffer = np.zeros((self._init_height, self._init_width, 4), np.float32).view(gloo.TextureFloat2D)
+#     self._depth_buffer = gloo.DepthBuffer(self._init_width, self._init_height)
+#     self._framebuffer = gloo.FrameBuffer(color=[self._texture_buffer], depth=self._depth_buffer)
+#     self.dispatch_event('prepare')
 
 
 # class glimManager:
@@ -491,4 +499,3 @@ def _popwin_frameworkfunc(hook):
 #         while len(self.__windows__) + len(self.__windows_to_remove__) > 0:
 #             self.execute()
 #         sys.exit()
-

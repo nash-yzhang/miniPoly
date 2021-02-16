@@ -52,8 +52,6 @@ def prepare():
     self.dist = -5
     self.quad.bind(V)
     self.window_state = [True, True]
-    self._init_glwin = True
-    self._glwinpos = [0,0]
 
 def set_widgets():
     if imgui.begin_main_menu_bar():
