@@ -77,7 +77,6 @@ def set_widgets():
 
     # self.pop_check()
     if self._children:
-    # if self._active_child:
         self.minion_plug.put(self, ['elv', 'azi', 'dist', 'bgcolor'])
         self.minion_plug.give(self._children, ['elv', 'azi', 'dist', 'bgcolor'])
         # else:

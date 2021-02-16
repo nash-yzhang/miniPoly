@@ -1,6 +1,11 @@
 import os
 import sys
-sys.path.insert(0,os.getcwd())
+print(os.getcwd())
+__rootpath__ = os.getcwd().replace('\\player','')
+os.chdir(__rootpath__)
+dll_path = __rootpath__ + '\\dll'
+os.environ['PATH'] = dll_path + os.pathsep + os.environ['PATH']
+sys.path.insert(0, __rootpath__)
 from bin.GlImgui import glimWindow,glimListener
 from glumpy import app
 config = app.configuration.Configuration()
@@ -11,7 +16,7 @@ def functest_controller(hook):
     glimgui_win.run()
 
 def functest_display(hook):
-    glimgui_win = glimListener(hook)
+    glimgui_win = glimListener(hook,fullscreen=True)
     glimgui_win.run()
 
 if __name__ == '__main__' :

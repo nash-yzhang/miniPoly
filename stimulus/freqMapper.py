@@ -6,7 +6,7 @@ import imgui
 self = None
 def prepare():
     self._clock.set_fps_limit(70)
-    shader_folder = '../bin/shaderfile/'
+    shader_folder = 'stimulus/shaderfile/'
     vertex_shader_fn = 'VS_tex_1511.glsl'
     frag_shader_fn = 'FS_tex_1511.glsl'
 

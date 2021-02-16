@@ -1,8 +1,9 @@
-from Glimgui.glarage import *
+import os
+from bin.glarage import *
 from glumpy import gloo
 import imgui
 import cv2
-import Glimgui.tisgrabber.tisgrabber as IC
+import bin.tisgrabber.tisgrabber as IC
 import numpy as np
 
 from datetime import datetime
@@ -19,7 +20,7 @@ class cam_config:
 
 
 def prepare():
-    shader_folder = './shaderfile/'
+    shader_folder = 'stimulus/shaderfile/'
     vertex_shader_fn = 'VS_basic_tex.glsl'
     frag_shader_fn = 'FS_basic_tex.glsl'
 
@@ -80,7 +81,8 @@ def prepare():
     self.arduino_ai = -1
     self.arduino_ts = -1
 
-    self.minion_plug.get('arduino_IO', ['internal_timestamp','analog_sig'])
+    # self.minion_plug.get('arduino_IO', ['internal_timestamp','analog_sig'])
+    self.minion_plug.get('arduino_IO')
     if 'analog_sig' in self.minion_plug.inbox.keys():
         self.arduino_ai = self.minion_plug.inbox['analog_sig']/1000.
     if 'internal_timestamp' in self.minion_plug.inbox.keys():
@@ -98,7 +100,7 @@ def prepare():
                                      (int(vidbuffer_shape[1]), int(vidbuffer_shape[0])))
     self.rec_timepoint = []
     self.rec_on = False
-    self.rec_button_text = 'Start'
+    self.rec_button_text = 'Disconnected'
     self._draw_cam = 0
     # TODO: complete the interacting message with arduino_IO
     self.minion_plug.put(self, ['LED_power','_frame_count','vid_fn'])
@@ -110,7 +112,10 @@ def set_widgets():
     fps_max = self.FPS + 15.
     x_offset = 50.
 
-    self.minion_plug.get('arduino_IO', ['internal_timestamp', 'analog_sig'])
+    self.minion_plug.get('arduino_IO')
+    if 'ard_conn' in self.minion_plug.inbox.keys():
+        if self.minion_plug.inbox['ard_conn'] and self.rec_button_text == 'Disconnected':
+            self.rec_button_text = 'Start'
     if 'analog_sig' in self.minion_plug.inbox.keys():
         self.arduino_ai = self.minion_plug.inbox['analog_sig']/1000.
     if 'internal_timestamp' in self.minion_plug.inbox.keys():
@@ -129,22 +134,23 @@ def set_widgets():
     imgui.same_line()
 
     if imgui.button(self.rec_button_text):
-        if self.rec_on:
-            self.rec_button_text = 'Start'
-            self.rec_timepoint[1] = self._frame_count
-            self.rec_on = False
-            self.vidwriter.release()
-            self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")
-            print(self.vid_fn)
-        else:
-            self.rec_on = True
-            if self.rec_button_text == 'Start':
-                self.rec_timepoint = [self._frame_count, 99999]
-                # self.timeline_file = open(self.vid_fn[:-3] + 'txt', 'w')
-                vidbuffer_shape = np.hstack(self.cam_buffer).shape
-                self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
-                                                 (int(vidbuffer_shape[1]), int(vidbuffer_shape[0])))
-                self.rec_button_text = 'Stop'
+        if self.rec_button_text != 'Disconnected':
+            if self.rec_on:
+                self.rec_button_text = 'Start'
+                self.rec_timepoint[1] = self._frame_count
+                self.rec_on = False
+                self.vidwriter.release()
+                self.vid_fn = datetime.now().strftime(".//Output_%H-%M-%S_%d%m%Y.avi")
+                print(self.vid_fn)
+            else:
+                self.rec_on = True
+                if self.rec_button_text == 'Start':
+                    self.rec_timepoint = [self._frame_count, 99999]
+                    # self.timeline_file = open(self.vid_fn[:-3] + 'txt', 'w')
+                    vidbuffer_shape = np.hstack(self.cam_buffer).shape
+                    self.vidwriter = cv2.VideoWriter(self.vid_fn, cv2.VideoWriter_fourcc(*'XVID'), self.FPS,
+                                                     (int(vidbuffer_shape[1]), int(vidbuffer_shape[0])))
+                    self.rec_button_text = 'Stop'
 
     _, buffer_FPS = imgui.slider_int('max FPS', self.FPS, 1, 100, '%d')
     if buffer_FPS != self.FPS:
@@ -283,15 +289,15 @@ def live_view():
 
 
 def terminate():
-    isalive = False
-    self.minion_plug.put(locals(),['_isalive'])
-    self.minion_plug.give('arduino_IO', ['_isalive'])
+    self.minion_plug.put({'should_run':False,'should_live':False})
+    self.minion_plug.give('arduino_IO', ['should_run','should_live'])
     try:
         for cam in [i for (i, v) in zip(self.camera, self.camera_isalive) if v]:
             cam.release()
     except:
         print(
             "\033[1;31mERROR: \033[0;33m An error(s) occurred when disconnecting \033[0m[\033[1;31m camera(s) \033[0m]")
+    self.minion_plug._isalive = False
 
 
 def pop_on_resize(width, height):
