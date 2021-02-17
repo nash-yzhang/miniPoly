@@ -217,7 +217,7 @@ class glimWindow(glplayer):
         else:
             self._start_pop = False
         super().__init__(*args, **kwargs)
-        glfw.set_window_icon(self._native_window, 1, pimg.open('../bin/MappApp.ico'))
+        glfw.set_window_icon(self._native_window, 1, pimg.open('bin/minipoly.ico'))
 
         self._texture_buffer = np.zeros((self.height, self.width, 4), np.float32).view(gloo.Texture2D)
         self._depth_buffer = gloo.DepthBuffer(self.width, self.height)
@@ -228,7 +228,7 @@ class glimWindow(glplayer):
         self.imgui_renderer = GlfwRenderer(self._native_window)
         self.io = imgui.get_io()
         self.open_dialog_state = False
-        self.sti_file_dir = "../stimulus"
+        self.sti_file_dir = "stimulus"
         self.open_conn_state = False
         self._connect_to = ''
         self.selected = False
