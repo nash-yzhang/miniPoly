@@ -139,23 +139,16 @@ def prepare():
     self._pca = PCA(n_components=2)
     self._framecount = 0
     self._ba = None
+    if self._name == 'controller':
+        self.init_pop_process()
 
 
 def set_widgets():
-    if imgui.begin_main_menu_bar():
-        if imgui.begin_menu("Command", True):
-            clicked_restart, _ = imgui.menu_item(
-                "Restart GLwindow", '', False, True
-            )
-            if clicked_restart:
-                self.window_state[1] = True
-            imgui.end_menu()
-        imgui.end_main_menu_bar()
 
     self.vobj.SnapImage()
     rawim = self.vobj.GetImage()
     try:
-        imslice = rawim[self.xbound[0]:self.xbound[1], self.ybound[0]:self.ybound[1], 0]
+        imslice = 255-rawim[self.xbound[0]:self.xbound[1], self.ybound[0]:self.ybound[1], 0]
         th2 = 255 - cv.adaptiveThreshold(imslice, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, self.y_crop * 2 + 1,
                                          self.segthre)
         _, labels = cv.connectedComponents(th2)
