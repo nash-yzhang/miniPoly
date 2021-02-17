@@ -7,6 +7,12 @@ from sklearn.decomposition import PCA
 
 self = None
 def longaxis(bwim,pca):
+    """
+    Detect zebrafish body axis (the long axis of an eclipse)
+    :param bwim: binarized image
+    :param pca: pca object... need to optimize here
+    :return: the column vectors of head and tail positions
+    """
     pix_x, pix_y = np.where(bwim)
     pix_coord = np.vstack([pix_x, pix_y]).T
     pca.fit(pix_coord)
@@ -15,12 +21,14 @@ def longaxis(bwim,pca):
     body_axis_score = np.sum(body_axis_vector * (pix_coord - cenpoint), axis=1)
     head = cenpoint[::-1]+np.max(body_axis_score)*body_axis_vector[::-1]
     tail = cenpoint[::-1]+np.min(body_axis_score)*body_axis_vector[::-1]
-
     # head = pix_coord[np.argmin(body_axis_score), ::-1]
     # tail = pix_coord[np.argmax(body_axis_score), ::-1]
     return np.vstack([head,tail])
 
 def prepare():
+    """
+    Initialize the vertex/fragment shader
+    """
     self._clock.set_fps_limit(50)
     vertex = """
        uniform vec2 aspect;
@@ -48,6 +56,9 @@ def prepare():
        }
        """
 
+    """
+    initialize the rendering program
+    """
     self.quad = gloo.Program(vertex, fragment)
     vtype = [('position', np.float32, 2),
              ('texcoord', np.float32, 2)]
@@ -70,6 +81,7 @@ def prepare():
     self._program['texture'].wrapping = gl.GL_REPEAT
     self._program['aspect'] = [1,1]
 
+    # Setup the camera streaming
     self.vobj = IC.TIS_CAM()
     self.vobj.DevName = self.vobj.GetDevices()[0].decode("utf-8")
     self.vobj.open(self.vobj.DevName)
@@ -123,7 +135,7 @@ def set_widgets():
         th3 = np.isin(labels, idx)
         body_axis = longaxis(th3,self._pca)
         body_ori  = body_axis[0]-body_axis[1]
-        body_ori = -body_ori[0]+1j*body_ori[1]
+        body_ori = body_ori[1]+1j*body_ori[0]
         self.dir  = np.imag(np.log(body_ori/np.abs(body_ori)))+self.adddir
         botheye = np.round(body_axis).astype(np.int)
         validsize = labelC[(labelC > sizebound[0]) & (labelC <= sizebound[1])]
@@ -145,8 +157,6 @@ def set_widgets():
 
     imgui.begin("Custom window", True)
     _, self.adddir = imgui.slider_float("Direciton", self.adddir, -np.pi, np.pi)
-    # _, self.x_crop = imgui.slider_float("X bound", self.x_crop, 0, 200)
-    # self.x_crop = np.round(self.x_crop).astype(int)
     _, self.y_crop = imgui.slider_float("block size", self.y_crop, 0, 100)
     self.y_crop = np.round(self.y_crop).astype(int)
     _, self.segthre = imgui.slider_float("threshold", self.segthre, 0, 255)
@@ -189,6 +199,7 @@ def on_init():
     gl.glEnable(gl.GL_DEPTH_TEST)
 
 def draw(ww,wh):
+    # draw program for client
     self.clear()
     mov_dir = np.exp(1j*self.dir)*self.speed
     self.V['texcoord'] += np.array([np.real(mov_dir),np.imag(mov_dir)])
