@@ -8,7 +8,7 @@ self = None
 
 def prepare():
     self._clock.set_fps_limit(70)
-    shader_folder = '../bin/shaderfile/'
+    shader_folder = 'stimulus/shaderfile/'
     vertex_shader_fn = 'VS_tex_1511.glsl'
     frag_shader_fn = 'FS_tex_1511.glsl'
 
@@ -27,18 +27,10 @@ def prepare():
         return np.max(data, axis=rangeaxis) - np.min(data, axis=rangeaxis)
 
     inputazi_ptest[
-        (d_range(inputazi_ptest, rangeaxis=1)[:, None] * np.ones([1, 3]) > np.pi) & (inputazi_ptest < 0)] = np.pi * 2 - \
-                                                                                                            inputazi_ptest[
-                                                                                                                (
-                                                                                                                            d_range(
-                                                                                                                                inputazi_ptest,
-                                                                                                                                rangeaxis=1)[
-                                                                                                                            :,
-                                                                                                                            None] * np.ones(
-                                                                                                                        [
-                                                                                                                            1,
-                                                                                                                            3]) > np.pi) & (
-                                                                                                                            inputazi_ptest < 0)]
+        (d_range(inputazi_ptest, rangeaxis=1)[:, None] * np.ones([1, 3]) > np.pi) & \
+        (inputazi_ptest < 0)] = np.pi * 2 - inputazi_ptest[(d_range(inputazi_ptest, rangeaxis=1)\
+                                                            [:, None] * np.ones([1,3]) > np.pi)\
+                                                       & (inputazi_ptest < 0)]
     self.V["position"] = vecNormalize(self.inputV)
     self.I = np.arange(sphV[sphI.flatten(), :].shape[0]).astype(np.uint32)
     # startpoint = cen2tri(np.random.rand(np.int(self.I.size / 3)), np.random.rand(np.int(self.I.size / 3)), .05)
@@ -68,12 +60,7 @@ def prepare():
     self.Shape['u_shift'] = np.array([.5, .5]) * 0
     self.Shape['texture'] = np.uint8(np.random.randint(0, 2, [200, 20, 1]) * np.array([[[1, 1, 1]]]) * 255)
     self.Shape['texture'].wrapping = gl.GL_REPEAT
-
     self._poped = False
-
-def client_draw():
-    self.dispatch_event('draw', self._width, self._height)
-
 
 def draw(ww, wh):
     self.Shape['u_scale'] = wh / ww, 1
@@ -107,3 +94,10 @@ def set_widgets():
     self.pop_check()
     if not self._poped:
         self.popable_opengl_component("FreqMapper", 'draw', pop_draw_func_name='client_draw')
+
+def client_draw():
+    self.minion_plug.put({'wfi': 1})
+    self.minion_plug.give(self._parent, ['wfi'])
+    self.minion_plug.get(self._parent)
+    ww,wh = self._width,self._height
+    self.dispatch_event('draw',ww,wh)

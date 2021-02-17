@@ -4,6 +4,7 @@ import sys
 from time import time,sleep
 import functools
 # noinspection SpellCheckingInspection
+
 def task_wrapper(hook):
     while hook._isalive:
         if hook._isrunning:
@@ -127,6 +128,8 @@ class minion (object) :
         if target in self._giveto:
             self.put({"should_live": False})
             self.give(target, ['should_live'])
+            if target in self._manager.minions.keys():
+                self._manager.minions.pop(target)
         else:
              print(f"{bcolors.bRED}ERROR: {bcolors.YELLOW}Target [{bcolors.bRESET}%s{bcolors.YELLOW}] not found" % target)
 
