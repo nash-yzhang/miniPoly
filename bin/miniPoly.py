@@ -15,6 +15,8 @@ def task_wrapper(hook):
             print(hook._name+" is off")
             hook.put({'isrunning': False})
             hook.give('all', ['isrunning'])
+            if hook._name == 'main':
+                hook._isalive = False
         else:
             hook.comm()
             sleep(0.01)
@@ -122,7 +124,9 @@ class minion (object) :
         timepass = time()-self._timeout
         self.put({'isalive': False})
         self.give('all', ['isalive'])
-        sys.exit()
+        if self.Process._popen:
+            self.Process.terminate()
+            self.Process.close()
 
     def remote_shutdown(self,target):
         if target in self._giveto:

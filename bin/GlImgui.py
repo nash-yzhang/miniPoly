@@ -134,28 +134,31 @@ class glplayer(adapted_glumpy_window):
 
     def set_sti_module(self, essential_func_name=[], draw_func_name="draw_main", static_func_name=[]):
         # Event dispatcher initialization
-        if 'static_func_name' in self.import_stipgm.__dict__:
-            static_func_name = self.import_stipgm.__dict__['static_func_name']
-            locals().update({k: v for k, v in self.import_stipgm.__dict__.items() if k in static_func_name})
-        import_func_list = [o for o in getmembers(self.import_stipgm) if isfunction(o[1])]
-        self.event_func_list = [o[0] for o in import_func_list if o[1].__module__ == self.import_stipgm.__name__]
-        if draw_func_name:
-            assert (draw_func_name != 'on_draw'), (
-                '\033[31mDraw function name cannot be the same as the buitin function \'on_draw\'')
-            self._draw_func_name = draw_func_name
-            essential_func_name.append(draw_func_name)
-        assert all(func in self.event_func_list for func in essential_func_name), (
-                    '\033[31m' + 'the following functions is not defined in the imported module: %s' % (
-                ', '.join(func for func in essential_func_name if func not in self.event_func_list)))
-
-        glumpy_default_func_list = ['on_init', 'on_draw', 'on_resize']
-        for func in self.event_func_list:
-            getattr(self.import_stipgm, func).__globals__['self'] = self
-            self.event(getattr(self.import_stipgm, func))
-            if func not in glumpy_default_func_list:
-                self.register_event_type(func)
-
-        self.dispatch_event('prepare')
+        try:
+            if 'static_func_name' in self.import_stipgm.__dict__:
+                static_func_name = self.import_stipgm.__dict__['static_func_name']
+                locals().update({k: v for k, v in self.import_stipgm.__dict__.items() if k in static_func_name})
+            import_func_list = [o for o in getmembers(self.import_stipgm) if isfunction(o[1])]
+            self.event_func_list = [o[0] for o in import_func_list if o[1].__module__ == self.import_stipgm.__name__]
+            if draw_func_name:
+                assert (draw_func_name != 'on_draw'), (
+                    '\033[31mDraw function name cannot be the same as the buitin function \'on_draw\'')
+                self._draw_func_name = draw_func_name
+                essential_func_name.append(draw_func_name)
+            assert all(func in self.event_func_list for func in essential_func_name), (
+                        '\033[31m' + 'the following functions is not defined in the imported module: %s' % (
+                    ', '.join(func for func in essential_func_name if func not in self.event_func_list)))
+    
+            glumpy_default_func_list = ['on_init', 'on_draw', 'on_resize']
+            for func in self.event_func_list:
+                getattr(self.import_stipgm, func).__globals__['self'] = self
+                self.event(getattr(self.import_stipgm, func))
+                if func not in glumpy_default_func_list:
+                    self.register_event_type(func)
+    
+            self.dispatch_event('prepare')
+        except Exception as e:
+            print (e.__repr__())
 
     def process(self):
         if self.minion_plug:

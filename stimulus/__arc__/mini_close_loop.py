@@ -219,3 +219,6 @@ def client_draw():
     self.__dict__.update(self.minion_plug.fetch({'dir':'dir','speed':'speed'}))
     ww,wh = self._width,self._height
     self.dispatch_event('draw',ww,wh)
+
+def terminate():
+    self.vobj.StopLive()

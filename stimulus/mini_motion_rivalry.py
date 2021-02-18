@@ -139,7 +139,7 @@ def prepare():
     self._pca = PCA(n_components=2)
     self._framecount = 0
     self._ba = None
-    if self._name == 'controller':
+    if self._name == 'main':
         self.init_pop_process()
 
 
@@ -247,3 +247,6 @@ def client_draw():
     self.__dict__.update(self.minion_plug.fetch({'dir': 'dir', 'speed': 'speed', 'pat_scale': 'pat_scale'}))
     ww, wh = self._width, self._height
     self.dispatch_event('draw', ww, wh)
+
+def terminate():
+    self.vobj.StopLive()
