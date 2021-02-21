@@ -120,7 +120,6 @@ class glplayer(adapted_glumpy_window):
         super().__init__(*args, **kwargs)
         self._parent = None
         self._children = None
-
         self.event_func_list = []
 
     def import_sti_module(self, sti_module_name):
@@ -134,31 +133,27 @@ class glplayer(adapted_glumpy_window):
 
     def set_sti_module(self, essential_func_name=[], draw_func_name="draw_main", static_func_name=[]):
         # Event dispatcher initialization
-        try:
-            if 'static_func_name' in self.import_stipgm.__dict__:
-                static_func_name = self.import_stipgm.__dict__['static_func_name']
-                locals().update({k: v for k, v in self.import_stipgm.__dict__.items() if k in static_func_name})
-            import_func_list = [o for o in getmembers(self.import_stipgm) if isfunction(o[1])]
-            self.event_func_list = [o[0] for o in import_func_list if o[1].__module__ == self.import_stipgm.__name__]
-            if draw_func_name:
-                assert (draw_func_name != 'on_draw'), (
-                    '\033[31mDraw function name cannot be the same as the buitin function \'on_draw\'')
-                self._draw_func_name = draw_func_name
-                essential_func_name.append(draw_func_name)
-            assert all(func in self.event_func_list for func in essential_func_name), (
-                        '\033[31m' + 'the following functions is not defined in the imported module: %s' % (
-                    ', '.join(func for func in essential_func_name if func not in self.event_func_list)))
-    
-            glumpy_default_func_list = ['on_init', 'on_draw', 'on_resize']
-            for func in self.event_func_list:
-                getattr(self.import_stipgm, func).__globals__['self'] = self
-                self.event(getattr(self.import_stipgm, func))
-                if func not in glumpy_default_func_list:
-                    self.register_event_type(func)
-    
-            self.dispatch_event('prepare')
-        except Exception as e:
-            print (e.__repr__())
+        if 'static_func_name' in self.import_stipgm.__dict__:
+            static_func_name = self.import_stipgm.__dict__['static_func_name']
+            locals().update({k: v for k, v in self.import_stipgm.__dict__.items() if k in static_func_name})
+        import_func_list = [o for o in getmembers(self.import_stipgm) if isfunction(o[1])]
+        self.event_func_list = [o[0] for o in import_func_list if o[1].__module__ == self.import_stipgm.__name__]
+        if draw_func_name:
+            assert (draw_func_name != 'on_draw'), (
+                '\033[31mDraw function name cannot be the same as the buitin function \'on_draw\'')
+            self._draw_func_name = draw_func_name
+            essential_func_name.append(draw_func_name)
+        assert all(func in self.event_func_list for func in essential_func_name), (
+                    '\033[31m' + 'the following functions is not defined in the imported module: %s' % (
+                ', '.join(func for func in essential_func_name if func not in self.event_func_list)))
+
+        glumpy_default_func_list = ['on_init', 'on_draw', 'on_resize']
+        for func in self.event_func_list:
+            getattr(self.import_stipgm, func).__globals__['self'] = self
+            self.event(getattr(self.import_stipgm, func))
+            if func not in glumpy_default_func_list:
+                self.register_event_type(func)
+        self.dispatch_event('prepare')
 
     def process(self):
         if self.minion_plug:
@@ -175,15 +170,17 @@ class glplayer(adapted_glumpy_window):
         self.clear()
         self.dispatch_event(self._draw_func_name)
 
-    def close(self):
-        self._isalive = False
+    def close(self,restart = False):
+        if restart:
+            self._isrunning = False
+        else:
+            self._isalive = False
         if "terminate" in self.event_func_list:
             self.dispatch_event("terminate")
         if self._children:
             self.minion_plug.remote_shutdown(self._children)
         glfw.set_window_should_close(self._native_window, True)
         self.destroy()
-
 
 class glimListener(glplayer):
     def __init__(self,hook):
@@ -220,6 +217,7 @@ class glimWindow(glplayer):
         else:
             self._start_pop = False
         super().__init__(*args, **kwargs)
+        self._init_param = [args,kwargs]
         glfw.set_window_icon(self._native_window, 1, pimg.open('bin/minipoly.ico'))
 
         self._texture_buffer = np.zeros((self.height, self.width, 4), np.float32).view(gloo.Texture2D)
@@ -291,7 +289,6 @@ class glimWindow(glplayer):
                 if imgui.button("Cancel"):
                     self.open_dialog_state = False
                 imgui.end_popup()
-
         if self.open_conn_state:
             imgui.set_next_window_size(400, 400)
             imgui.open_popup("Socket connection")
