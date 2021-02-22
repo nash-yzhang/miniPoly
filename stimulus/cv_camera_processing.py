@@ -30,11 +30,11 @@ def switch_gui(cpobj:cp): #TODO: Fix here!
     img_process = [i for i in func_called if i]
     imgui.begin('Control')
     temp,self.image_processor_idx = imgui.listbox("List",self.image_processor_idx,img_process)
-    selected_func_name = func_called[self.image_processor_idx]
+    selected_func_name = img_process[self.image_processor_idx]
     if selected_func_name:
         kwarg_selected = cpobj._kwarg[selected_func_name]
-        for key,val in kwarg_selected:
-            cpobj._kwarg[selected_func_name][key] = imgui.drag_float(key,val)
+        for key,val in kwarg_selected.items():
+            _,cpobj._kwarg[selected_func_name][key] = imgui.drag_float(key,val)
     imgui.end()
     return img_process
 
@@ -121,7 +121,6 @@ def set_widgets():
         imgui.end_main_menu_bar()
     # if self.image_processor_idx >0:
     #     self.image_processor.exc('snap', self.vobj).exc('bwize', self.image_processor.fetch[1], bwize_kwarg)
-    imgui.end()
     if self.vobj_running:
         self.image_processor.clear()
         self.image_processor.exc('snap',self.vobj).exc('bwize',self.image_processor.fetch[1])

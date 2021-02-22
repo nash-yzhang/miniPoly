@@ -8,7 +8,7 @@ self = None
 
 def prepare():
     self._clock.set_fps_limit(70)
-    shader_folder = 'stimulus/shaderfile/'
+    shader_folder = 'bin/shaderfile/'
     vertex_shader_fn = 'VS_tex_1511.glsl'
     frag_shader_fn = 'FS_tex_1511.glsl'
 
@@ -67,7 +67,6 @@ def draw(ww, wh):
 
     def d_range(data, rangeaxis=0):
         return np.max(data, axis=rangeaxis) - np.min(data, axis=rangeaxis)
-
     self.t += 1
     tempV = vecNormalize(self.inputV) * (
                 self.spsmoothrs[:, np.mod(self.t, 499)][:, None] * np.array([1, 1, 0]) * 10 + 1) + np.array(

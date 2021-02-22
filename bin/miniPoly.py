@@ -11,11 +11,16 @@ def task_wrapper(hook):
             hook.put({'isrunning':True})
             hook.give('all',['isrunning'])
             hook._task(hook)
-            hook._isrunning = False
-            print(hook._name+" is off")
+            if "restart" in hook._name:
+                hook._isrunning = True
+                hook._name = "_".join(hook._name.split("_")[:-1])
+                print("Restarting "+hook._name)
+            else:
+                hook._isrunning = False
+                print(hook._name+" is off")
             hook.put({'isrunning': False})
             hook.give('all', ['isrunning'])
-            if hook._name == 'main':
+            if "shutdown" in hook._name:
                 hook._isalive = False
         else:
             hook.comm()

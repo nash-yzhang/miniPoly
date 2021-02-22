@@ -170,11 +170,15 @@ class glplayer(adapted_glumpy_window):
         self.clear()
         self.dispatch_event(self._draw_func_name)
 
-    def close(self,restart = False):
-        if restart:
-            self._isrunning = False
-        else:
-            self._isalive = False
+    def close(self,shutdown_mode="suspend"):
+        if shutdown_mode == "shutdown":
+            self.minion_plug._name = 'main_shutdown'
+        elif shutdown_mode == "restart":
+            self.minion_plug._name = 'main_restart'
+        elif shutdown_mode == "suspend":
+            pass
+
+        self._isalive = False
         if "terminate" in self.event_func_list:
             self.dispatch_event("terminate")
         if self._children:
@@ -317,15 +321,20 @@ class glimWindow(glplayer):
                 imgui.end_popup()
 
     def process(self):
+        # try:
         self.dt = self._clock.tick()
         self.clear()
         self.imgui_renderer.process_inputs()
         imgui.new_frame()
+        ctx = imgui.get_current_context()
         self.set_basic_widgets()
         if hasattr(self, 'import_stipgm'):
             self.dispatch_event("set_widgets")
         imgui.render()
         self.imgui_renderer.render(imgui.get_draw_data())
+        # except Exception as e:
+        #     print('Fatal error: ' + e.__repr__())
+        #     self.close('restart')
 
     def _terminate(self):
         if not self._parent and self._children:
@@ -333,6 +342,7 @@ class glimWindow(glplayer):
             self.minion_plug.give(self._children, ['should_run'])
             self._should_pop = self._poped
             self._poped = False
+
 
     def pop_check(self):
         if self._children:  # "GLPop" in self.minion_plug._getfrom.keys():
