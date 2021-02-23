@@ -3,8 +3,8 @@ from glumpy import gloo, gl
 import cv2 as cv
 import numpy as np
 import bin.tisgrabber.tisgrabber as IC
-import bin.chainProcessor as cp
-
+from bin.helper import switch_gui, chainProcessor as cp
+from copy import deepcopy
 self = None
 
 def snap(vobj):
@@ -12,16 +12,29 @@ def snap(vobj):
     rawim = vobj.GetImage()
     return rawim
 
-def binarization(img,thre=127):
-    _,bwim = cv.threshold(img,thre,255,cv.THRESH_BINARY)
-    return bwim
+def delta_binarization(img1,img2,thre = 30,lowerbound = 10, upperbound = 100):
+    _,bwim = cv.threshold(cv.absdiff(img1,img2),thre,255,cv.THRESH_BINARY)
+    _, labels = cv.connectedComponents(bwim[..., 0])
+    labelC = np.bincount(labels.flatten())
+    idx = [i for i, x in enumerate(labelC) if ((x > lowerbound) & (x <= upperbound))]
+    th3 = np.isin(labels, idx)
+    motionimg = np.repeat(th3[...,np.newaxis],3,axis=2)*255
+    if th3.any():
+        pix_x, pix_y = np.where(th3)
+        pix_coord = np.vstack([pix_x, pix_y]).T
+        cenpoint = np.mean(pix_coord, axis=0).astype(np.uint16)
+        output = cv.rectangle(motionimg, (cenpoint[1] - 5, cenpoint[0] - 5), (cenpoint[1] + 5, cenpoint[0] + 5), (0, 128, 255), -1)
+        return output
+    else:
+        return motionimg
 
 def prepare():
     """
     Initialize the vertex/fragment shader
     """
-    self._clock.set_fps_limit(50)
-    vertex_2 = """
+    self.FPS = 50
+    self._clock.set_fps_limit(self.FPS)
+    self._vertex_2 = """
        uniform vec2 aspect;
        attribute vec2 position;   // Vertex position
        attribute vec2 texcoord;   // Vertex texture coordinates red
@@ -37,7 +50,7 @@ def prepare():
        }
        """
 
-    fragment_2 = """
+    self._fragment_2 = """
        uniform sampler2D texture;    // Texture
        varying vec2      v_texcoord; // Interpolated fragment texture coordinates (in)
        void main()
@@ -68,17 +81,20 @@ def prepare():
     self.vobj.StartLive(0)
     self.vobj.SnapImage()
     self.vobj_running = True
-    self._visfishimg = self.vobj.GetImage()
-    self._program2 = gloo.Program(vertex_2, fragment_2)
+    temp = self.vobj.GetImage()
+    self._visfishimg = deepcopy(temp)
+    self._program2 = gloo.Program(self._vertex_2, self._fragment_2)
     self._program2.bind(self.V2)
     self._program2['texture'] = self._visfishimg
     self._program2['texture'].wrapping = gl.GL_REPEAT
     self._program2['aspect'] = [1, 1]
 
-    self.image_processor = cp.chainProcessor(10)
+    self.image_processor = cp(2)
     self.image_processor.reg('snap',snap)
-    self.image_processor.reg('bwize',binarization)
+    self.image_processor.reg('bwize',delta_binarization,{'thre': ['int',0,255],'lowerbound': ['int',1,200],'upperbound': ['int',10,500]})
+    self.image_GUI_idx = 0
     self.image_processor_idx = 0
+    self.image_buffer = None
 
     self._texture_buffer2 = np.zeros((self.height, self.width, 4), np.float32).view(gloo.Texture2D)
     self._framebuffer2 = gloo.FrameBuffer(color=[self._texture_buffer2])
@@ -102,21 +118,29 @@ def set_widgets():
                     self.vobj_running = True
             imgui.end_menu()
         imgui.end_main_menu_bar()
-    self.image_processor.clear()
-    _,bwize_kwarg = self.image_processor.get_arg('bwize')
-    self.image_processor.exc('snap',self.vobj).exc('bwize',self.image_processor.fetch[1],thre=bwize_kwarg['thre'])
-    img_process,_ = self.image_processor.fetch_('all')
-    img_process = [i for i in img_process if i]
-    imgui.begin('Control')
-    temp,self.image_processor_idx = imgui.listbox("List",self.image_processor_idx,img_process)
+    if self.vobj_running:
+        self.image_buffer = self.image_processor.fetch_(0)[1]
+        self.image_processor.exc('snap', self.vobj)
+        if self.image_buffer is None:
+            self.image_buffer = self.image_processor.fetch_()[1]*0
+        self.image_processor.exc('bwize', self.image_processor.fetch_()[1],self.image_buffer)
+    imgui.begin("Inspetor")
+    selected_img, self.image_GUI_idx, self.image_processor_idx = switch_gui(self.image_processor, self.image_GUI_idx, self.image_processor_idx)
+    imgui.separator()
+
+    _,self.FPS = imgui.slider_float("FPS",self.FPS,1,500)
     imgui.text("Frame duration: %.2f ms" % (self.dt * 1000))
     imgui.text("FPS: %d Hz" % round(1 / (self.dt + 1e-8)))
-    imgui.end()
-    # if self.image_processor_idx >0:
-    #     self.image_processor.exc('snap', self.vobj).exc('bwize', self.image_processor.fetch[1], bwize_kwarg)
+    self._clock.set_fps_limit(self.FPS)
 
-    _,self._visfishimg = self.image_processor.fetch_(self.image_processor_idx+len(self.image_processor._output)-len(img_process))
-    imgui.begin("VisFish", True)  # , flags = imgui.WINDOW_NO_TITLE_BAR)
+    imgui.end()
+    if selected_img.shape != self._visfishimg.shape:
+        self._program2['texture'] = self._visfishimg
+        self._program2['texture'].wrapping = gl.GL_REPEAT
+        self._program2['aspect'] = [1, 1]
+
+    self._visfishimg = selected_img
+    imgui.begin("VisFish", True)
     ww, wh = imgui.get_window_size()
     winPos = imgui.get_cursor_screen_pos()
     self.clear()

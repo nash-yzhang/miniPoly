@@ -2,41 +2,27 @@ import imgui
 from glumpy import gloo, gl
 import cv2 as cv
 import numpy as np
-import bin.chainProcessor as cp
+from bin.helper import switch_gui, chainProcessor as cp
 
 self = None
 
+
 def snap(vobj):
-    ret,rawim = vobj.read()
+    ret, rawim = vobj.read()
     if ret == True:
         rawim = cv.flip(rawim, 0)
-        rawim = cv.cvtColor(rawim,cv.COLOR_BGR2RGB)
+        rawim = cv.cvtColor(rawim, cv.COLOR_BGR2RGB)
     return rawim
 
-def binarization(img,thre:int=127):
-    if not isinstance(thre,int):
-        print("Threshold should be integer")
-        thre = np.round(thre)
-    if thre > 255 or thre < 0:
-        print("Invalid binary threshold value (should be between 0-255)")
-        thre = 127
-    img = cv.cvtColor(img,cv.COLOR_RGB2GRAY)
-    _,bwim = cv.threshold(img,thre,255,cv.THRESH_BINARY)
+
+def binarization(img, thre: int = 127):
+    img = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
+    _, bwim = cv.threshold(img, thre, 255, cv.THRESH_BINARY)
     bwim = np.repeat(bwim[..., np.newaxis], 3, axis=2)
     return bwim
 
-def switch_gui(cpobj:cp): #TODO: Fix here!
-    func_called,output_fetched = cpobj.fetch_('all')
-    img_process = [i for i in func_called if i]
-    imgui.begin('Control')
-    temp,self.image_processor_idx = imgui.listbox("List",self.image_processor_idx,img_process)
-    selected_func_name = img_process[self.image_processor_idx]
-    if selected_func_name:
-        kwarg_selected = cpobj._kwarg[selected_func_name]
-        for key,val in kwarg_selected.items():
-            _,cpobj._kwarg[selected_func_name][key] = imgui.drag_float(key,val)
-    imgui.end()
-    return img_process
+
+
 
 def prepare():
     """
@@ -84,7 +70,7 @@ def prepare():
     # Setup the camera streaming
     self.vobj = cv.VideoCapture(0)
     self.vobj_running = True
-    _,self._visfishimg = self.vobj.read()
+    _, self._visfishimg = self.vobj.read()
 
     self._program2 = gloo.Program(vertex_2, fragment_2)
     self._program2.bind(self.V2)
@@ -92,13 +78,14 @@ def prepare():
     self._program2['texture'].wrapping = gl.GL_REPEAT
     self._program2['aspect'] = [1, 1]
 
-    self.image_processor = cp.chainProcessor(10)
-    self.image_processor.reg('snap',snap)
-    self.image_processor.reg('bwize',binarization)
+    self.image_processor = cp(10)
+    self.image_processor.reg('snap', snap)
+    self.image_processor.reg('bwize', binarization, {'thre': ['int',0,255]})
     self.image_processor_idx = 0
 
     self._texture_buffer2 = np.zeros((self.height, self.width, 4), np.float32).view(gloo.Texture2D)
     self._framebuffer2 = gloo.FrameBuffer(color=[self._texture_buffer2])
+
 
 def set_widgets():
     if imgui.begin_main_menu_bar():
@@ -119,13 +106,15 @@ def set_widgets():
                     self.vobj_running = True
             imgui.end_menu()
         imgui.end_main_menu_bar()
-    # if self.image_processor_idx >0:
-    #     self.image_processor.exc('snap', self.vobj).exc('bwize', self.image_processor.fetch[1], bwize_kwarg)
     if self.vobj_running:
         self.image_processor.clear()
-        self.image_processor.exc('snap',self.vobj).exc('bwize',self.image_processor.fetch[1])
-    img_process = switch_gui(self.image_processor)
-    _,self._visfishimg = self.image_processor.fetch_(self.image_processor_idx+len(self.image_processor._output)-len(img_process))
+        self.image_processor.exc('snap', self.vobj).exc('bwize', self.image_processor.fetch[1])
+    imgui.begin("Inspetor")
+    selected_img, self.image_processor_idx = switch_gui(self.image_processor, self.image_processor_idx)
+    imgui.text("Frame duration: %.2f ms" % (self.dt * 1000))
+    imgui.text("FPS: %d Hz" % round(1 / (self.dt + 1e-8)))
+    imgui.end()
+    self._visfishimg = selected_img
     imgui.begin("VisFish", True)  # , flags = imgui.WINDOW_NO_TITLE_BAR)
     ww, wh = imgui.get_window_size()
     winPos = imgui.get_cursor_screen_pos()
@@ -138,13 +127,15 @@ def set_widgets():
                         (0, 0), (1, 1))
     imgui.end()
 
+
 def draw(ww, wh):
     self.clear()
-    img_aspect = self._visfishimg.shape[0]/self._visfishimg.shape[1]
-    _aspect = [ww / max(ww, wh)*img_aspect, wh / max(ww, wh)]
+    img_aspect = self._visfishimg.shape[0] / self._visfishimg.shape[1]
+    _aspect = [ww / max(ww, wh) * img_aspect, wh / max(ww, wh)]
     self._program2['aspect'] = _aspect[::-1]
     self._program2['texture'] = self._visfishimg
     self._program2.draw(gl.GL_TRIANGLE_STRIP)
+
 
 def terminate():
     self.vobj.release()

@@ -3,29 +3,10 @@ from glumpy import gloo, gl
 import cv2 as cv
 import numpy as np
 import bin.tisgrabber.tisgrabber as IC
-from sklearn.decomposition import PCA
+from copy import deepcopy
 
 self = None
 
-
-def longaxis(bwim, pca):
-    """
-    Detect zebrafish body axis (the long axis of an eclipse)
-    :param bwim: binarized image
-    :param pca: pca object... need to optimize here
-    :return: the column vectors of head and tail positions
-    """
-    pix_x, pix_y = np.where(bwim)
-    pix_coord = np.vstack([pix_x, pix_y]).T
-    pca.fit(pix_coord)
-    cenpoint = np.mean(pix_coord, axis=0)
-    body_axis_vector = pca.components_[0, :]
-    body_axis_score = np.sum(body_axis_vector * (pix_coord - cenpoint), axis=1)
-    head = cenpoint[::-1] + np.max(body_axis_score) * body_axis_vector[::-1]
-    tail = cenpoint[::-1] + np.min(body_axis_score) * body_axis_vector[::-1]
-    # head = pix_coord[np.argmin(body_axis_score), ::-1]
-    # tail = pix_coord[np.argmax(body_axis_score), ::-1]
-    return np.vstack([head, tail])
 
 
 def prepare():
@@ -62,7 +43,7 @@ def prepare():
             float pat_c = 0.;smoothstep(stepthre+.1,stepthre,distance(fract(st*pat_scale+vec2(0.610,0.470)),vec2(.5)))*step(0.5,sin(u_time*20.));
             float pat_b = smoothstep(stepthre,stepthre+.1,distance(fract(st*pat_scale-mov_pat),vec2(.5)));
             float pat_a = smoothstep(stepthre,stepthre+.1,distance(fract(st*pat_scale+mov_pat),vec2(.5)));
-            gl_FragColor = vec4(vec3(pat_a+pat_b)/2.,1.0);
+            gl_FragColor = vec4(vec3((pat_a+pat_b)/1.5,1.,1.)/2.,1.0);
         }
        """
     vertex_2 = """
@@ -114,13 +95,16 @@ def prepare():
 
     # Setup the camera streaming
     self.vobj = IC.TIS_CAM()
+    self.imgbuffer = [None]*2
     self.vobj.DevName = self.vobj.GetDevices()[0].decode("utf-8")
     self.vobj.open(self.vobj.DevName)
     self.vobj.SetVideoFormat("Y16 (752x480)")
     self.vobj.SetContinuousMode(0)
     self.vobj.StartLive(0)
     self.vobj.SnapImage()
-    self._visfishimg = self.vobj.GetImage()
+    self.imgbuffer.append(deepcopy(self.vobj.GetImage()))
+    self.imgbuffer.pop(0)
+    self._visfishimg = self.imgbuffer[-1]
     self._program2 = gloo.Program(vertex_2, fragment_2)
     self._program2.bind(self.V2)
     self._program2['texture'] = self._visfishimg
@@ -133,10 +117,8 @@ def prepare():
     self.x_crop = 0
     self.y_crop = 45
     self.segthre = 24
-    self.ybound = np.array([100, 600])
-    self.xbound = np.array([0, 500])
     self.sizebound = [50, 150]
-    self._pca = PCA(n_components=2)
+    self.body_pos = [0,0]
     self._framecount = 0
     self._ba = None
     if self._name == 'main':
@@ -146,48 +128,29 @@ def prepare():
 def set_widgets():
 
     self.vobj.SnapImage()
-    rawim = self.vobj.GetImage()
+    self.imgbuffer.append(deepcopy(self.vobj.GetImage()))
+    self.imgbuffer.pop(0)
     try:
-        imslice = 255-rawim[self.xbound[0]:self.xbound[1], self.ybound[0]:self.ybound[1], 0]
-        th2 = 255 - cv.adaptiveThreshold(imslice, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, self.y_crop * 2 + 1,
-                                         self.segthre)
-        _, labels = cv.connectedComponents(th2)
+        _, bwim = cv.threshold(cv.absdiff(self.imgbuffer[0], self.imgbuffer[1]), self.segthre, 255, cv.THRESH_BINARY)
+        _, labels = cv.connectedComponents(bwim[..., 0])
         labelC = np.bincount(labels.flatten())
-        sizebound = self.sizebound
-        idx = [i for i, x in enumerate(labelC) if ((x > sizebound[0]) & (x <= sizebound[1]))]
+        idx = [i for i, x in enumerate(labelC) if ((x > self.sizebound[0]) & (x <= self.sizebound[1]))]
         th3 = np.isin(labels, idx)
-        body_axis = longaxis(th3, self._pca)
-        body_ori = body_axis[0] - body_axis[1]
-        body_ori = body_ori[1] + 1j * body_ori[0]
-        if self._ba:
-            balength_diff = np.abs(np.abs(body_ori) - np.abs(self._ba))
+        if th3.any():
+            pix_x, pix_y = np.where(th3)
+            pix_coord = np.vstack([pix_x, pix_y]).T
+            cenpoint = np.mean(pix_coord, axis=0).astype(np.uint16)
+            self._ba = cenpoint-self.body_pos
         else:
-            balength_diff = 0
-            self._ba = body_ori
-        body_ori /= np.abs(body_ori)
-        buffer_ori = np.exp(1j*self.dir)
-        buffer_ori = np.real(buffer_ori)*1j+np.imag(buffer_ori)
-        buffer_ori_diff = np.abs(np.imag(np.log(buffer_ori/body_ori)))
-        if buffer_ori_diff>np.pi/9 and balength_diff<50:
-            self.dir = np.imag(np.log(body_ori)) + self.adddir
-            self._ba = body_ori
-        botheye = np.round(body_axis).astype(np.int)
-        validsize = labelC[(labelC > sizebound[0]) & (labelC <= sizebound[1])]
-        self.xbound = np.array(
-            [max(min(botheye[:, 1]) - 50 + self.xbound[0], 0),
-             min(max(botheye[:, 1]) + 50 + self.xbound[0], rawim.shape[1])])
-        self.ybound = np.array(
-            [max(min(botheye[:, 0]) - 50 + self.ybound[0], 0),
-             min(max(botheye[:, 0]) + 50 + self.ybound[0], rawim.shape[0])])
-        # self.sizebound = [min(validsize) - 40, max(validsize) + 40]
-        loc_cor = [self.ybound[0], self.xbound[0]]
-        self._visfishimg = cv.line(rawim, tuple(botheye[0] + loc_cor), tuple(botheye[1] + loc_cor), (255, 0, 0),
+            cenpoint = self.body_pos
+        if self._ba is not None:
+            self.dir = np.imag(np.log(self._ba[0] * 1j + self._ba[1])) + self.adddir
+        self._visfishimg = cv.line(bwim, (cenpoint[1], cenpoint[0]), (self.body_pos[1], self.body_pos[0]), (255, 0, 0),
                                    thickness=2)
+        self.body_pos = cenpoint
     except:
-        self._visfishimg = rawim
-        self.ybound = np.array([0, rawim.shape[0]])
-        self.xbound = np.array([0, rawim.shape[1]])
-        # self.sizebound = [50, 150]
+        self._visfishimg = self.imgbuffer[-1]
+        print(1)
 
     imgui.begin("Custom window", True)
     _, self.adddir = imgui.slider_float("Direciton", self.adddir, -np.pi, np.pi)
@@ -195,8 +158,6 @@ def set_widgets():
     _, self.pat_scale = imgui.drag_float("pat_scale", self.pat_scale, 0.1)
     _, self.sizebound[0] = imgui.slider_float("sizebound_lower", self.sizebound[0], 10, 500)
     _, self.sizebound[1] = imgui.slider_float("sizebound_upper", self.sizebound[1], 11, 501)
-    _, self.y_crop = imgui.slider_float("block size", self.y_crop, 0, 100)
-    self.y_crop = np.round(self.y_crop).astype(int)
     _, self.segthre = imgui.slider_float("threshold", self.segthre, 0, 255)
     imgui.text("FPS: %d" % (1 / (self.dt + 1e-5)))
     imgui.end()
