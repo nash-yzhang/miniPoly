@@ -14,9 +14,9 @@ vertex = """
     }
 """
 
-fragment = load_shaderfile('C:\\Users\\yzhang\\Documents\\GitHub\\miniPoly\\stimulus\\shaderfile\\CMNV2b1.glsl')
+fragment = load_shaderfile('..\\stimulus\\shaderfile\\CMNV2b1.glsl')
 
-v = pims.Video('C:\\Users\\yzhang\\Documents\\GitHub\\miniPoly\\stimulus\\noise.avi')
+v = pims.Video('..\\stimulus\\noise.avi')
 total_frames = v.__len__()
 T = v[0][:,:,1] / 256
 # T = np.array(Image.open("C:\\Users\\yzhang\\Documents\\GitHub\\miniPoly\\stimulus\\download2.png"))/256
