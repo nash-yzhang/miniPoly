@@ -48,6 +48,18 @@ class qn (np.ndarray) :
             qn_compact['z'] = compactMat_r[:, 2].reshape(matshape[:-1])
             warningmsg = "Input array %s is set to %s" % (matshape, tuple(targetshape))
             warnings.warn(warningmsg)
+        elif matshape[-1] == 2:
+            targetshape = list(matshape)
+            targetshape[-1] = 4
+            compactMat_r = compact_mat.reshape([-1, 2])
+            compactMat_xy = np.exp(1j*compactMat_r[:,0])
+            compactMat_z = np.sin(compactMat_r[:,1])
+            qn_compact['w'] = np.zeros(matshape[:-1])
+            qn_compact['x'] = np.real(compactMat_xy).reshape(matshape[:-1])/np.sqrt(1+compactMat_z**2)
+            qn_compact['y'] = np.imag(compactMat_xy).reshape(matshape[:-1])/np.sqrt(1+compactMat_z**2)
+            qn_compact['z'] = compactMat_z.reshape(matshape[:-1])/np.sqrt(1+compactMat_z**2)
+            warningmsg = "Input array %s is set to %s" % (matshape, tuple(targetshape))
+            warnings.warn(warningmsg)
         else:
             raise Exception('Input array should be a N x ... x 4 matrix, instead its shape is %s\n' % (matshape,))
         obj = qn_compact.view(cls)  # Convert to quaternion ndarray object
