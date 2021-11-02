@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QCheckBox
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget,QAction,QFileDialog,QMenuBar,QMenu
 import glsl_preset as gp
 import sys
+import os
 from vispy import app, gloo
 from utils import load_shaderfile
 
@@ -64,36 +65,48 @@ class MainWindow(QMainWindow):
         self.boxlayout.addLayout(self.sublayout)
 
         self._fs = None
+        os.environ["QT_FILESYSTEMMODEL_WATCH_FILES"] = '1'
         self.FSname = None
         self.FSwatcher = QFileSystemWatcher([])
+        self.FSwatcher.fileChanged.connect(self.refresh)
 
     def loadfile(self):
+        if self.FSname is not None:
+            self.FSwatcher.removePath(self.FSname)
         self.FSname = QFileDialog.getOpenFileName(self,'Open File','./shader',"frag shader (*.glsl *.vert *.frag)","",QFileDialog.DontUseNativeDialog)
         self.FSname = self.FSname[0]
+        self._autoR_box.setChecked(False)
         if self.FSname:
             self._fs = load_shaderfile(self.FSname)
             self._renderer.reload(self._fs)
 
     #TODO: implement the auto file update system
     def auto_refresh(self, checked):
-        if checked and self._fs is not None:
-            self.FSwatcher.addPath(self._fs)
-            self.FSwatcher.fileChanged.connect(self.refresh)
-        elif not checked and self._fs is not None:
-            self.FSwatcher.removePath(self._fs)
+        if checked and self.FSname is not None:
+            self.FSwatcher.addPath(self.FSname)
+        elif not checked and self.FSname is not None:
+            self.FSwatcher.removePath(self.FSname)
+        else:
+            self._autoR_box.setChecked(False)
 
     def refresh(self, checked):
-        if self._fs is not None:
+        if self.FSname is not None:
             self._fs = load_shaderfile(self.FSname)
             self._renderer.reload(self._fs)
 
     def _use_sphere(self,checked):
+        if self.FSname is not None:
+            self.FSwatcher.removePath(self.FSname)
+            self._autoR_box.setChecked(False)
         self._renderer = gp.sphereRenderer(self._vcanvas)
         self._vcanvas.load(self._renderer)
         self._sphere_box.setChecked(True)
         self._plane_box.setChecked(False)
 
     def _use_plane(self,checked):
+        if self.FSname is not None:
+            self.FSwatcher.removePath(self.FSname)
+            self._autoR_box.setChecked(False)
         self._renderer = gp.planeRenderer(self._vcanvas)
         self._vcanvas.load(self._renderer)
         self._sphere_box.setChecked(False)

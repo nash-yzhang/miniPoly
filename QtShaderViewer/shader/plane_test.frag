@@ -6,6 +6,6 @@ void main() {
     st.x *= u_resolution.x/u_resolution.y;
     st *= 2.;
     st = fract(st);
-    vec3 color = vec3(distance(st,vec2(.5)));
+    vec3 color = vec3(step(distance(st,vec2(.5)),.1));
     gl_FragColor = vec4(color, 1.0);
 }
