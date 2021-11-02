@@ -1,5 +1,26 @@
 varying vec3 v_pos;
 uniform float u_time;
+#define PI 3.14159265
+float atan2(in float y, in float x)
+{
+    float norm = length(vec2(x,y));
+    x /= norm;
+    return mix(acos(x),-acos(x),int(y>0));
+}
+
+vec2 cart2sph(in vec3 cart_coord)
+{
+    //    TODO: something wrong here, fix it!
+    cart_coord /= length(cart_coord); // normalization
+    return vec2(atan2(cart_coord.y,cart_coord.x),atan2(cart_coord.z,length(cart_coord.xy)));
+}
+
+vec3 sph2cart(in vec2 sph_coord)
+{
+    return vec3(sin(sph_coord.x)*cos(sph_coord.y),
+    cos(sph_coord.x)*cos(sph_coord.y),
+    sin(sph_coord.y));
+}
 
 float random (in vec2 _st) {
     return fract(sin(dot(_st.xy,
@@ -44,5 +65,8 @@ float fbm ( in vec2 _st) {
 }
 
 void main() {
-    gl_FragColor = vec4(vec3(fbm(vec2(fbm(v_pos.xy*10.-u_time),fbm(v_pos.zx*10.-u_time)))),1.);
+//    gl_FragColor = vec4(vec3(fbm(vec2(fbm(v_pos.xy*10.-u_time),fbm(v_pos.zx*10.-u_time)))),1.);
+    vec2 uv_pos = cart2sph(v_pos);
+//    gl_FragColor = vec4(vec3(sin((uv_pos.x+u_time/3.)*4*PI)),1.);
+    gl_FragColor = vec4(vec3(0.,0.,1.),1.);
 }
