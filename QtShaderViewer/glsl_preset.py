@@ -40,7 +40,7 @@ _default_sphere_FS = """
     """
 class glCanvas(app.Canvas):
     def __init__(self,*args,**kwargs):
-        app.Canvas.__init__(self, *args, **kwargs, keys='interactive')
+        app.Canvas.__init__(self, *args, **kwargs)
         self.timer = app.Timer('auto', self.on_timer, start=True)
 
     def load(self,renderer):
@@ -56,19 +56,33 @@ class glCanvas(app.Canvas):
         self.update()
 
 
-
-class planeRenderer:
+class renderer:
 
     def __init__(self,canvas):
+        self.canvas = canvas
+
+    def reload(self,FS):
+        self.FS = FS
+        self.program = gloo.Program(self.VS,self.FS)
+        self.init_renderer()
+
+    def on_resize(self, event):
+        gloo.set_viewport(0, 0, *self.canvas.physical_size)
+        self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
+
+class planeRenderer(renderer):
+
+    def __init__(self,canvas):
+        super().__init__(canvas)
         self.VS = _default_plane_VS
         self.FS = _default_plane_FS
         self.program = gloo.Program(self.VS,self.FS)
-        self.canvas = canvas
 
     def init_renderer(self):
         self.program['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)
         self.program['u_time'] = 0
         gloo.set_state(clear_color='w')
+        self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
 
     def on_draw(self,event):
         gloo.clear()
@@ -76,23 +90,14 @@ class planeRenderer:
         self.program['u_time'] = u_time
         self.program.draw('triangle_strip')
 
-    def reload(self,FS):
-        self.FS = FS
-        self.program = gloo.Program(self.VS,self.FS)
-        self.init_renderer()
-        self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
 
-    def on_resize(self, event):
-        gloo.set_viewport(0, 0, *self.canvas.physical_size)
-        self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
-
-class sphereRenderer:
+class sphereRenderer(renderer):
 
     def __init__(self,canvas):
+        super().__init__(canvas)
         self.VS = _default_sphere_VS
         self.FS = _default_sphere_FS
         self.program = gloo.Program(self.VS,self.FS)
-        self.canvas = canvas
 
     def init_renderer(self):
         self._vertices,self._faces = uv_sphere(60,40)
@@ -120,18 +125,18 @@ class sphereRenderer:
         self.program['u_time'] = u_time
         self.program.draw('triangles',self.sph_index)
 
-    def reload(self,FS):
-        self.FS = FS
-        self.program = gloo.Program(self.VS,self.FS)
-        self.view = translate((0, 0, self.translate))
-        self.model = np.eye(4, dtype=np.float32)
-        self.program['u_model'] = self.model
-        self.program['u_view'] = self.view
-        self.phi, self.theta = 0, 0
-        self.program['a_pos'] = qn.qn(self._vertices)['xyz'].astype(np.float32)
-        projection = perspective(45.0, self.canvas.size[0] / float(self.canvas.size[1]),
-                                 2.0, 10.0)
-        self.program['u_projection'] = projection
+    # def reload(self,FS):
+    #     self.FS = FS
+    #     self.program = gloo.Program(self.VS,self.FS)
+    #     self.view = translate((0, 0, self.translate))
+    #     self.model = np.eye(4, dtype=np.float32)
+    #     self.program['u_model'] = self.model
+    #     self.program['u_view'] = self.view
+    #     self.phi, self.theta = 0, 0
+    #     self.program['a_pos'] = qn.qn(self._vertices)['xyz'].astype(np.float32)
+    #     projection = perspective(45.0, self.canvas.size[0] / float(self.canvas.size[1]),
+    #                              2.0, 10.0)
+    #     self.program['u_projection'] = projection
 
     def on_resize(self, event):
         gloo.set_viewport(0, 0, *self.canvas.physical_size)
