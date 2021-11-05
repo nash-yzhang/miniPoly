@@ -104,7 +104,7 @@ class Renderer(renderer):
         self.canvas.events.mouse_move.connect((self.canvas, "on_mouse_motion"))
 
     def on_draw(self,event):
-        gloo.clear(depth=True)
+        gloo.clear([.5,.5,.5],depth=True)
         u_time = self.canvas.timer.elapsed
         self.program['u_time'] = u_time
         self.program.draw('triangles',self.sph_index)

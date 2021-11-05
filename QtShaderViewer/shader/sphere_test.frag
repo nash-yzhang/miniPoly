@@ -67,7 +67,9 @@ float fbm ( in vec2 _st) {
 void main() {
 //    gl_FragColor = vec4(vec3(fbm(vec2(fbm(v_pos.xy*10.-u_time),fbm(v_pos.zx*10.-u_time)))),1.);
     vec2 uv_pos = cart2sph(v_pos.zxy);
-//    gl_FragColor = vec4(vec3(sin((uv_pos.x/PI*2.+u_time/2.)*4*PI)),1.);
-    gl_FragColor = vec4(vec3(sin((v_pos.x/PI*2.+u_time/2.)*4*PI)),1.);
+    vec3 color = vec3(sin((uv_pos.x/PI*2.+u_time/2.)*4*PI));
+    float mask = step(v_pos.z,0.);
+    gl_FragColor = vec4(color,mask);
+//    gl_FragColor = vec4(vec3(sin((v_pos.x/PI*2.+u_time/2.)*4*PI)),1.);
 //    gl_FragColor = vec4(vec3(0.,0.,1.),1.);
 }

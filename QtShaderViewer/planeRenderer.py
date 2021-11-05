@@ -31,6 +31,9 @@ class customWidget(qw.QWidget):
         self._sublayout.addWidget(self.refresh_button,1)
         self._layout.addLayout(self._sublayout)
 
+        spacer = qw.QSpacerItem(1,1,qw.QSizePolicy.Minimum, qw.QSizePolicy.MinimumExpanding)
+        self.layout().addItem(spacer)
+
         self._fs = None
         os.environ["QT_FILESYSTEMMODEL_WATCH_FILES"] = '1'
         self.FSname = None
@@ -78,18 +81,48 @@ class Renderer(renderer):
 
     def __init__(self,canvas):
         super().__init__(canvas)
-        self.VS = _default_plane_VS
-        self.FS = _default_plane_FS
+        self.VS = """
+            #version 130
+            attribute vec2 a_pos;
+            varying vec2 v_pos;
+            void main () {
+                v_pos = a_pos;
+                gl_PointSize = 10.;
+                gl_Position = vec4(a_pos, 0.0, 1.0);
+            }
+            """
+
+        self.FS = """
+            varying vec2 v_pos; 
+            uniform float u_alpha; 
+            void main() {
+                float marker = step(.5,distance(gl_PointCoord,vec2(.5)));
+                float color = sin(v_pos.x*20.*6.28)/2.-.15+marker;
+                gl_FragColor = vec4(vec3(color), u_alpha);
+            }
+        """
+        self.FS2 = """
+            varying vec2 v_pos; 
+            void main() {
+             float color = min(step(abs(v_pos.x),.97),step(abs(v_pos.y),.965));
+             gl_FragColor = vec4(vec3(color), .5); }
+        """
         self.program = gloo.Program(self.VS,self.FS)
+        self.bg = gloo.Program(self.VS,self.FS)
 
     def init_renderer(self):
-        self.program['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)
+        self.program['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)#/2.
+        # self.bg['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)
         self.program['u_time'] = 0
-        gloo.set_state(clear_color='w')
-        self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
+        self.program['u_alpha'] = np.float32(1)
+        # self.bg['u_alpha'] = np.float32(.15)
+        gloo.set_state("translucent")
+        # self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
 
     def on_draw(self,event):
-        gloo.clear()
+        gloo.clear('white')
         u_time = self.canvas.timer.elapsed
         self.program['u_time'] = u_time
         self.program.draw('triangle_strip')
+        # self.program.draw('points')
+        # self.bg.draw('triangle_strip')

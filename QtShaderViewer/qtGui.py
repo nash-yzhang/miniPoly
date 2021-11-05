@@ -33,9 +33,14 @@ class MainWindow_2(qw.QMainWindow):
         self._menu_file = self._menubar.addMenu('File')
         loadfile = qw.QAction("Load",self)
         loadfile.setShortcut("Ctrl+O")
-        loadfile.setStatusTip("Load fragment shader file")
+        loadfile.setStatusTip("Load renderer script")
         loadfile.triggered.connect(self.loadfile)
+        reload = qw.QAction("Reload",self)
+        reload.setShortcut("Ctrl+R")
+        reload.setStatusTip("Reload renderer")
+        reload.triggered.connect(self.reload)
         self._menu_file.addAction(loadfile)
+        self._menu_file.addAction(reload)
         self.rendererScriptName = ''
         self.rendererName = ''
         self._vcanvas = None
@@ -47,10 +52,9 @@ class MainWindow_2(qw.QMainWindow):
         self.canvasLabel.setAlignment(qc.Qt.AlignCenter)
         self.boxlayout.addWidget(self.canvasLabel)
         self.customWidget = None
+        self.rendererScriptName = None
 
-    def loadfile(self):
-        rendererScriptName = qw.QFileDialog.getOpenFileName(self,'Open File','./renderer',"GLSL rendering script (*.py)","",qw.QFileDialog.DontUseNativeDialog)
-        rendererScriptName = rendererScriptName[0]
+    def _load(self,rendererScriptName):
         if rendererScriptName:
             if rendererScriptName == self.rendererScriptName:
                 reload(self.imported)
@@ -72,6 +76,14 @@ class MainWindow_2(qw.QMainWindow):
                 self.boxlayout.removeWidget(self.customWidget)
             self.customWidget = self.imported.customWidget(self)
             self.boxlayout.addWidget(self.customWidget)
+
+    def loadfile(self):
+        rendererScriptName = qw.QFileDialog.getOpenFileName(self,'Open File','./renderer',"GLSL rendering script (*.py)","",qw.QFileDialog.DontUseNativeDialog)
+        rendererScriptName = rendererScriptName[0]
+        self._load(rendererScriptName)
+
+    def reload(self):
+        self._load(self.rendererScriptName)
 
     def importModuleFromPath(self):
         spec = util.spec_from_file_location(self.rendererName, location=self.rendererScriptName)
