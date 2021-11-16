@@ -42,7 +42,7 @@ class customWidget(qw.QWidget):
             self.FSwatcher.removePath(self.FSname)
         self._autoR_box.setChecked(False)
         self.FSname = qw.QFileDialog.getOpenFileName(self, 'Open File', './shader',
-                                                     "frag shader (*.*)", ""
+                                                     "frag shader (*.frag)", ""
                                                      ,qw.QFileDialog.DontUseNativeDialog)
         self.FSname = self.FSname[0]
         if self.FSname:

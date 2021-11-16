@@ -1,14 +1,10 @@
 from vispy import gloo
-import glsl_preset as gp
 import os
 import numpy as np
-from glsl_preset import renderer, _default_plane_VS, _default_plane_FS
+from glsl_preset import renderer
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 from utils import load_shaderfile
-
-import_func_name = ['setGUI','loadshader']
-self = None
 
 class customWidget(qw.QWidget):
     def __init__(self,mainW):
@@ -45,7 +41,7 @@ class customWidget(qw.QWidget):
             self.FSwatcher.removePath(self.FSname)
         self._autoR_box.setChecked(False)
         self.FSname = qw.QFileDialog.getOpenFileName(self, 'Open File', './shader',
-                                                     "frag shader (*.*)", ""
+                                                     "frag shader (*.frag)", ""
                                                      ,qw.QFileDialog.DontUseNativeDialog)
         self.FSname = self.FSname[0]
         if self.FSname:
@@ -66,17 +62,6 @@ class customWidget(qw.QWidget):
             self._mainWindow._renderer.reload(self._fs)
 
 
-def loadshader():
-    if self.FSname is not None:
-        self.FSwatcher.removePath(self.FSname)
-    self.FSname = qw.QFileDialog.getOpenFileName(self, 'Open File', './shader', "frag shader (*.glsl *.vert *.frag)", "", qw.QFileDialog.DontUseNativeDialog)
-
-    self.FSname = self.FSname[0]
-    self._autoR_box.setChecked(False)
-    if self.FSname:
-        self._fs = load_shaderfile(self.FSname)
-        self._renderer.reload(self._fs)
-
 class Renderer(renderer):
 
     def __init__(self,canvas):
@@ -95,6 +80,7 @@ class Renderer(renderer):
         self.FS = """
             varying vec2 v_pos; 
             uniform float u_alpha; 
+            uniform float u_time; 
             void main() {
                 float marker = step(.5,distance(gl_PointCoord,vec2(.5)));
                 float color = sin(v_pos.x*20.*6.28)/2.-.15+marker;
@@ -117,7 +103,7 @@ class Renderer(renderer):
         self.program['u_alpha'] = np.float32(1)
         # self.bg['u_alpha'] = np.float32(.15)
         gloo.set_state("translucent")
-        # self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
+        self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
 
     def on_draw(self,event):
         gloo.clear('white')

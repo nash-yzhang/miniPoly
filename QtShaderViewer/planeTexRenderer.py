@@ -1,20 +1,6 @@
 from vispy import gloo
-import glsl_preset as gp
-import os
 import numpy as np
-from glsl_preset import renderer, _default_plane_VS, _default_plane_FS
-import PyQt5.QtWidgets as qw
-import PyQt5.QtCore as qc
-from utils import load_shaderfile
-
-import_func_name = ['setGUI','loadshader']
-self = None
-
-class customWidget(qw.QWidget):
-    def __init__(self,mainW):
-        super().__init__()
-        self._mainWindow = mainW
-
+from glsl_preset import renderer
 
 class Renderer(renderer):
 
