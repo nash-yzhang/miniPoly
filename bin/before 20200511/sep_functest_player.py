@@ -30,6 +30,6 @@ if __name__ == '__main__' :
     srv = mnp.simpleSocket('server',HOST,PORT)
     # minion_manager.add_queue_connection('controller->display')
     minion_manager.add_socket_connnection('controller<->display',srv)
-    print(minion_manager.minions['controller']._giveto)
-    print(minion_manager.minions['controller']._getfrom)
+    print(minion_manager.minions['controller']._stack)
+    print(minion_manager.minions['controller']._queue)
     minion_manager.run(['controller'])

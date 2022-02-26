@@ -10,7 +10,7 @@ def task_wrapper(hook):
         if hook._isrunning:
             hook.put({'isrunning':True})
             hook.give('all',['isrunning'])
-            hook._task(hook)
+            hook._func(hook)
             if "restart" in hook._name:
                 hook._isrunning = True
                 hook._name = "_".join(hook._name.split("_")[:-1])
