@@ -3,6 +3,32 @@ import socket, pickle
 import sys
 from time import time,sleep
 
+class Manager(mp.managers.SyncManager) :
+    def __init__(self):
+        self._queues = {}
+        super(Manager, self).__init__()
+
+    def register(self,minion):
+        self._minions[minion._name] = minion
+        return self
+
+
+    def request_queue(self,src_name,tgt_name):
+        if_src_exist = src_name in self._minions.keys()
+        if_tgt_exist = tgt_name in self._minions.keys()
+        if if_src_exist and if_tgt_exist:
+            self._queues['{} to {}'.format(src_name,tgt_name)] = []
+            q = self.Queue()
+            self._queues['{} to {}'.format(src_name,tgt_name)].append(q)
+            self._minions[tgt_name].add_target(src_name,q)
+            return q
+        else:
+            if not if_src_exist:
+                print("Source not found: {}".format(src_name))
+            if not if_tgt_exist:
+                print("Target not found: {}".format(tgt_name))
+
+
 def task_wrapper(hook):
     while hook._isalive:
         if hook._isrunning:
@@ -25,10 +51,10 @@ def task_wrapper(hook):
             sleep(0.01)
     hook.shutdown()
 
-class minion (object) :
+class Minion (object) :
     _func = None
-    def __init__(self, name, main_func, custom_var = {}):
-        self._manager = 'unknown'
+    def __init__(self, manager:Manager, name, main_func):
+        self._manager = manager
         self._name = name
         self._func = main_func
         self._regVar = {} # the rpc-modifiable variable name must be registered
@@ -36,8 +62,9 @@ class minion (object) :
         self._queue  = {} # a dictionary of inbox for receiving rpc calls
         self.Process = mp.Process(target=task_wrapper, args=(self,))
 
-    def add_source(self,source_minion_name,source_channel):
-        self._queue[source_minion_name] = source_channel
+    def add_source(self, src_name):
+        source_channel = self._manager.request_queue(src_name,self._name)
+        self._queue[src_name] = source_channel
 
     def add_target(self,target_minion_name,target_channel):
         self._stack[target_minion_name] = target_channel
@@ -58,9 +85,6 @@ class minion (object) :
                 chn.put(out_pkg)
         elif isinstance(chn,mp.connection.PipeConnection):
             chn.send(out_pkg)
-        elif isinstance(chn, simpleSocket):
-            datastring = pickle.dumps(out_pkg)
-            chn.send(datastring)
 
     def give(self, minion_name, varname):
         out_pkg = {k:self.outbox[k] for k in varname}
@@ -78,12 +102,6 @@ class minion (object) :
         elif isinstance(chn, mp.connection.PipeConnection):
             if chn.poll():
                 in_package = chn.recv()
-                self.inbox.update(in_package)
-        elif isinstance(chn, simpleSocket):
-            data = chn.recv(4096)
-            if data:
-                in_package = pickle.loads(data)
-                # self.inbox.update({k: in_package[k] for k in set(in_package.keys()) & set(varname)})
                 self.inbox.update(in_package)
 
     def get(self, minion_name) :
@@ -133,99 +151,71 @@ class minion (object) :
              print(f"{bcolors.bRED}ERROR: {bcolors.YELLOW}Target [{bcolors.bRESET}%s{bcolors.YELLOW}] not found" % target)
 
 
-class manager (object):
-    def __init__(self):
-        self.minions = {}
-        self.pipes = {}
-        self.queue = {}
-        self.socket_conn = {}
-
-    def add_minion(self, minion_name, task_method,**kwargs):
-        if minion_name not in self.minions.keys():
-            self.minions[minion_name] = minion(minion_name,task_method,**kwargs)
-            self.minions[minion_name]._manager = self
-        else:
-            print(f"{bcolors.bRED}ERROR: {bcolors.YELLOW}Name [{bcolors.bRESET}%s{bcolors.YELLOW}] already taken"%minion_name)
-
-    def add_pipe_connection(self,conn_exp_str):
-        if "->" in conn_exp_str:
-            if "<->" in conn_exp_str:
-                [sn,tn] = conn_exp_str.split("<->")
-                r_src, r_tar = mp.Pipe()
-                self.minions[sn].add_source(tn,r_src)
-                self.minions[tn].add_target(sn,r_tar)
-            else:
-                [sn,tn] = conn_exp_str.split("->")
-            src, tar = mp.Pipe()
-            self.minions[sn].add_target(tn,tar)
-            self.minions[tn].add_source(sn,src)
-
-    def add_queue_connection(self,conn_exp_str,queue_size = 1):
-        if "->" in conn_exp_str:
-            if "<->" in conn_exp_str:
-                [sn,tn] = conn_exp_str.split("<->")
-                self.queue[sn+'<-'+tn] = mp.Queue(queue_size)
-                self.minions[sn].add_source(tn,self.queue[sn+'<-'+tn])
-                self.minions[tn].add_target(sn,self.queue[sn+'<-'+tn])
-            else:
-                [sn,tn] = conn_exp_str.split("->")
-            self.queue[sn + '->' + tn] = mp.Queue(queue_size)
-            self.minions[sn].add_target(tn, self.queue[sn + '->' + tn])
-            self.minions[tn].add_source(sn, self.queue[sn + '->' + tn])
-
-    def add_socket_connnection(self,conn_exp_str,skt):
-        if "->" in conn_exp_str:
-            if "<->" in conn_exp_str:
-                [sn,tn] = conn_exp_str.split("<->")
-                if skt.skt_type == "server":
-                    self.minions[sn].add_source(tn,skt)
-                    self.minions[sn].add_target(tn,skt)
-                elif skt.skt_type == "client":
-                    self.minions[tn].add_source(sn,skt)
-                    self.minions[tn].add_target(sn,skt)
-            else:
-                [sn,tn] = conn_exp_str.split("->")
-                if skt.skt_type == "server":
-                    self.minions[sn].add_target(tn, skt)
-                elif skt.skt_type == "client":
-                    self.minions[tn].add_source(sn, skt)
-
-
-    def run(self,minion_name):
-        if minion_name == "all":
-            for mini in self.minions.values():
-                mini.Process.start()
-        else:
-            for mini in minion_name:
-                self.minions[mini].Process.start()
-
-class simpleSocket:
-    def __init__(self,skt_type,host, port):
-        self.program = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.skt_type = skt_type
-        if skt_type == "server":
-            self.program.bind((host, port))
-            self.program.listen()
-            self.conn, self.addr = self.program.accept()
-        elif skt_type == "client":
-            self.program.connect((host, port))
-
-    def send(self,*args,**kwargs):
-        if self.skt_type == "server":
-            self.conn.send(*args,**kwargs)
-        elif self.skt_type == "client":
-            self.program.send(*args, **kwargs)
-
-    def recv(self,*args,**kwargs):
-        if self.skt_type == "server":
-            return self.conn.recv(*args,**kwargs)
-        elif self.skt_type == "client":
-            return self.program.recv(*args, **kwargs)
-        # if self.skt_type == "server":
-        #     self.conn.recv(*args,**kwargs)
-        # elif self.skt_type == "client":
-        #     self.program.recv(*args, **kwargs)
-
+# class manager (object):
+#     def __init__(self):
+#         self.minions = {}
+#         self.pipes = {}
+#         self.queue = {}
+#         self.socket_conn = {}
+#
+#     def add_minion(self, minion_name, task_method,**kwargs):
+#         if minion_name not in self.minions.keys():
+#             self.minions[minion_name] = minion(minion_name,task_method,**kwargs)
+#             self.minions[minion_name]._manager = self
+#         else:
+#             print(f"{bcolors.bRED}ERROR: {bcolors.YELLOW}Name [{bcolors.bRESET}%s{bcolors.YELLOW}] already taken"%minion_name)
+#
+#     def add_pipe_connection(self,conn_exp_str):
+#         if "->" in conn_exp_str:
+#             if "<->" in conn_exp_str:
+#                 [sn,tn] = conn_exp_str.split("<->")
+#                 r_src, r_tar = mp.Pipe()
+#                 self.minions[sn].add_source(tn,r_src)
+#                 self.minions[tn].add_target(sn,r_tar)
+#             else:
+#                 [sn,tn] = conn_exp_str.split("->")
+#             src, tar = mp.Pipe()
+#             self.minions[sn].add_target(tn,tar)
+#             self.minions[tn].add_source(sn,src)
+#
+#     def add_queue_connection(self,conn_exp_str,queue_size = 1):
+#         if "->" in conn_exp_str:
+#             if "<->" in conn_exp_str:
+#                 [sn,tn] = conn_exp_str.split("<->")
+#                 self.queue[sn+'<-'+tn] = mp.Queue(queue_size)
+#                 self.minions[sn].add_source(tn,self.queue[sn+'<-'+tn])
+#                 self.minions[tn].add_target(sn,self.queue[sn+'<-'+tn])
+#             else:
+#                 [sn,tn] = conn_exp_str.split("->")
+#             self.queue[sn + '->' + tn] = mp.Queue(queue_size)
+#             self.minions[sn].add_target(tn, self.queue[sn + '->' + tn])
+#             self.minions[tn].add_source(sn, self.queue[sn + '->' + tn])
+#
+#     def add_socket_connnection(self,conn_exp_str,skt):
+#         if "->" in conn_exp_str:
+#             if "<->" in conn_exp_str:
+#                 [sn,tn] = conn_exp_str.split("<->")
+#                 if skt.skt_type == "server":
+#                     self.minions[sn].add_source(tn,skt)
+#                     self.minions[sn].add_target(tn,skt)
+#                 elif skt.skt_type == "client":
+#                     self.minions[tn].add_source(sn,skt)
+#                     self.minions[tn].add_target(sn,skt)
+#             else:
+#                 [sn,tn] = conn_exp_str.split("->")
+#                 if skt.skt_type == "server":
+#                     self.minions[sn].add_target(tn, skt)
+#                 elif skt.skt_type == "client":
+#                     self.minions[tn].add_source(sn, skt)
+#
+#
+#     def run(self,minion_name):
+#         if minion_name == "all":
+#             for mini in self.minions.values():
+#                 mini.Process.start()
+#         else:
+#             for mini in minion_name:
+#                 self.minions[mini].Process.start()
 
 class bcolors:
     RED     = '\033[31m'
