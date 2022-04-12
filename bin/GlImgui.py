@@ -172,9 +172,9 @@ class glplayer(adapted_glumpy_window):
 
     def close(self,shutdown_mode="suspend"):
         if shutdown_mode == "shutdown":
-            self.minion_plug._name = 'main_shutdown'
+            self.minion_plug.name = 'main_shutdown'
         elif shutdown_mode == "restart":
-            self.minion_plug._name = 'main_restart'
+            self.minion_plug.name = 'main_restart'
         elif shutdown_mode == "suspend":
             pass
 
@@ -195,8 +195,8 @@ class glimListener(glplayer):
         else:
             win_extent = [500, 500, 1024, 720]
 
-        super().__init__(hook._name, width=win_extent[2], height=win_extent[3], config=app.configuration.Configuration(),
-                        minion_plug=hook)
+        super().__init__(hook.name, width=win_extent[2], height=win_extent[3], config=app.configuration.Configuration(),
+                         minion_plug=hook)
         self.set_position(win_extent[0],win_extent[1])
         self._parent = pocket['parent_name']
         self.update_sti_module()
