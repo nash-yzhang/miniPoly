@@ -1,7 +1,7 @@
 import time as ti
-from QtShaderViewer.miniPoly.core import Minion
+from QtShaderViewer.miniPoly.core import BaseMinion
 
-class minionA(Minion):
+class baseMinionA(BaseMinion):
     def main(self):
         for tgt in self.target.keys():
             self.send(tgt, 'Greetings from {}\n'.format(self.name))
@@ -15,7 +15,7 @@ class minionA(Minion):
                     self.shutdown()
         ti.sleep(.1)
 
-class minionB(Minion):
+class baseMinionB(BaseMinion):
     def main(self):
         ti.sleep(.2)
         for tgt in self.target.keys():
@@ -28,8 +28,8 @@ class minionB(Minion):
 
 
 if __name__ == "__main__":
-    m1 = minionA('ma')
-    m2 = minionB('mb')
+    m1 = baseMinionA('ma')
+    m2 = baseMinionB('mb')
     m1.add_target(m2)
     m2.add_target(m1)
     m2.run()

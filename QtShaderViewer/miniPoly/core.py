@@ -2,11 +2,13 @@ import multiprocessing as mp
 from multiprocessing import Value, Queue
 from multiprocessing.managers import SyncManager
 from time import time, sleep
+import logging 
+import logging.handlers as lh
 
 
 
 
-class Minion:
+class BaseMinion:
     @staticmethod
     def innerLoop(hook):
         STATE = hook.get_state(hook.name,"status")
@@ -76,7 +78,7 @@ class Minion:
         self.state.update({'{}_{}'.format(minion_name, category): value})
 
     def run(self):
-        self.Process = mp.Process(target=Minion.innerLoop, args=(self,))
+        self.Process = mp.Process(target=BaseMinion.innerLoop, args=(self,))
         self.set_state(self.name,"status",1)
         self.Process.start()
 
@@ -86,5 +88,12 @@ class Minion:
     def shutdown(self):
         self.set_state(self.name,"status",-1)
         if self.Process._popen:
-            self.Process.terminate()
-            self.Process.close()
+            self.Process.join()
+            # self.Process.close()
+
+class logger(BaseMinion):
+    def __init__(self,):
+        self.stop_event = Event()
+        self.
+        super(logger, self).__init__(name="logger")
+        
