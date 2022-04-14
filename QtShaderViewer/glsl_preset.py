@@ -1,4 +1,5 @@
 from sphModel import *
+import numpy as np
 from vispy import app,gloo
 from vispy.util.transforms import translate, rotate, perspective
 
