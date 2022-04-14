@@ -4,8 +4,6 @@ import warnings
 from time import time, sleep
 import logging
 import logging.config
-import logging.handlers as lh
-from logging.handlers import QueueListener
 
 DEFAULT_LOGGING_CONFIG = {
     'version': 1,
@@ -31,7 +29,7 @@ class BaseMinion:
             hook.logger = logging.getLogger(hook.name)
         while STATE >= 0:
             if STATE == 1:
-                hook.main()
+                hook._main()
             elif STATE == 0:
                 hook.log(logging.INFO,hook.name + " is suspended\n")
                 sleep(0.01)
@@ -149,8 +147,15 @@ class BaseMinion:
     def main(self):
         pass
 
+    def _main(self):
+        self.main()
+        s = self.get_state(self.name)
+        if s == 3:
+            self.shutdown()
+
     def shutdown(self):
-        self.log(logging.INFO, self.name + " is off")
+        self.log(logging.INFO, self.name + " has been shut down")
+        sleep(1e-5)
         self.set_state(self.name, "status", -1)
 
     def _shutdown(self):
