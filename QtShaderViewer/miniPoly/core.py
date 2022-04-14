@@ -1,9 +1,10 @@
 import multiprocessing as mp
-from multiprocessing import Value, Queue, Event
+from multiprocessing import Value, Queue
 import warnings
-from time import time, sleep
+from time import sleep
 import logging
 import logging.config
+from logging.handlers import QueueListener
 
 DEFAULT_LOGGING_CONFIG = {
     'version': 1,
@@ -19,6 +20,7 @@ DEFAULT_LOGGING_CONFIG = {
     }
 }
 
+COMM_WAITING_TIME = 1e-3
 
 class BaseMinion:
     @staticmethod
@@ -29,7 +31,7 @@ class BaseMinion:
             hook.logger = logging.getLogger(hook.name)
         while STATE >= 0:
             if STATE == 1:
-                hook._main()
+                hook.main()
             elif STATE == 0:
                 hook.log(logging.INFO,hook.name + " is suspended\n")
                 sleep(0.01)
@@ -88,7 +90,7 @@ class BaseMinion:
             if not chn.empty():
                 received = chn.get()
             else:
-                self.log(logging.WARNING,"Empty Queue")
+                self.log(logging.DEBUG,"Empty Queue")
                 received = None
         else:
             self.log(logging.ERROR,"Receive failed: '{}' has been terminated".format(src_name))
@@ -147,48 +149,19 @@ class BaseMinion:
     def main(self):
         pass
 
-    def _main(self):
-        self.main()
-        s = self.get_state(self.name)
-        if s == 3:
-            self.shutdown()
-
     def shutdown(self):
-        self.log(logging.INFO, self.name + " has been shut down")
-        sleep(1e-5)
         self.set_state(self.name, "status", -1)
 
     def _shutdown(self):
+        if self.logger is not None:
+            self.log(logging.INFO, self.name + " is off")
+            self.set_state(self.name, "status", -2)
         for i in self.source.keys():
             self.del_source(i)
         for i in self.target.keys():
             self.del_target(i)
         if self.Process._popen:
             self.Process.join()
-
-# class MinionLogListener(QueueListener):
-#     """
-#     A simple handler for logging events. It runs in the listener process and
-#     dispatches events to loggers based on the name in the received record,
-#     which then get dispatched, by the logging system, to the handlers
-#     configured for those loggers.
-#     """
-#
-#     def _monitor(self):
-#         q = self.queue
-#         has_task_done = hasattr(q, 'task_done')
-#         while True:
-#             try:
-#                 record = self.dequeue(True)
-#                 if record is self._sentinel:
-#                     if has_task_done:
-#                         q.task_done()
-#                     break
-#                 self.handle(record)
-#                 if has_task_done:
-#                     q.task_done()
-#             except self.queue:
-#                 break
 
 class MinionLogHandler:
     """
@@ -204,12 +177,10 @@ class MinionLogHandler:
         else:
             logger = logging.getLogger(record.name)
         if logger.isEnabledFor(record.levelno):
-            # The process name is transformed just to show that it's the listener
-            # doing the logging to files and console
             record.processName = '%s (for %s)' % (mp.current_process().name, record.processName)
             logger.handle(record)
 
-class LoggerMinion(BaseMinion):
+class LoggerMinion(BaseMinion,QueueListener):
     DEFAULT_LOGGER_CONFIG = {
         'version': 1,
         'handlers': {
@@ -280,42 +251,7 @@ class LoggerMinion(BaseMinion):
         self.reporter.append(reporter.name)
 
     def poll_reporter(self):
-        return any([self.get_state(i)==1 for i in self.reporter])
-
-    def prepare(self, record):
-        """
-        Prepare a record for handling.
-
-        This method just returns the passed-in record. You may want to
-        override this method if you need to do any custom marshalling or
-        manipulation of the record before passing it to the handlers.
-        """
-        return record
-
-    def dequeue(self, block):
-        """
-        Dequeue a record and return it, optionally blocking.
-
-        The base implementation uses get. You may want to override this method
-        if you want to use timeouts or work with custom queue implementations.
-        """
-        return self.queue.get(block)
-
-    def handle(self, record):
-        """
-        Handle a record.
-
-        This just loops through the handlers offering them the record
-        to handle.
-        """
-        record = self.prepare(record)
-        for handler in self.handlers:
-            if not self.respect_handler_level:
-                process = True
-            else:
-                process = record.levelno >= handler.level
-            if process:
-                handler.handle(record)
+        return all([self.get_state(i)==-2 for i in self.reporter])
 
     def main(self):
         if not self.hasConfig:
@@ -323,5 +259,11 @@ class LoggerMinion(BaseMinion):
             self.hasConfig = True
         record = self.dequeue(True)
         self.handle(record)
-        if not self.poll_reporter():
+        if self.poll_reporter():
             self.shutdown()
+
+    def shutdown(self):
+        while not self.queue.empty():
+            record = self.dequeue(True)
+            self.handle(record)
+        self.set_state(self.name, "status", -1)

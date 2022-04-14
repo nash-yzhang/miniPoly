@@ -1,34 +1,32 @@
-import time as ti
+from time import sleep
 from core import BaseMinion,LoggerMinion
 import logging
 
 class baseMinionA(BaseMinion):
     def main(self):
         for tgt in self.target.keys():
-            self.log(logging.INFO,"Send greeting message...")
+            self.log(logging.INFO,"Send greeting message to {}".format(tgt))
             self.send(tgt, 'Greetings from {}\n'.format(self.name))
 
         for key in self.source.keys():
             msg = self.get(key)
             if msg:
-                self.log(logging.INFO, 'Message from [{}]:{}'.format(key, msg))
+                self.log(logging.INFO,"[{}]:{}".format(tgt,msg))
                 if "Killing" in msg:
                     for tgt in self.target.keys():
-                        self.set_state(tgt,"status",3)
+                        self.set_state(tgt,"status",-1)
                     self.shutdown()
-        ti.sleep(1e-5)
+        sleep(.01)
 
 class baseMinionB(BaseMinion):
     def main(self):
+        for tgt in self.target.keys():
+            self.send(tgt, 'Killing {}\n'.format(tgt))
         for key in self.source.keys():
             msg = self.get(key)
             if msg:
-                self.log(logging.INFO, 'Message from [{}]:{}'.format(key, msg))
-                for tgt in self.target.keys():
-                    self.send(tgt, 'Killing {}\n'.format(tgt))
-                    self.log(logging.INFO, "Send killing message...")
-        ti.sleep(1e-5)
-
+                self.log(logging.INFO,"[{}]:{}".format(key,msg))
+        sleep(.01)
 
 if __name__ == "__main__":
     lm = LoggerMinion()
