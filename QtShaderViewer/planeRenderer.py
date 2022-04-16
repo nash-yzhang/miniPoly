@@ -83,7 +83,7 @@ class Renderer(renderer):
             uniform float u_time; 
             void main() {
                 float marker = step(.5,distance(gl_PointCoord,vec2(.5)));
-                float color = sin(v_pos.x*20.*6.28)/2.-.15+marker;
+                float color = sin(v_pos.x*20.+u_time*30.)/2.-.15+marker;
                 gl_FragColor = vec4(vec3(color), u_alpha);
             }
         """

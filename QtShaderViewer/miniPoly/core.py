@@ -1,7 +1,7 @@
 import multiprocessing as mp
 from multiprocessing import Value, Queue
 import warnings
-from time import sleep
+from time import sleep, time
 import logging
 import logging.config
 from logging.handlers import QueueListener
@@ -33,8 +33,9 @@ class BaseMinion:
             if STATE == 1:
                 hook.main()
             elif STATE == 0:
-                hook.log(logging.INFO,hook.name + " is suspended\n")
-                sleep(0.01)
+                if not hook._is_suspended:
+                    hook.log(logging.INFO,hook.name + " is suspended\n")
+                    hook._is_suspended = True
             STATE = hook.get_state()
         hook._shutdown()
 
@@ -45,7 +46,9 @@ class BaseMinion:
         self.state = {'{}_{}'.format(self.name, 'status'): Value('i', 0)}
         self.sharedBuffer = {}  # a dictionary of inbox for receiving rpc calls
         self._log_config = None
+        self._is_suspended = False
         self.logger = None
+        self._elapsed = time()
 
     def add_source(self, src):
         self.share_state_handle(src.name, "status", src.get_state_handle())
