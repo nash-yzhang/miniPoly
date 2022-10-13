@@ -1,5 +1,5 @@
 from time import sleep
-from core import BaseMinion,LoggerMinion
+from minion import BaseMinion,LoggerMinion
 import logging
 
 class baseMinionA(BaseMinion):

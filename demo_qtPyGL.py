@@ -1,4 +1,4 @@
-from bin.core import BaseMinion,LoggerMinion
+from bin.minion import BaseMinion,LoggerMinion
 import logging,sys
 from vispy import app
 import vispy
