@@ -3,13 +3,27 @@ import PyQt5.QtCore as qc
 import traceback,sys
 from importlib import util, reload
 
-class GUICtrl(qw.QMainWindow):
-    def __init__(self, processHandler, displayProcName = "Display", windowSize = (400,400), rendererName = None):
+class BaseGUI(qw.QMainWindow):
+    def __init__(self, processHandler, windowSize = (400,400), rendererPath = None):
         super().__init__()
         self._processHandler = processHandler
-        self._displayProcName = displayProcName
-        self.setWindowTitle("GLSL Controller")
-        self.resize(*windowSize)
+        self._windowSize = windowSize
+        self._renderer_path = rendererPath
+
+        self._displayProcName = ''
+        self.rendererName = ''
+        self._renderer_path = ''
+        self._vcanvas = None
+
+        self._init_main_win()
+        self._init_menu()
+        self._load()
+
+    def _init_main_win(self):
+        self.setWindowTitle("Main")
+        self.resize(*self._windowSize)
+
+    def _init_menu(self):
         self._menubar = self.menuBar()
         self._menu_file = self._menubar.addMenu('File')
         self._menu_display = self._menubar.addMenu('Display')
@@ -37,9 +51,6 @@ class GUICtrl(qw.QMainWindow):
         self._menu_file.addAction(Exit)
         self._menu_display.addAction(restartDisplay)
         self._menu_display.addAction(haltDisplay)
-        self._vcanvas = None
-        self.rendererName = ''
-        self.rendererScriptName = ''
         self.central_widget = qw.QWidget()               # define central widget
         self.setCentralWidget(self.central_widget)
         self.boxlayout = qw.QVBoxLayout()
@@ -48,43 +59,45 @@ class GUICtrl(qw.QMainWindow):
         self.canvasLabel.setAlignment(qc.Qt.AlignCenter)
         self.boxlayout.addWidget(self.canvasLabel)
         self.customWidget = None
-        if rendererName:
-            self._load(rendererName)
 
-    def _load(self,rendererScriptName):
-        try:
-            if rendererScriptName:
-                if rendererScriptName == self.rendererScriptName:
-                    self.importModuleFromPath()
-                    self._processHandler.info("Reloaded rendering script {}".format(rendererScriptName))
-                else:
-                    self.rendererScriptName = rendererScriptName
-                    self.rendererName = self.rendererScriptName.split("/")[-1][:-3]
-                    self.importModuleFromPath()
-                    self._processHandler.info("Loaded rendering script: {}".format(rendererScriptName))
-                self._processHandler.info("Forwarding script [{}] to [{}]".format(rendererScriptName,self._displayProcName))
-                self._processHandler.send(self._displayProcName,('rendering_script',rendererScriptName))
-                # Load GUI
-                if self.customWidget is not None:
-                    self.boxlayout.removeWidget(self.customWidget)
-                    self.customWidget = None
-                if hasattr(self.imported,'Widget'):
-                    self.customWidget = self.imported.Widget(self)
-                    self.boxlayout.addWidget(self.customWidget)
-        except Exception:
-            self._processHandler.error(traceback.format_exc())
+    def add_displayProc(self,displayProcName):
+        self._displayProcName = displayProcName
+
+    def _load(self):
+        if self._renderer_path:
+            try:
+                if self._renderer_path:
+                    if self._renderer_path == self._renderer_path:
+                        self.importModuleFromPath()
+                        self._processHandler.info("Reloaded rendering script {}".format(self._renderer_path))
+                    else:
+                        self._renderer_path = self._renderer_path
+                        self.rendererName = self._renderer_path.split("/")[-1][:-3]
+                        self.importModuleFromPath()
+                        self._processHandler.info("Loaded rendering script: {}".format(self._renderer_path))
+                    self._processHandler.info("Forwarding script [{}] to [{}]".format(self._renderer_path, self._displayProcName))
+                    self._processHandler.send(self._displayProcName, ('rendering_script',self._renderer_path))
+                    # Load GUI
+                    if self.customWidget is not None:
+                        self.boxlayout.removeWidget(self.customWidget)
+                        self.customWidget = None
+                    if hasattr(self.imported,'Widget'):
+                        self.customWidget = self.imported.Widget(self)
+                        self.boxlayout.addWidget(self.customWidget)
+            except Exception:
+                self._processHandler.error(traceback.format_exc())
 
     def loadfile(self):
         rendererScriptName = qw.QFileDialog.getOpenFileName(self,'Open File','./renderer',"GLSL rendering script (*.py)","",qw.QFileDialog.DontUseNativeDialog)
-        rendererScriptName = rendererScriptName[0]
-        self._load(rendererScriptName)
+        self._renderer_path = rendererScriptName[0]
+        self._load()
 
     def reload(self):
-        self._load(self.rendererScriptName)
+        self._load()
 
     def importModuleFromPath(self):
         try:
-            spec = util.spec_from_file_location(self.rendererName, location=self.rendererScriptName)
+            spec = util.spec_from_file_location(self.rendererName, location=self._renderer_path)
             self.imported = util.module_from_spec(spec)
             sys.modules[self.rendererName] = self.imported
             spec.loader.exec_module(self.imported)

@@ -257,8 +257,8 @@ class LoggerMinion(BaseMinion,QueueListener):
         }
     }
 
-    def __init__(self, logger_config=DEFAULT_LOGGER_CONFIG, listener_config=DEFAULT_LISTENER_CONFIG):
-        self.name = 'logger'
+    def __init__(self, name, logger_config=DEFAULT_LOGGER_CONFIG, listener_config=DEFAULT_LISTENER_CONFIG):
+        self.name = name
         super(LoggerMinion, self).__init__(name=self.name)
         logging.config.dictConfig(logger_config)
         self.logger = logging.getLogger("SETUP")
