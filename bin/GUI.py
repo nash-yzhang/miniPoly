@@ -1,14 +1,14 @@
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
-import traceback,sys
+import traceback, sys
 from importlib import util, reload
 
+
 class BaseGUI(qw.QMainWindow):
-    def __init__(self, processHandler, windowSize = (400,400), rendererPath = None):
+    def __init__(self, processHandler, windowSize=(400, 400), rendererPath=None):
         super().__init__()
         self._processHandler = processHandler
         self._windowSize = windowSize
-        self._renderer_path = rendererPath
 
         self._displayProcName = ''
         self.rendererName = ''
@@ -17,7 +17,8 @@ class BaseGUI(qw.QMainWindow):
 
         self._init_main_win()
         self._init_menu()
-        self._load()
+
+        self.load_renderer(rendererPath)
 
     def _init_main_win(self):
         self.setWindowTitle("Main")
@@ -27,23 +28,23 @@ class BaseGUI(qw.QMainWindow):
         self._menubar = self.menuBar()
         self._menu_file = self._menubar.addMenu('File')
         self._menu_display = self._menubar.addMenu('Display')
-        loadfile = qw.QAction("Load",self)
+        loadfile = qw.QAction("Load", self)
         loadfile.setShortcut("Ctrl+O")
         loadfile.setStatusTip("Load renderer script")
         loadfile.triggered.connect(self.loadfile)
-        reload = qw.QAction("Reload",self)
+        reload = qw.QAction("Reload", self)
         reload.setShortcut("Ctrl+R")
         reload.setStatusTip("Reload renderer")
         reload.triggered.connect(self.reload)
-        Exit = qw.QAction("Quit",self)
+        Exit = qw.QAction("Quit", self)
         Exit.setShortcut("Ctrl+Q")
         Exit.setStatusTip("Exit program")
         Exit.triggered.connect(self.close)
-        restartDisplay = qw.QAction("Restart Display",self)
+        restartDisplay = qw.QAction("Restart Display", self)
         restartDisplay.setShortcut("Ctrl+Shift+R")
         restartDisplay.setStatusTip("Restart display process")
         restartDisplay.triggered.connect(self.restartDisplay)
-        haltDisplay = qw.QAction("Suspend Display",self)
+        haltDisplay = qw.QAction("Suspend Display", self)
         haltDisplay.setShortcut("Ctrl+Shift+H")
         haltDisplay.setStatusTip("Suspend display process")
         haltDisplay.triggered.connect(self.suspendDisplay)
@@ -51,7 +52,7 @@ class BaseGUI(qw.QMainWindow):
         self._menu_file.addAction(Exit)
         self._menu_display.addAction(restartDisplay)
         self._menu_display.addAction(haltDisplay)
-        self.central_widget = qw.QWidget()               # define central widget
+        self.central_widget = qw.QWidget()  # define central widget
         self.setCentralWidget(self.central_widget)
         self.boxlayout = qw.QVBoxLayout()
         self.central_widget.setLayout(self.boxlayout)
@@ -60,12 +61,25 @@ class BaseGUI(qw.QMainWindow):
         self.boxlayout.addWidget(self.canvasLabel)
         self.customWidget = None
 
-    def add_displayProc(self,displayProcName):
-        self._displayProcName = displayProcName
+    @property
+    def display_proc(self):
+        return self._displayProcName
+
+    @display_proc.setter
+    def display_proc(self, display_proc_name):
+        self._displayProcName = display_proc_name
+        self._load()
+
+    def load_renderer(self, renderer_path):
+        if renderer_path:
+            self._renderer_path = renderer_path
+            self._load()
+        else:
+            self._processHandler.error("Undefined renderer path")
 
     def _load(self):
-        if self._renderer_path:
-            try:
+        try:
+            if self._displayProcName:
                 if self._renderer_path:
                     if self._renderer_path == self._renderer_path:
                         self.importModuleFromPath()
@@ -75,25 +89,32 @@ class BaseGUI(qw.QMainWindow):
                         self.rendererName = self._renderer_path.split("/")[-1][:-3]
                         self.importModuleFromPath()
                         self._processHandler.info("Loaded rendering script: {}".format(self._renderer_path))
-                    self._processHandler.info("Forwarding script [{}] to [{}]".format(self._renderer_path, self._displayProcName))
-                    self._processHandler.send(self._displayProcName, ('rendering_script',self._renderer_path))
+                    self._processHandler.info(
+                        "Forwarding script [{}] to [{}]".format(self._renderer_path, self._displayProcName))
+                    self._processHandler.send(self._displayProcName, ('rendering_script', self._renderer_path))
                     # Load GUI
                     if self.customWidget is not None:
                         self.boxlayout.removeWidget(self.customWidget)
                         self.customWidget = None
-                    if hasattr(self.imported,'Widget'):
+                    if hasattr(self.imported, 'Widget'):
                         self.customWidget = self.imported.Widget(self)
                         self.boxlayout.addWidget(self.customWidget)
-            except Exception:
-                self._processHandler.error(traceback.format_exc())
+                else:
+                    self._processHandler.log("Display process undefined")
+        except Exception:
+            self._processHandler.error(traceback.format_exc())
 
     def loadfile(self):
-        rendererScriptName = qw.QFileDialog.getOpenFileName(self,'Open File','./renderer',"GLSL rendering script (*.py)","",qw.QFileDialog.DontUseNativeDialog)
-        self._renderer_path = rendererScriptName[0]
-        self._load()
+        rendererScriptName = qw.QFileDialog.getOpenFileName(self, 'Open File', './renderer',
+                                                            "GLSL rendering script (*.py)", "",
+                                                            qw.QFileDialog.DontUseNativeDialog)
+        self.load_renderer(rendererScriptName[0])
 
     def reload(self):
-        self._load()
+        if self._renderer_path:
+            self._load()
+        else:
+            self._processHandler.error('Failed to reload: invalid renderer path')
 
     def importModuleFromPath(self):
         try:
@@ -106,16 +127,16 @@ class BaseGUI(qw.QMainWindow):
 
     def restartDisplay(self):
         self.suspendDisplay()
-        while self._processHandler.get_state(self._displayProcName,'status') == 0:
-            self._processHandler.set_state(self._displayProcName,'status',1)
+        while self._processHandler.get_state(self._displayProcName, 'status') == 0:
+            self._processHandler.set_state(self._displayProcName, 'status', 1)
         self.reload()
         self._processHandler.info("Restarted [{}] process".format(self._displayProcName))
 
     def suspendDisplay(self):
-        while self._processHandler.get_state(self._displayProcName,'status') > 0:
-            self._processHandler.set_state(self._displayProcName,'status',0)
+        while self._processHandler.get_state(self._displayProcName, 'status') > 0:
+            self._processHandler.set_state(self._displayProcName, 'status', 0)
         self._processHandler.info("Suspended [{}] process".format(self._displayProcName))
 
     def shutdown(self):
         while self._processHandler.get_state(self._displayProcName, "status") != -1:
-            self._processHandler.set_state(self._displayProcName,"status",-11)
+            self._processHandler.set_state(self._displayProcName, "status", -11)

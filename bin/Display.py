@@ -8,22 +8,32 @@ import PyQt5.QtWidgets as qw
 from bin.glsl_preset import glCanvas,renderer
 
 class GLDisplay(glCanvas):
-    def __init__(self,handler,*args,**kwargs):
+    def __init__(self,handler,*args,controllerProcName=None,**kwargs):
         super(GLDisplay, self).__init__(*args,**kwargs)
         self._processHandler = handler
         self._setTime = 0
         self._tic = 0
         self._rmtShutdown = False
+        if controllerProcName:
+            self.controllerProcName = controllerProcName
+
+    @property
+    def controllerProcName(self):
+        return self._controllerProcName
+
+    @controllerProcName.setter
+    def controllerProcName(self,value):
+       self._controllerProcName = value
 
     def on_timer(self, event):
         if self.timer.elapsed - self._setTime > 1:
             self._setTime = np.floor(self.timer.elapsed)
-            msg = self._processHandler.get('Controller')
+            msg = self._processHandler.get(self.controllerProcName)
             if msg is not None:
                 if msg[0] == 'rendering_script':
                     self.rendererScriptName = msg[1]
                     self.rendererName = self.rendererScriptName.split("/")[-1][:-3]
-                    self._processHandler.info("Received rendering script [{}] from [Controller]".format(self.rendererScriptName))
+                    self._processHandler.info("Received rendering script [{}] from [{}]".format(self.rendererScriptName,self.controllerProcName))
                     self.importModuleFromPath()
                     self._renderer = self.imported.Renderer(self)
                     self.load(self._renderer)

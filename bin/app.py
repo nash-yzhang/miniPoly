@@ -10,16 +10,28 @@ class GUIModule(BaseMinion):
     def __init__(self, *args, **kwargs):
         super(GUIModule, self).__init__(*args, **kwargs)
 
-    def add_displayProc(self,displayProcName):
-        self._displayProcName = displayProcName
+        self._app = None
+        self._win = None
+        self.display_proc = None
+
+    @property
+    def display_proc(self):
+        return self._displayProcName
+
+    @display_proc.setter
+    def display_proc(self, display_proc_name):
+        self._displayProcName = display_proc_name
 
     def main(self):
-        app = qw.QApplication(sys.argv)
-        w = BaseGUI(self, rendererPath='renderer/planeAnimator.py', )
-        w.add_displayProc(self._displayProcName)
+        self._app = qw.QApplication(sys.argv)
+        self._win = BaseGUI(self, rendererPath='renderer/planeAnimator.py')
+        if not self.display_proc:
+            self.log(logging.WARNING, "[{}] Undefined display process name".format(self.name))
+        else:
+            self._win.display_proc = self.display_proc
         self.log(logging.INFO, "Starting GUI")
-        w.show()
-        app.exec()
+        self._win.show()
+        self._app.exec()
         self.shutdown()
 
     def shutdown(self):
@@ -30,15 +42,32 @@ class GUIModule(BaseMinion):
 
 
 class CanvasModule(BaseMinion):
+    def __init__(self, *args, **kwargs):
+        super(CanvasModule, self).__init__(*args, **kwargs)
+        self._win = None
+        self.controller_proc = None
+
     def main(self):
         try:
             vispy.use('glfw')
-            cvs = GLDisplay(self)
-            cvs.show()
-            app.run()
-            cvs.on_close()
+            self._win = GLDisplay(self)
+            if self.controller_proc is not None:
+                self._win.controllerProcName = self.controller_proc
+                self._win.show()
+                app.run()
+                self._win.on_close()
+            else:
+                self.log(logging.ERROR, "[{}] Cannot initialize: Undefined controller process name".format(self.name))
         except Exception as e:
             self.error(e)
+
+    @property
+    def controller_proc(self):
+        return self._controllerProcName
+
+    @controller_proc.setter
+    def controller_proc(self, value):
+        self._controllerProcName = value
 
 
 class GLapp:
@@ -46,7 +75,8 @@ class GLapp:
         self.name = name
         self._GUI = GUIModule('GUI')
         self._GL_canvas = CanvasModule('OPENGL')
-        self._GUI.add_displayProc(self._GL_canvas.name)
+        self._GUI.display_proc = self._GL_canvas.name
+        self._GL_canvas.controller_proc = self._GUI.name
         self._logger = LoggerMinion('MAIN LOGGER')
         self._GUI.attach_logger(self._logger)
         self._GL_canvas.attach_logger(self._logger)
