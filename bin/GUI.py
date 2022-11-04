@@ -94,6 +94,7 @@ class BaseGUI(qw.QMainWindow):
                     self._processHandler.send(self._displayProcName, ('rendering_script', self._renderer_path))
                     # Load GUI
                     if self.customWidget is not None:
+                        self.customWidget.close()
                         self.boxlayout.removeWidget(self.customWidget)
                         self.customWidget = None
                     if hasattr(self.imported, 'Widget'):
