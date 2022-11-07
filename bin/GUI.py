@@ -54,12 +54,23 @@ class BaseGUI(qw.QMainWindow):
         self._menu_display.addAction(haltDisplay)
         self.central_widget = qw.QWidget()  # define central widget
         self.setCentralWidget(self.central_widget)
+
         self.boxlayout = qw.QVBoxLayout()
         self.central_widget.setLayout(self.boxlayout)
+        self.init_default_custom_widget()
+        # self.canvasLabel = qw.QLabel("Load stimulus via File (Ctrl+O)")
+        # self.canvasLabel.setAlignment(qc.Qt.AlignCenter)
+        # self.boxlayout.addWidget(self.canvasLabel)
+        # self.customWidget = None
+
+    def init_default_custom_widget(self):
+        self.customWidget = qw.QWidget() # define custom widget
+        self.customWidgetLayout = qw.QVBoxLayout()
+        self.customWidget.setLayout(self.customWidgetLayout)
         self.canvasLabel = qw.QLabel("Load stimulus via File (Ctrl+O)")
         self.canvasLabel.setAlignment(qc.Qt.AlignCenter)
-        self.boxlayout.addWidget(self.canvasLabel)
-        self.customWidget = None
+        self.customWidget.layout().addWidget(self.canvasLabel)
+        self.boxlayout.addWidget(self.customWidget)
 
     @property
     def display_proc(self):
@@ -96,6 +107,7 @@ class BaseGUI(qw.QMainWindow):
                     if self.customWidget is not None:
                         self.customWidget.close()
                         self.boxlayout.removeWidget(self.customWidget)
+                        self.customWidget.setParent(None)
                         self.customWidget = None
                     if hasattr(self.imported, 'Widget'):
                         self.customWidget = self.imported.Widget(self)

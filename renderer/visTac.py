@@ -11,7 +11,7 @@ from utils import load_shaderfile
 import pyfirmata as fmt
 
 class Widget(qw.QWidget):
-    def __init__(self,mainW,arduino_port="COM7"):
+    def __init__(self,mainW,arduino_port="COM3"):
         super().__init__()
         self._mainWindow = mainW
         self._processHandler = mainW._processHandler
@@ -34,7 +34,7 @@ class Widget(qw.QWidget):
         self.load_button = qw.QPushButton("Load Shader")
         self.load_button.setShortcut("Ctrl+Shift+O")
         self.load_button.clicked.connect(self.loadfile)
-        self._layout.addWidget(self.load_button,1)
+        self.layout().addWidget(self.load_button,1)
         self._autoR_box = qw.QCheckBox("auto refresh")
         self._autoR_box.setChecked(False)
         self._autoR_box.clicked.connect(self.auto_refresh)
@@ -44,7 +44,7 @@ class Widget(qw.QWidget):
         self._sublayout = qw.QHBoxLayout()
         self._sublayout.addWidget(self._autoR_box)
         self._sublayout.addWidget(self.refresh_button,1)
-        self._layout.addLayout(self._sublayout)
+        self.layout().addLayout(self._sublayout)
         self._servo_ori_slider = qw.QSlider(qt.Horizontal)
         self._servo_ori_slider.setMinimum(0)
         self._servo_ori_slider.setMaximum(180)
@@ -92,7 +92,12 @@ class Widget(qw.QWidget):
             self.rpc_reload()
 
     def change_servo_ori(self,val):
-        self._servo_pin.write(val)
+        try:
+            self._servo_pin.write(val)
+        except Exception as e:
+            self._processHandler.error(traceback.format_exc())
+
+        self._processHandler.send(self._mainWindow._displayProcName,('uniform',{'u_barpos':val/180}))
 
     def close(self):
         self._arduino_board.exit()
@@ -113,37 +118,41 @@ class Renderer(renderer):
             """
 
         self.FS = """
-            varying vec2 v_pos; 
-            uniform float u_alpha; 
-            uniform float u_time; 
+            varying vec2 v_pos;
+            uniform float u_alpha;
+            uniform float u_time;
+            uniform float u_barpos;
             void main() {
                 float marker = step(.5,distance(gl_PointCoord,vec2(.5)));
                 float color = sin(v_pos.x*20.+u_time*30.)/2.-.15+marker;
-                gl_FragColor = vec4(vec3(color), u_alpha);
+                float mask  = step(.1,abs(v_pos.x-u_barpos));
+                gl_FragColor = vec4(vec3(mask), u_alpha);
             }
         """
-        self.FS2 = """
-            varying vec2 v_pos; 
-            void main() {
-             float color = min(step(abs(v_pos.x),.97),step(abs(v_pos.y),.965));
-             gl_FragColor = vec4(vec3(color), .5); }
-        """
+        # self.FS2 = """
+        #     varying vec2 v_pos;
+        #     void main() {
+        #      float color = min(step(abs(v_pos.x),.97),step(abs(v_pos.y),.965));
+        #      gl_FragColor = vec4(vec3(color), .5); }
+        # """
         self.program = gloo.Program(self.VS,self.FS)
-        self.bg = gloo.Program(self.VS,self.FS)
 
     def init_renderer(self):
         self.program['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)#/2.
-        # self.bg['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)
         self.program['u_time'] = 0
         self.program['u_alpha'] = np.float32(1)
-        # self.bg['u_alpha'] = np.float32(.15)
+        self.program['u_barpos'] = 0
+
         gloo.set_state("translucent")
         self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
 
     def on_draw(self,event):
+        msg = self.canvas._processHandler.get(self.canvas._controllerProcName)
+        if msg is not None:
+            if msg[0] == 'uniform':
+                for k,v in msg[1].items():
+                    self.program[k] = v
         gloo.clear('white')
         u_time = self.canvas.timer.elapsed
         self.program['u_time'] = u_time
         self.program.draw('triangle_strip')
-        # self.program.draw('points')
-        # self.bg.draw('triangle_strip')

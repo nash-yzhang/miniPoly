@@ -1,6 +1,22 @@
 from vispy import gloo
 import numpy as np
 from bin.glsl_preset import renderer
+import PyQt5.QtWidgets as qw
+import PyQt5.QtCore as qc
+
+class Widget(qw.QWidget):
+    def __init__(self,mainW,arduino_port="COM3"):
+        super().__init__()
+        self._mainWindow = mainW
+        self._processHandler = mainW._processHandler
+        self.init_gui()
+
+    def init_gui(self):
+        self._layout = qw.QVBoxLayout()
+        self.setLayout(self._layout)
+        self.canvasLabel = qw.QLabel("Load stimulus via File (Ctrl+O)")
+        self.canvasLabel.setAlignment(qc.Qt.AlignCenter)
+        self.layout().addWidget(self.canvasLabel)
 
 class Renderer(renderer):
 
