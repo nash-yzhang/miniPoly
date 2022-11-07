@@ -6,10 +6,11 @@ from vispy import gloo,app
 import PyQt5.QtWidgets as qw
 
 from bin.glsl_preset import glCanvas,renderer
+from bin.minion import AbstractMinionMixin
 
-class GLDisplay(glCanvas):
+class GLDisplay(glCanvas, AbstractMinionMixin):
     def __init__(self,handler,*args,controllerProcName=None,**kwargs):
-        super(GLDisplay, self).__init__(*args,**kwargs)
+        super().__init__(*args,**kwargs)
         self._processHandler = handler
         self._setTime = 0
         self._tic = 0
@@ -25,21 +26,34 @@ class GLDisplay(glCanvas):
     def controllerProcName(self,value):
        self._controllerProcName = value
 
+    def parse_msg(self,msg_type,msg):
+        if msg_type == 'rendering_script':
+            self.rendererScriptName = msg
+            self.rendererName = self.rendererScriptName.split("/")[-1][:-3]
+            self._processHandler.info("Received rendering script [{}] from [{}]".format(self.rendererScriptName,self.controllerProcName))
+            self.importModuleFromPath()
+            self._renderer = self.imported.Renderer(self)
+            self.load(self._renderer)
+            self._processHandler.info("Running script [{}]".format(self.rendererScriptName))
+        elif msg_type == 'rendering_shader':
+            self._renderer.reload(msg)
+
     def on_timer(self, event):
         if self.timer.elapsed - self._setTime > 1:
             self._setTime = np.floor(self.timer.elapsed)
-            msg = self._processHandler.get(self.controllerProcName)
-            if msg is not None:
-                if msg[0] == 'rendering_script':
-                    self.rendererScriptName = msg[1]
-                    self.rendererName = self.rendererScriptName.split("/")[-1][:-3]
-                    self._processHandler.info("Received rendering script [{}] from [{}]".format(self.rendererScriptName,self.controllerProcName))
-                    self.importModuleFromPath()
-                    self._renderer = self.imported.Renderer(self)
-                    self.load(self._renderer)
-                    self._processHandler.info("Running script [{}]".format(self.rendererScriptName))
-                elif msg[0] == 'rendering_shader':
-                    self._renderer.reload(msg[1])
+            self.get(self.controllerProcName)
+            # msg,_ = self._processHandler.get(self.controllerProcName)
+            # if msg is not None:
+            #     if msg[0] == 'rendering_script':
+            #         self.rendererScriptName = msg[1]
+            #         self.rendererName = self.rendererScriptName.split("/")[-1][:-3]
+            #         self._processHandler.info("Received rendering script [{}] from [{}]".format(self.rendererScriptName,self.controllerProcName))
+            #         self.importModuleFromPath()
+            #         self._renderer = self.imported.Renderer(self)
+            #         self.load(self._renderer)
+            #         self._processHandler.info("Running script [{}]".format(self.rendererScriptName))
+            #     elif msg[0] == 'rendering_shader':
+            #         self._renderer.reload(msg[1])
         self.update()
         if self._processHandler.get_state() == -1:
             self._rmtShutdown = True

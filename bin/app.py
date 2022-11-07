@@ -26,10 +26,10 @@ class GUIModule(BaseMinion):
         self._app = qw.QApplication(sys.argv)
         self._win = BaseGUI(self, rendererPath='renderer/planeAnimator.py')
         if not self.display_proc:
-            self.log(logging.WARNING, "[{}] Undefined display process name".format(self.name))
+            self.warning("[{}] Undefined display process name".format(self.name))
         else:
             self._win.display_proc = self.display_proc
-        self.log(logging.INFO, "Starting GUI")
+        self.info("Starting GUI")
         self._win.show()
         self._app.exec()
         self.shutdown()
@@ -54,10 +54,11 @@ class CanvasModule(BaseMinion):
             if self.controller_proc is not None:
                 self._win.controllerProcName = self.controller_proc
                 self._win.show()
+                self.info('Starting display window')
                 app.run()
                 self._win.on_close()
             else:
-                self.log(logging.ERROR, "[{}] Cannot initialize: Undefined controller process name".format(self.name))
+                self.error("[{}] Cannot initialize: Undefined controller process name".format(self.name))
         except Exception as e:
             self.error(e)
 
@@ -78,6 +79,7 @@ class GLapp:
         self._GUI.display_proc = self._GL_canvas.name
         self._GL_canvas.controller_proc = self._GUI.name
         self._logger = LoggerMinion('MAIN LOGGER')
+        self._logger.set_level(self._GUI.display_proc,'debug')
         self._GUI.attach_logger(self._logger)
         self._GL_canvas.attach_logger(self._logger)
         self._connections = {}
