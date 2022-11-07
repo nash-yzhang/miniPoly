@@ -3,9 +3,13 @@ import PyQt5.QtCore as qc
 import traceback, sys
 from importlib import util, reload
 
+from bin.minion import AbstractMinionMixin
 
-class BaseGUI(qw.QMainWindow):
-    def __init__(self, processHandler, windowSize=(400, 400), rendererPath=None):
+class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
+    '''
+    Base class serving as an interface between "minion" process handler and Qt GUI
+    '''
+    def __init__(self, processHandler=None, windowSize=(400, 400), rendererPath=None):
         super().__init__()
         self._processHandler = processHandler
         self._windowSize = windowSize
@@ -91,7 +95,7 @@ class BaseGUI(qw.QMainWindow):
                         self._processHandler.info("Loaded rendering script: {}".format(self._renderer_path))
                     self._processHandler.info(
                         "Forwarding script [{}] to [{}]".format(self._renderer_path, self._displayProcName))
-                    self._processHandler.send(self._displayProcName, ('rendering_script', self._renderer_path))
+                    self.send(self._displayProcName, 'rendering_script', self._renderer_path)
                     # Load GUI
                     if self.customWidget is not None:
                         self.customWidget.close()

@@ -4,6 +4,7 @@ import warnings
 from time import sleep, time
 import logging
 import logging.config
+from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
 from logging.handlers import QueueListener
 
 DEFAULT_LOGGING_CONFIG = {
@@ -18,6 +19,14 @@ DEFAULT_LOGGING_CONFIG = {
         'handlers': ['queue'],
         'level': 'DEBUG'
     }
+}
+
+LOG_LVL_LOOKUP_TABLE = {
+    "DEBUG": DEBUG,
+    "INFO": INFO,
+    "WARNING": WARNING,
+    "ERROR": ERROR,
+    "CRITICAL": CRITICAL,
 }
 
 COMM_WAITING_TIME = 1e-3
@@ -75,14 +84,14 @@ class BaseMinion:
         self.target[tgt_name].close()
         self.target.pop(tgt_name,'None')
 
-    def send(self, tgt_name, val):
+    def send(self, tgt_name, msg_val, msg_type=None):
         if self.get_state() > 0:
             chn = self.target[tgt_name]
             if chn is None:
                 self.log(logging.ERROR,"Send failed: Queue [{}] does not exist".format(tgt_name))
                 return None
             if not chn.full():
-                chn.put(val)
+                chn.put((msg_val,msg_type))
             else:
                 self.log(logging.WARNING," Send failed: the queue for '{}' is fulled".format(tgt_name))
         else:
@@ -106,7 +115,11 @@ class BaseMinion:
             received = None
             self.del_source(src_name)
             self.log(logging.INFO, "Removed invalid source [{}]".format(src_name))
-        return received
+
+        if received is not None:
+            msg_val = received[0]
+            msg_type = received[1]
+            return msg_val,msg_type
 
     def add_buffer(self, buffer_name, buffer_handle):
         self.sharedBuffer[buffer_name] = buffer_handle
@@ -241,7 +254,8 @@ class LoggerMinion(BaseMinion,QueueListener):
                 'class': 'logging.FileHandler',
                 'filename': 'minions.log',
                 'mode': 'w',
-                'formatter': 'detailed'
+                'formatter': 'detailed',
+                'level': 'DEBUG'
             },
             'errors': {
                 'class': 'logging.FileHandler',
@@ -261,13 +275,24 @@ class LoggerMinion(BaseMinion,QueueListener):
         self.name = name
         super(LoggerMinion, self).__init__(name=self.name)
         logging.config.dictConfig(logger_config)
-        self.logger = logging.getLogger("SETUP")
+        self.logger = logging.getLogger(self.name)
         self.queue = Queue()
         self.handlers = [MinionLogHandler()]
         self.respect_handler_level = False
         self.listener_config = listener_config
         self.hasConfig = False
         self.reporter = []
+
+    def set_level(self,logger_name,level):
+        level = level.upper()
+        if level in LOG_LVL_LOOKUP_TABLE.keys():
+            logLevel = LOG_LVL_LOOKUP_TABLE[level]
+            logger   = logging.getLogger(logger_name)
+            logger.setLevel(logLevel)
+            for handler in logger.handlers:
+                handler.setLevel(logLevel)
+        else:
+            self.debug(f"Unknown logging level: {level}")
 
     def register_reporter(self,reporter):
         self.share_state_handle(reporter.name, "status", reporter.get_state_handle())
@@ -290,3 +315,45 @@ class LoggerMinion(BaseMinion,QueueListener):
             record = self.dequeue(True)
             self.handle(record)
         self.set_state(self.name, "status", -1)
+
+class AbstractMinionMixin:
+    '''
+    This class should serve as an interface between Qt window and minion process handler,
+    All interaction rules between the two components should be defined here
+    '''
+
+    def log(self, level, msg):
+        '''
+        :param level: str; "DEBUG","INFO","WARNING","ERROR","CRITICAL"
+        :param msg: str, log message
+        :return: None
+        '''
+
+        level = level.upper()
+        if level in LOG_LVL_LOOKUP_TABLE.keys():
+            self._processHandler.log(LOG_LVL_LOOKUP_TABLE[level], msg)
+        else:
+            self._processHandler.debug(f"Logging failed, unknown logging level: {level}")
+
+    def send(self,target:str,msg_type:str,msg_val):
+        """
+        :param target: string, the minion name to call
+        :param msg: string or tuple of string
+        :return:
+        """
+        self._processHandler.send(target,msg_type=msg_type,msg_val=msg_val)
+        self.log("DEBUG",f"Sending message to [{target}],type: {msg_type}")
+
+    def get(self,source:str):
+        msg, msg_type = self._processHandler.get(source)
+        if msg is not None:
+            if msg_type is not None:
+                self.log("DEBUG",f"Received message from [{source}] (type: {msg_type})")
+            else:
+                self.log("DEBUG",f"Received message from [{source}] (type: UNKNOWN)")
+            self.parse_msg(msg_type, msg)
+        else:
+            self.log("DEBUG",f"EMPTY MESSAGE from [{source}]")
+
+    def parse_msg(self,msg_type,msg):
+        pass
