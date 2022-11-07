@@ -97,7 +97,7 @@ class Widget(qw.QWidget):
         except Exception as e:
             self._processHandler.error(traceback.format_exc())
 
-        self._processHandler.send(self._mainWindow._displayProcName,('uniform',{'u_barpos':val/180}))
+        self._processHandler.send(self._mainWindow._displayProcName,'uniform',{'u_barpos':val/180})
 
     def close(self):
         self._arduino_board.exit()
@@ -147,10 +147,10 @@ class Renderer(renderer):
         self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
 
     def on_draw(self,event):
-        msg = self.canvas._processHandler.get(self.canvas._controllerProcName)
+        msg_type,msg = self.canvas._processHandler.get(self.canvas._controllerProcName)
         if msg is not None:
-            if msg[0] == 'uniform':
-                for k,v in msg[1].items():
+            if msg_type == 'uniform':
+                for k,v in msg.items():
                     self.program[k] = v
         gloo.clear('white')
         u_time = self.canvas.timer.elapsed

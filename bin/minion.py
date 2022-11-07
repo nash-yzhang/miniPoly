@@ -120,6 +120,8 @@ class BaseMinion:
             msg_val = received[0]
             msg_type = received[1]
             return msg_val,msg_type
+        else:
+            return None, None
 
     def add_buffer(self, buffer_name, buffer_handle):
         self.sharedBuffer[buffer_name] = buffer_handle
