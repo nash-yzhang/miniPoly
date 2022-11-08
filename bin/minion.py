@@ -31,10 +31,11 @@ LOG_LVL_LOOKUP_TABLE = {
 
 COMM_WAITING_TIME = 1e-3
 
+
 class BaseMinion:
     @staticmethod
     def innerLoop(hook):
-        STATE = hook.get_state()
+        STATE = hook.status
         if hook._log_config is not None:
             logging.config.dictConfig(hook._log_config)
             hook.logger = logging.getLogger(hook.name)
@@ -47,71 +48,73 @@ class BaseMinion:
                 if not hook._is_suspended:
                     hook.info(hook.name + " is suspended\n")
                     hook._is_suspended = True
-            STATE = hook.get_state()
+            STATE = hook.status
         hook._shutdown()
 
     def __init__(self, name):
         self.name = name
         self.source = {}  # a dictionary of output channels storing rpc function name-value pair (marshalled) E.g.: {'receiver_minion_1':('terminate',True)}
         self.target = {}  # a dictionary of inbox for receiving rpc calls
-        self.state = {'{}_{}'.format(self.name, 'status'): Value('i', 0)}
-        self.sharedBuffer = {}  # a dictionary of inbox for receiving rpc calls
+        self._buffer = {}
         self._log_config = None
         self._is_suspended = False
         self.logger = None
         self._elapsed = time()
 
+        self.create_shared_buffer('status', Value('i', 0))
+
     def add_source(self, src):
-        self.share_state_handle(src.name, "status", src.get_state_handle())
         self.source[src.name] = src.target[self.name]
+        self.register_shared_buffer(src, "status")
+        # self.share_state_handle(src.name, "status", src.get_state_handle())
 
     def del_source(self, src_name):
-        for key in list(self.state.keys()):
+        for key in list(self._buffer.keys()):
             if src_name in key:
-                self.state.pop(key, 'None')
+                self._buffer.pop(key, 'None')
         self.source[src_name].close()
-        self.source.pop(src_name,'None')
+        self.source.pop(src_name, 'None')
 
     def add_target(self, tgt):
-        self.share_state_handle(tgt.name, "status", tgt.get_state_handle())
         self.target[tgt.name] = Queue()
         tgt.add_source(self)
+        self.register_shared_buffer(tgt,"status")
 
     def del_target(self, tgt_name):
-        for key in list(self.state.keys()):
+        for key in list(self._buffer.keys()):
             if tgt_name in key:
-                self.state.pop(key, 'None')
+                self._buffer.pop(key, 'None')
         self.target[tgt_name].close()
-        self.target.pop(tgt_name,'None')
+        self.target.pop(tgt_name, 'None')
 
     def send(self, tgt_name, msg_val, msg_type=None):
-        if self.get_state() > 0:
+        if self.status > 0:
             chn = self.target[tgt_name]
             if chn is None:
-                self.log(logging.ERROR,"Send failed: Queue [{}] does not exist".format(tgt_name))
+                self.log(logging.ERROR, "Send failed: Queue [{}] does not exist".format(tgt_name))
                 return None
             if not chn.full():
-                chn.put((msg_val,msg_type))
+                chn.put((msg_val, msg_type))
             else:
-                self.log(logging.WARNING," Send failed: the queue for '{}' is fulled".format(tgt_name))
+                self.log(logging.WARNING, " Send failed: the queue for '{}' is fulled".format(tgt_name))
         else:
-            self.log(logging.ERROR,"Send failed: '{}' has been terminated".format(tgt_name))
+            self.log(logging.ERROR, "Send failed: '{}' has been terminated".format(tgt_name))
             self.del_target(tgt_name)
-            self.log(logging.INFO,"Removed invalid target {}".format(tgt_name))
+            self.log(logging.INFO, "Removed invalid target {}".format(tgt_name))
 
     def get(self, src_name):
         chn = self.source[src_name]
         if chn is None:
-            self.log(logging.ERROR,"Receive failed: Queue [{}] does not exist".format(src_name))
+            self.log(logging.ERROR, "Receive failed: Queue [{}] does not exist".format(src_name))
             return None
-        if self.get_state() > 0:
+        if self.status > 0:
             if not chn.empty():
                 received = chn.get()
             else:
-                self.log(logging.DEBUG,"Empty Queue")
+                self.log(logging.DEBUG, "Empty Queue")
                 received = None
         else:
-            self.log(logging.ERROR,"Receive failed: '{}' has been terminated".format(src_name))
+            self.log(logging.ERROR, "Receive failed: '{}' has been terminated".format(src_name))
             received = None
             self.del_source(src_name)
             self.log(logging.INFO, "Removed invalid source [{}]".format(src_name))
@@ -119,28 +122,87 @@ class BaseMinion:
         if received is not None:
             msg_val = received[0]
             msg_type = received[1]
-            return msg_val,msg_type
+            return msg_val, msg_type
         else:
             return None, None
 
-    def add_buffer(self, buffer_name, buffer_handle):
-        self.sharedBuffer[buffer_name] = buffer_handle
+    # def add_buffer(self, buffer_name, buffer_handle):
+    #     self.state['{}_B_{}'.format(self.name, buffer_name)] = buffer_handle
+    #
+    # def get_buffer_from(self,minion_name,buffer_name):
+    #     buffer_value = self.state.get('{}_BUF{}'.format(minion_name,buffer_name))
+    #     if buffer_value is None:
+    #         buffer_source_minion = self.source[minion_name]
+    #         self.share_state_handle(minion_name,f"BUF{buffer_name}",buffer_source_minion.get_state_handle(category=f"BUF{buffer_name}"))
+    #         buffer_value = self.state.get('{}_BUF{}'.format(minion_name,buffer_name))
+    #     return buffer_value
 
-    def get_state(self, minion_name=None, category="status"):
-        if minion_name is None:
-            minion_name = self.name
-        return self.state['{}_{}'.format(minion_name, category)].value
+    @property
+    def status(self):
+        return self._buffer['{}_status'.format(self.name)].value
 
-    def get_state_handle(self, minion_name=None, category="status"):
-        if minion_name is None:
-            minion_name = self.name
-        return self.state['{}_{}'.format(minion_name, category)]
+    @status.setter
+    def status(self, value):
+        self._buffer['{}_status'.format(self.name)].value = value
+
+    @property
+    def status_handle(self):
+        return self._buffer['{}_status'.format(self.name)]
+
+    @status_handle.setter
+    def status_handle(self, value):
+        self.log(logging.ERROR, "Status handle is a read-only property that cannot be changed")
+
+    def create_shared_buffer(self, buffer_name=None, buffer_handle=None):
+        self._buffer['{}_{}'.format(self.name, buffer_name)] = buffer_handle
+    def register_shared_buffer(self, minion, buffer_name):
+        if minion.name in self.source.keys() or minion.name in self.target.keys():
+            pass
+        else:
+            self.log(logging.WARNING, "Access Denied in registering shared buffer: Minion {} is neither a source nor a target".format(minion.name))
+        buffer_handle = minion.get_buffer(buffer_name)
+        if buffer_handle is None:
+            self.log(logging.ERROR, "Unregistered buffer name {} in minion {}".format(buffer_name, minion.name))
+            return None
+        self._buffer['{}_{}'.format(minion.name, buffer_name)] = buffer_handle
+
+    def get_buffer(self, buffer_name):
+        return self.get_buffer_from(self.name, buffer_name)
+
+    def get_buffer_from(self, minion_name, buffer_name):
+        i_buffer = self._buffer.get('{}_{}'.format(minion_name, buffer_name))
+        if i_buffer is None:
+            self.log(logging.ERROR, "Unregistered buffer name {} in minion {}".format(buffer_name, minion_name))
+            return None
+        else:
+            return i_buffer
+
+    def get_state(self, buffer_name):
+        return self.get_buffer(buffer_name).value
+
+    def get_state_from(self, minion_name, buffer_name):
+        return self.get_buffer_from(minion_name, buffer_name).value
+
+        # if minion_name is None:
+        #     minion_name = self.name
+        # return self._buffer['{}_{}'.format(minion_name, category)].value
 
     def set_state(self, minion_name, category, value):
-        self.state['{}_{}'.format(minion_name, category)].value = value
+        self._buffer['{}_{}'.format(minion_name, category)].value = value
 
-    def share_state_handle(self, minion_name, category, value):
-        self.state.update({'{}_{}'.format(minion_name, category): value})
+    # def get_state_handle(self, minion_name=None, category="status"):
+    #     '''
+    #     Only used as a shortcut for getting minion status
+    #     :param minion_name: the name of the minion to get the state handle for
+    #     :param category: state category
+    #     :return:
+    #     '''
+    #     if minion_name is None:
+    #         minion_name = self.name
+    #     return self._buffer['{}_{}'.format(minion_name, category)]
+
+    # def share_state_handle(self, minion_name, category, value):
+    #     self._buffer.update({'{}_{}'.format(minion_name, category): value})
 
     def attach_logger(self, logger):
         config_worker = {
@@ -161,17 +223,17 @@ class BaseMinion:
         self._log_queue = logger.queue
         logger.register_reporter(self)
 
-    def log(self,*args):
+    def log(self, *args):
         if self.logger is not None:
             self.logger.log(*args)
         else:
-           warnings.warn("[{}]-[Warning] Logger unattached".format(self.name))
+            warnings.warn("[{}]-[Warning] Logger unattached".format(self.name))
 
-    def debug(self,msg):
-        self.log(logging.DEBUG,msg)
+    def debug(self, msg):
+        self.log(logging.DEBUG, msg)
 
-    def info(self,msg):
-        self.log(logging.INFO,msg)
+    def info(self, msg):
+        self.log(logging.INFO, msg)
 
     def warning(self, msg):
         self.log(logging.WARNING, msg)
@@ -201,6 +263,7 @@ class BaseMinion:
         if self.Process._popen:
             self.Process.join()
 
+
 class MinionLogHandler:
     """
     A simple handler for logging events. It runs in the listener process and
@@ -218,7 +281,8 @@ class MinionLogHandler:
             record.processName = '%s (for %s)' % (mp.current_process().name, record.processName)
             logger.handle(record)
 
-class LoggerMinion(BaseMinion,QueueListener):
+
+class LoggerMinion(BaseMinion, QueueListener):
     DEFAULT_LOGGER_CONFIG = {
         'version': 1,
         'handlers': {
@@ -285,23 +349,23 @@ class LoggerMinion(BaseMinion,QueueListener):
         self.hasConfig = False
         self.reporter = []
 
-    def set_level(self,logger_name,level):
+    def set_level(self, logger_name, level):
         level = level.upper()
         if level in LOG_LVL_LOOKUP_TABLE.keys():
             logLevel = LOG_LVL_LOOKUP_TABLE[level]
-            logger   = logging.getLogger(logger_name)
+            logger = logging.getLogger(logger_name)
             logger.setLevel(logLevel)
             for handler in logger.handlers:
                 handler.setLevel(logLevel)
         else:
             self.debug(f"Unknown logging level: {level}")
 
-    def register_reporter(self,reporter):
-        self.share_state_handle(reporter.name, "status", reporter.get_state_handle())
+    def register_reporter(self, reporter):
+        self.register_shared_buffer(reporter, "status")
         self.reporter.append(reporter.name)
 
     def poll_reporter(self):
-        return all([self.get_state(i)==-2 for i in self.reporter])
+        return all([self.get_state_from(i,'status') == -2 for i in self.reporter])
 
     def main(self):
         if not self.hasConfig:
@@ -317,6 +381,7 @@ class LoggerMinion(BaseMinion,QueueListener):
             record = self.dequeue(True)
             self.handle(record)
         self.set_state(self.name, "status", -1)
+
 
 class AbstractMinionMixin:
     '''
@@ -337,25 +402,25 @@ class AbstractMinionMixin:
         else:
             self._processHandler.debug(f"Logging failed, unknown logging level: {level}")
 
-    def send(self,target:str,msg_type:str,msg_val):
+    def send(self, target: str, msg_type: str, msg_val):
         """
         :param target: string, the minion name to call
         :param msg: string or tuple of string
         :return:
         """
-        self._processHandler.send(target,msg_type=msg_type,msg_val=msg_val)
-        self.log("DEBUG",f"Sending message to [{target}],type: {msg_type}")
+        self._processHandler.send(target, msg_type=msg_type, msg_val=msg_val)
+        self.log("DEBUG", f"Sending message to [{target}],type: {msg_type}")
 
-    def get(self,source:str):
+    def get(self, source: str):
         msg, msg_type = self._processHandler.get(source)
         if msg is not None:
             if msg_type is not None:
-                self.log("DEBUG",f"Received message from [{source}] (type: {msg_type})")
+                self.log("DEBUG", f"Received message from [{source}] (type: {msg_type})")
             else:
-                self.log("DEBUG",f"Received message from [{source}] (type: UNKNOWN)")
+                self.log("DEBUG", f"Received message from [{source}] (type: UNKNOWN)")
             self.parse_msg(msg_type, msg)
         else:
-            self.log("DEBUG",f"EMPTY MESSAGE from [{source}]")
+            self.log("DEBUG", f"EMPTY MESSAGE from [{source}]")
 
-    def parse_msg(self,msg_type,msg):
+    def parse_msg(self, msg_type, msg):
         pass

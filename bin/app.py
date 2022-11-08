@@ -24,7 +24,7 @@ class GUIModule(BaseMinion):
 
     def main(self):
         self._app = qw.QApplication(sys.argv)
-        self._win = BaseGUI(self, rendererPath='renderer/planeAnimator.py')
+        self._win = BaseGUI(self, rendererPath='renderer/visTac.py')
         if not self.display_proc:
             self.warning("[{}] Undefined display process name".format(self.name))
         else:

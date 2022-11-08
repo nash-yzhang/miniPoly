@@ -144,16 +144,16 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
 
     def restartDisplay(self):
         self.suspendDisplay()
-        while self._processHandler.get_state(self._displayProcName, 'status') == 0:
+        while self._processHandler.get_state_from(self._displayProcName, 'status') == 0:
             self._processHandler.set_state(self._displayProcName, 'status', 1)
         self.reload()
         self._processHandler.info("Restarted [{}] process".format(self._displayProcName))
 
     def suspendDisplay(self):
-        while self._processHandler.get_state(self._displayProcName, 'status') > 0:
+        while self._processHandler.get_state_from(self._displayProcName, 'status') > 0:
             self._processHandler.set_state(self._displayProcName, 'status', 0)
         self._processHandler.info("Suspended [{}] process".format(self._displayProcName))
 
     def shutdown(self):
-        while self._processHandler.get_state(self._displayProcName, "status") != -1:
+        while self._processHandler.get_state_from(self._displayProcName, "status") != -1:
             self._processHandler.set_state(self._displayProcName, "status", -11)

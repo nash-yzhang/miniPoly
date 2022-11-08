@@ -10,17 +10,21 @@ from PyQt5.Qt import Qt as qt
 from utils import load_shaderfile
 import pyfirmata as fmt
 
+from multiprocessing import Value, Queue
+
 class Widget(qw.QWidget):
     def __init__(self,mainW,arduino_port="COM3"):
         super().__init__()
         self._mainWindow = mainW
         self._processHandler = mainW._processHandler
-        self._arduino_board = fmt.Arduino(arduino_port)
+        self._arduino_port = arduino_port
+        self._processHandler.create_shared_buffer('u_barpos',Value('i',0))
         self.init_arduino()
         self.init_gui()
 
     def init_arduino(self):
         try:
+            self._arduino_board = fmt.Arduino(self._arduino_port)
             self._arduino_iterator = fmt.util.Iterator(self._arduino_board)
             self._arduino_iterator.start()
             self._servo_pin_number = 9
@@ -92,10 +96,10 @@ class Widget(qw.QWidget):
             self.rpc_reload()
 
     def change_servo_ori(self,val):
-        try:
-            self._servo_pin.write(val)
-        except Exception as e:
-            self._processHandler.error(traceback.format_exc())
+        # try:
+        #     self._servo_pin.write(val)
+        # except Exception as e:
+        #     self._processHandler.error(traceback.format_exc())
 
         self._processHandler.send(self._mainWindow._displayProcName,'uniform',{'u_barpos':val/180})
 
