@@ -39,7 +39,13 @@ class GLDisplay(glCanvas, AbstractMinionMixin):
             self._renderer.reload(msg)
 
     def on_timer(self, event):
-        if self.timer.elapsed - self._setTime > 1:
+        if self._processHandler.get_state() == -1:
+            self._rmtShutdown = True
+            self.on_close()
+        elif self._processHandler.get_state() == 0:
+            self.on_close()
+
+        if self.timer.elapsed - self._setTime > 1/60:
             self._setTime = np.floor(self.timer.elapsed)
             self.get(self.controllerProcName)
             # msg,_ = self._processHandler.get(self.controllerProcName)
@@ -55,11 +61,6 @@ class GLDisplay(glCanvas, AbstractMinionMixin):
             #     elif msg[0] == 'rendering_shader':
             #         self._renderer.reload(msg[1])
         self.update()
-        if self._processHandler.get_state() == -1:
-            self._rmtShutdown = True
-            self.on_close()
-        elif self._processHandler.get_state() == 0:
-            self.on_close()
 
     def on_close(self):
         if not self._rmtShutdown:

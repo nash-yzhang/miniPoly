@@ -1,4 +1,4 @@
-import PyQt5.Qt
+# import PyQt5.Qt
 import traceback, sys
 from vispy import gloo
 import os
@@ -9,12 +9,17 @@ import PyQt5.QtCore as qc
 from PyQt5.Qt import Qt as qt
 from utils import load_shaderfile
 import pyfirmata as fmt
+from time import sleep
 
 from multiprocessing import Value, Queue
 
 class Widget(qw.QWidget):
     def __init__(self,mainW,arduino_port="COM3"):
         super().__init__()
+        self.timer = qc.QTimer()
+        self.timer.setInterval(10)
+        self.timer.timeout.connect(self.update)
+        self.timer.start()
         self._mainWindow = mainW
         self._processHandler = mainW._processHandler
         self._arduino_port = arduino_port
@@ -92,16 +97,12 @@ class Widget(qw.QWidget):
     def refresh(self, checked):
         if self.FSname is not None:
             self._fs = load_shaderfile(self.FSname)
-            # self._mainWindow._renderer.reload(self._fs)
             self.rpc_reload()
 
     def change_servo_ori(self,val):
-        # try:
-        #     self._servo_pin.write(val)
-        # except Exception as e:
-        #     self._processHandler.error(traceback.format_exc())
+        self._processHandler.send(self._mainWindow._displayProcName,'uniform',{'u_barpos':val/90-1})
+        self._servo_pin.write(val)
 
-        self._processHandler.send(self._mainWindow._displayProcName,'uniform',{'u_barpos':val/180})
 
     def close(self):
         self._arduino_board.exit()

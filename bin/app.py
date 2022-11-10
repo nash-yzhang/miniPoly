@@ -36,7 +36,7 @@ class GUIModule(BaseMinion):
 
     def shutdown(self):
         for tgt in self.target.keys():
-            while self.get_state(tgt, "status") != -1:
+            while self.get_state_from(tgt, "status") != -1:
                 self.set_state(tgt, "status", -1)
         self.set_state(self.name, "status", -1)
 
