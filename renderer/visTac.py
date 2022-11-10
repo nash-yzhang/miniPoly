@@ -18,7 +18,7 @@ class Widget(qw.QWidget):
         self._mainWindow = mainW
         self._processHandler = mainW._processHandler
         self._arduino_port = arduino_port
-        self._processHandler.create_shared_buffer('u_barpos',Value('i',0))
+        self._processHandler.create_shared_state(self._processHandler.name,'u_barpos', 0.)
         self.init_arduino()
         self.init_gui()
 
@@ -101,7 +101,8 @@ class Widget(qw.QWidget):
         # except Exception as e:
         #     self._processHandler.error(traceback.format_exc())
 
-        self._processHandler.send(self._mainWindow._displayProcName,'uniform',{'u_barpos':val/180})
+        self._processHandler.set_state(self._processHandler.name,'u_barpos',(val/90)-1)
+        # self._processHandler.send(self._mainWindow._displayProcName,'uniform',{'u_barpos':(val/90)-1})
 
     def close(self):
         self._arduino_board.exit()
@@ -145,18 +146,19 @@ class Renderer(renderer):
         self.program['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)#/2.
         self.program['u_time'] = 0
         self.program['u_alpha'] = np.float32(1)
-        self.program['u_barpos'] = 0
+        self.program['u_barpos'] = self.canvas._processHandler.get_state_from(self.canvas._controllerProcName,'u_barpos')
 
         gloo.set_state("translucent")
         self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
 
     def on_draw(self,event):
-        msg_type,msg = self.canvas._processHandler.get(self.canvas._controllerProcName)
-        if msg is not None:
-            if msg_type == 'uniform':
-                for k,v in msg.items():
-                    self.program[k] = v
+        # msg_type,msg = self.canvas._processHandler.get(self.canvas._controllerProcName)
+        # if msg is not None:
+        #     if msg_type == 'uniform':
+        #         for k,v in msg.items():
+        #             self.program[k] = v
         gloo.clear('white')
         u_time = self.canvas.timer.elapsed
         self.program['u_time'] = u_time
+        self.program['u_barpos'] = self.canvas._processHandler.get_state_from(self.canvas._controllerProcName,'u_barpos')
         self.program.draw('triangle_strip')

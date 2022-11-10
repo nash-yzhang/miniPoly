@@ -1,5 +1,6 @@
 import multiprocessing as mp
-from multiprocessing import Value, Queue
+import numpy as np
+from multiprocessing import Value, Queue, shared_memory
 import warnings
 from time import sleep, time
 import logging
@@ -53,43 +54,34 @@ class BaseMinion:
 
     def __init__(self, name):
         self.name = name
-        self.source = {}  # a dictionary of output channels storing rpc function name-value pair (marshalled) E.g.: {'receiver_minion_1':('terminate',True)}
-        self.target = {}  # a dictionary of inbox for receiving rpc calls
+        self._conn = {}  # a dictionary of in/output channels storing rpc function name-value pair (marshalled) E.g.: {'receiver_minion_1':('terminate',True)}
         self._buffer = {}
+        self._buffer_lookup_table = {}
         self._log_config = None
         self._is_suspended = False
         self.logger = None
+        self.shared_memory = {}
+        self._shared_memory = {}
         self._elapsed = time()
 
-        self.create_shared_buffer('status', Value('i', 0))
 
-    def add_source(self, src):
-        self.source[src.name] = src.target[self.name]
-        self.register_shared_buffer(src, "status")
-        # self.share_state_handle(src.name, "status", src.get_state_handle())
+    def add_connection(self, conn):
+        if conn._conn.get(self.name) is not None:
+            self._conn[conn.name] = conn._conn[self.name]
+        else:
+            self._conn[conn.name] = Queue()
+            conn.add_connection(self)
 
-    def del_source(self, src_name):
+    def del_connection(self, src_name):
         for key in list(self._buffer.keys()):
             if src_name in key:
                 self._buffer.pop(key, 'None')
-        self.source[src_name].close()
-        self.source.pop(src_name, 'None')
-
-    def add_target(self, tgt):
-        self.target[tgt.name] = Queue()
-        tgt.add_source(self)
-        self.register_shared_buffer(tgt,"status")
-
-    def del_target(self, tgt_name):
-        for key in list(self._buffer.keys()):
-            if tgt_name in key:
-                self._buffer.pop(key, 'None')
-        self.target[tgt_name].close()
-        self.target.pop(tgt_name, 'None')
+        self._conn[src_name].close()
+        self._conn.pop(src_name, 'None')
 
     def send(self, tgt_name, msg_val, msg_type=None):
         if self.status > 0:
-            chn = self.target[tgt_name]
+            chn = self._conn[tgt_name]
             if chn is None:
                 self.log(logging.ERROR, "Send failed: Queue [{}] does not exist".format(tgt_name))
                 return None
@@ -99,11 +91,11 @@ class BaseMinion:
                 self.log(logging.WARNING, " Send failed: the queue for '{}' is fulled".format(tgt_name))
         else:
             self.log(logging.ERROR, "Send failed: '{}' has been terminated".format(tgt_name))
-            self.del_target(tgt_name)
+            self.del_connection(tgt_name)
             self.log(logging.INFO, "Removed invalid target {}".format(tgt_name))
 
     def get(self, src_name):
-        chn = self.source[src_name]
+        chn = self._conn[src_name]
         if chn is None:
             self.log(logging.ERROR, "Receive failed: Queue [{}] does not exist".format(src_name))
             return None
@@ -116,7 +108,7 @@ class BaseMinion:
         else:
             self.log(logging.ERROR, "Receive failed: '{}' has been terminated".format(src_name))
             received = None
-            self.del_source(src_name)
+            self.del_connection(src_name)
             self.log(logging.INFO, "Removed invalid source [{}]".format(src_name))
 
         if received is not None:
@@ -126,24 +118,14 @@ class BaseMinion:
         else:
             return None, None
 
-    # def add_buffer(self, buffer_name, buffer_handle):
-    #     self.state['{}_B_{}'.format(self.name, buffer_name)] = buffer_handle
-    #
-    # def get_buffer_from(self,minion_name,buffer_name):
-    #     buffer_value = self.state.get('{}_BUF{}'.format(minion_name,buffer_name))
-    #     if buffer_value is None:
-    #         buffer_source_minion = self.source[minion_name]
-    #         self.share_state_handle(minion_name,f"BUF{buffer_name}",buffer_source_minion.get_state_handle(category=f"BUF{buffer_name}"))
-    #         buffer_value = self.state.get('{}_BUF{}'.format(minion_name,buffer_name))
-    #     return buffer_value
 
     @property
     def status(self):
-        return self._buffer['{}_status'.format(self.name)].value
+        return self._buffer['{}_status'.format(self.name)]
 
     @status.setter
     def status(self, value):
-        self._buffer['{}_status'.format(self.name)].value = value
+        self._buffer['{}_status'.format(self.name)] = value
 
     @property
     def status_handle(self):
@@ -153,23 +135,74 @@ class BaseMinion:
     def status_handle(self, value):
         self.log(logging.ERROR, "Status handle is a read-only property that cannot be changed")
 
-    def create_shared_buffer(self, buffer_name=None, buffer_handle=None):
-        self._buffer['{}_{}'.format(self.name, buffer_name)] = buffer_handle
-    def register_shared_buffer(self, minion, buffer_name):
-        if minion.name in self.source.keys() or minion.name in self.target.keys():
-            pass
-        else:
-            self.log(logging.WARNING, "Access Denied in registering shared buffer: Minion {} is neither a source nor a target".format(minion.name))
-        buffer_handle = minion.get_buffer(buffer_name)
-        if buffer_handle is None:
-            self.log(logging.ERROR, "Unregistered buffer name {} in minion {}".format(buffer_name, minion.name))
-            return None
-        self._buffer['{}_{}'.format(minion.name, buffer_name)] = buffer_handle
+    def link_shared_memory(self, buffer_name, shape, dtype):
+        self._shared_memory[buffer_name] = shared_memory.SharedMemory(name=buffer_name)
+        self.shared_memory.update({buffer_name:np.ndarray(shape, dtype=dtype, buffer=self._shared_memory[buffer_name].buf)})
+        self.shared_memory[buffer_name][:] = np.nan
+        self._buffer['{}_{}'.format(buffer_name, 'status')] = self.shared_memory[buffer_name][0]
 
-    def get_buffer(self, buffer_name):
+    def create_shared_state(self, minion_name:str, state_name:str, state_val=None):
+        '''
+        Create a shared state for a minion with registered shared memory
+        :param minion_name: registered minion name
+        :param state_name: shared state name
+        :param state_val: (Optional) shared state value
+        :return:
+        '''
+        try:
+            buffer_loc = next(i for i,v in enumerate(self.shared_memory[minion_name]) if np.isnan(v))
+        except StopIteration:
+            self.log("No empty space on shared memory: [{}] for storing new state".format(minion_name))
+            return None
+        self._buffer['{}_{}'.format(self.name, state_name)] = self.shared_memory[self.name][buffer_loc]
+        self._buffer_lookup_table['{}_{}'.format(self.name, state_name)] = buffer_loc
+        if state_val is not None:
+            self._buffer['{}_{}'.format(self.name, state_name)] = state_val
+
+    # def create_shared_state(self, minion_name, buffer_name='all'):
+    #     if minion_name not in self._conn.keys():
+    #         self.log(logging.WARNING, "Registering buffer from an UNKNOWN minion {}".format(minion_name))
+    #     # minion_shared_memory = minion.shared_memory[minion.name]
+    #     # new_instance_buffer = shared_memory.SharedMemory(name=minion.name)
+    #     # memory_handle = np.ndarray(minion_shared_memory.shape, dtype=minion_shared_memory.dtype, buffer=new_instance_buffer.buf)
+    #     # self.shared_memory.update({minion.name: memory_handle})
+    #
+    #     if type(buffer_name) is str:
+    #         if buffer_name == 'all':
+    #             buffer_name_list = list(minion._buffer.keys())
+    #         else:
+    #             buffer_name_list = ['{}_{}'.format(minion.name, buffer_name)]
+    #     elif type(buffer_name) is list:
+    #         buffer_name_list = ['{}_{}'.format(minion.name,i) for i in buffer_name]
+    #     else:
+    #         self.log(logging.ERROR, "Invalid type of buffer name")
+    #
+    #     for iter_buffer_name in buffer_name_list:
+    #         buffer_loc = minion._buffer_lookup_table[iter_buffer_name]
+    #         if buffer_loc is None:
+    #             self.log(logging.ERROR, "Unregistered buffer name {} in minion {}".format(buffer_name, minion.name))
+    #         else:
+    #             self._buffer[iter_buffer_name] = self.shared_memory[minion.name][buffer_loc]
+    #             self._buffer_lookup_table[iter_buffer_name] = buffer_loc
+
+    # def remote_register_shared_buffer(self,minion_name,buffer_name,timeout=1):
+    #     if minion_name in self._conn.keys():
+    #         self.send(minion_name, buffer_name, msg_type='request_buffer_handle')
+    #         sent_time = time()
+    #         while time()-sent_time < timeout:
+    #             self.get(minion_name)
+    #     else:
+    #         self.log(logging.WARNING, "Access Denied in registering shared buffer: Minion {} is neither a source nor a target".format(minion.name))
+    #     buffer_handle = minion.get_buffer(buffer_name)
+    #     if buffer_handle is None:
+    #         self.log(logging.ERROR, "Unregistered buffer name {} in minion {}".format(buffer_name, minion.name))
+    #         return None
+    #     self._buffer['{}_{}'.format(minion.name, buffer_name)] = buffer_handle
+
+    def get_state(self, buffer_name):
         return self.get_buffer_from(self.name, buffer_name)
 
-    def get_buffer_from(self, minion_name, buffer_name):
+    def get_state_from(self, minion_name, buffer_name):
         i_buffer = self._buffer.get('{}_{}'.format(minion_name, buffer_name))
         if i_buffer is None:
             self.log(logging.ERROR, "Unregistered buffer name {} in minion {}".format(buffer_name, minion_name))
@@ -177,18 +210,12 @@ class BaseMinion:
         else:
             return i_buffer
 
-    def get_state(self, buffer_name):
-        return self.get_buffer(buffer_name).value
-
-    def get_state_from(self, minion_name, buffer_name):
-        return self.get_buffer_from(minion_name, buffer_name).value
-
         # if minion_name is None:
         #     minion_name = self.name
         # return self._buffer['{}_{}'.format(minion_name, category)].value
 
     def set_state(self, minion_name, category, value):
-        self._buffer['{}_{}'.format(minion_name, category)].value = value
+        self._buffer['{}_{}'.format(minion_name, category)] = value
 
     # def get_state_handle(self, minion_name=None, category="status"):
     #     '''
@@ -256,10 +283,10 @@ class BaseMinion:
         if self.logger is not None:
             self.log(logging.INFO, self.name + " is off")
             self.set_state(self.name, "status", -2)
-        for i in list(self.source.keys()):
-            self.del_source(i)
-        for i in list(self.target.keys()):
-            self.del_target(i)
+        for i in list(self._conn.keys()):
+            self.del_connection(i)
+        for i in list(self._conn.keys()):
+            self.del_connection(i)
         if self.Process._popen:
             self.Process.join()
 
@@ -361,7 +388,7 @@ class LoggerMinion(BaseMinion, QueueListener):
             self.debug(f"Unknown logging level: {level}")
 
     def register_reporter(self, reporter):
-        self.register_shared_buffer(reporter, "status")
+        self.create_shared_state(reporter.name, "status")
         self.reporter.append(reporter.name)
 
     def poll_reporter(self):
