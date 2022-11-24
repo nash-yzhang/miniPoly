@@ -1,5 +1,8 @@
 import multiprocessing as mp
+import traceback
+
 import numpy as np
+import json
 from multiprocessing import Value, Queue, shared_memory
 import warnings
 from time import sleep, time
@@ -33,9 +36,191 @@ LOG_LVL_LOOKUP_TABLE = {
 COMM_WAITING_TIME = 1e-3
 
 
+class SharedBuffer:
+    '''
+    Wrapper for multiprocessing.shared_memory
+    '''
+    _CLASS_NAME = 'SharedBuffer'
+    _MAX_BUFFER_SIZE = 2 ** 32  # Maximum shared memory: 4 GB
+    _READ_OFFSET = 30  # The first 30 bytes represents the valid size of the shared buffer
+
+    def __init__(self, name, data=None, size=None, create=True, force_write=False):
+        self._size = None
+        self._name = name
+        self._valid_size = 0  # The actual size with data loaded
+
+        byte_data = None
+
+        if create:
+            if size is None:
+                if data is None:
+                    raise ValueError("'size' must be a positive number different from zero")
+                else:
+                    byte_data = json.dumps(data).encode('utf-8')
+                    nbytes_data = len(byte_data)
+                    self._size = min(nbytes_data * 2, self._MAX_BUFFER_SIZE)
+            else:
+                if size > self._MAX_BUFFER_SIZE:
+                    raise ValueError(
+                        f'[{self._CLASS_NAME} - {self._name}] Input size ({size // (2 ** 30)}GB) is larger than '
+                        f'the maximum size (4GB) supported.')
+                if data is None:
+                    self._size = size
+                else:
+                    byte_data = json.dumps(data).encode('utf-8')
+                    nbytes_data = len(byte_data)
+                    if size < nbytes_data:
+                        raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Input memory size ({size}) is smaller than the '
+                                         f'actual data size ({nbytes_data}).')
+                    else:
+                        self._size = min(nbytes_data * 2, self._MAX_BUFFER_SIZE)
+
+            self._size += self._READ_OFFSET
+            self._shared_memory = shared_memory.SharedMemory(create=True, name=self._name, size=self._size)
+            try:
+                if byte_data is not None:
+                    self.write(data)
+            except Exception:
+                print(traceback.format_exc())
+                self.close()
+                raise Exception(f'[{self._CLASS_NAME} - {self._name}] Unknown error in writing data')
+        else:
+            self._shared_memory = shared_memory.SharedMemory(name=self._name)
+            self._size = self._shared_memory.size
+            try:
+                identity_string = self._read(-self._READ_OFFSET,self._READ_OFFSET).split('~')
+                if identity_string[0] != self._CLASS_NAME:
+                    raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
+                else:
+                    self._valid_size = int(identity_string[-1])
+            except Exception:
+                print(traceback.format_exc())
+                self.close()
+                raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
+
+            try:
+                if force_write and data is not None:
+                    self.write(data)
+            except Exception:
+                print(traceback.format_exc())
+                self.close()
+                raise Exception(f'[{self._CLASS_NAME} - {self._name}] Unknown error in writing data')
+
+
+    def find(self, data, k=1, offset=0, length=None):
+        '''
+        :param data: picklable data that can be converted to bytes with json.dumps
+        :param k: return the first k occurrence of the data
+        :return: offsets: list of the occurrence positions
+        '''
+        iter = 0
+        byte_data = json.dumps(data).encode('utf-8')
+        if length is None:
+            length = self.valid_size - offset
+        bytes_to_search = self._read(offset=offset, length=length, mode='bytes')
+        offset_list = []
+        offset_loc = offset
+
+        while iter < k:
+            loc = bytes_to_search.find(byte_data)
+            if loc > 0:
+                offset_list.append(loc+offset_loc)
+                offset_loc = loc+len(byte_data)
+                bytes_to_search = bytes_to_search[(offset_loc-offset):]
+                iter += 1
+            else:
+                break
+
+        return offset_list
+
+    @property
+    def valid_size(self):
+        return self._valid_size
+    @valid_size.setter
+    def valid_size(self,val):
+        self._valid_size = val
+        s_val = str(val)
+        place_holder = '~'*(self._READ_OFFSET-len(self._CLASS_NAME+s_val)-2)
+        data = self._CLASS_NAME + place_holder + s_val
+        byte_data = json.dumps(data).encode('utf-8')
+        self._shared_memory.buf[:self._READ_OFFSET] = byte_data
+
+
+    def read(self):
+        return self._read(0, self.valid_size)
+
+    def _read(self, offset, length, mode='obj'):
+        offset += self._READ_OFFSET
+        _decoded_bytes = bytes(self._shared_memory.buf[offset:(offset + length)])
+        if mode == 'obj':
+            return json.loads(_decoded_bytes.decode('utf-8').split('\x00')[0])
+        elif mode == 'bytes':
+            return _decoded_bytes
+        else:
+            raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Undefined reading mode {mode}')
+
+    def read_bytes(self):
+        return self._read(0, self.valid_size, mode='bytes')
+
+    def write(self, data, mode='overwrite', offset=0):
+        '''
+        :param data: picklable data
+        :param mode: If 'overwrite' (default), the input offset will be ignored.
+                     All contents in the existing memory will be overwritten by the input data;
+                     If 'modify', the bytes in [offset:nbytes(data)] will be changed by data
+
+        :param offset: Only for mode == 'modify'. The start position in the buffer for the set operation
+        :return:
+        '''
+        byte_data = json.dumps(data).encode('utf-8')
+        if mode == 'overwrite':
+            self.clean()
+            self._set(byte_data, offset=0)
+        elif mode == 'modify':
+            self._set(byte_data, offset=offset)
+
+    def clean(self):
+        self._clean(0)
+
+    def _clean(self, offset):
+        self._set(b'\x00' * (self.valid_size - offset), offset=offset)  # delete everything after offset
+        self.valid_size = offset
+
+    def _set(self, byte_data, offset):
+
+        if offset > max(self.valid_size - 1, 0):
+            raise IndexError(
+                f'[{self._CLASS_NAME} - {self._name}] Offset ({offset}) out of range: ({self.valid_size - 1})')  # To make sure all binary contents are continuous and no gap (b'\x00') in between
+
+        if (offset + len(byte_data)) > self._size:
+            raise ValueError(
+                f'[{self._CLASS_NAME} - {self._name}] Data byte end position out of range (Offset: {offset}, Length: {len(byte_data)}). \nCheck if the data size is smaller than the buffer size')
+        else:
+            length = len(byte_data)
+
+        offset += self._READ_OFFSET  # Protect the identity and size info block
+
+        self._shared_memory.buf[offset:(offset + length)] = byte_data
+
+        if offset + length > self.valid_size:
+            self.valid_size = offset + length
+
+    def close(self):
+        self._shared_memory.close()
+        self._shared_memory.unlink()
+
+    def __del__(self):
+        self.close()
+
+
 class BaseMinion:
     @staticmethod
     def innerLoop(hook):
+        '''
+        A dirty way to put BaseMinion as a listener when suspended
+        :param hook: Insert self as a hook for using self logger, main process and shutdown method
+        :return:
+        '''
         STATE = hook.status
         if hook._log_config is not None:
             logging.config.dictConfig(hook._log_config)
@@ -59,11 +244,19 @@ class BaseMinion:
         self._buffer_lookup_table = {}
         self._log_config = None
         self._is_suspended = False
+        self._shared_memory = None
         self.logger = None
         self.shared_memory = {}
         self._shared_memory = {}
         self._elapsed = time()
 
+    # def init_header_buffer(self):
+    #     self._header_buffer = shared_memory.SharedMemory(create=True,name=self.name,size=proto_shared_memory.nbytes)
+
+    def create_shared_memory(self, name, shape, dtype):
+        proto_shared_memory = np.ndarray(shape=shape, dtype=dtype)
+        self._shared_memory = shared_memory.SharedMemory(create=True, name=name, size=proto_shared_memory.nbytes)
+        self._shared_memory_param = (name, shape, dtype)
 
     def add_connection(self, conn):
         if conn._conn.get(self.name) is not None:
@@ -118,7 +311,6 @@ class BaseMinion:
         else:
             return None, None
 
-
     @property
     def status(self):
         return self._buffer['{}_status'.format(self.name)]
@@ -137,11 +329,12 @@ class BaseMinion:
 
     def link_shared_memory(self, buffer_name, shape, dtype):
         self._shared_memory[buffer_name] = shared_memory.SharedMemory(name=buffer_name)
-        self.shared_memory.update({buffer_name:np.ndarray(shape, dtype=dtype, buffer=self._shared_memory[buffer_name].buf)})
+        self.shared_memory.update(
+            {buffer_name: np.ndarray(shape, dtype=dtype, buffer=self._shared_memory[buffer_name].buf)})
         self.shared_memory[buffer_name][:] = np.nan
         self._buffer['{}_{}'.format(buffer_name, 'status')] = self.shared_memory[buffer_name][0]
 
-    def create_shared_state(self, minion_name:str, state_name:str, state_val=None):
+    def create_shared_state(self, minion_name: str, state_name: str, state_val=None):
         '''
         Create a shared state for a minion with registered shared memory
         :param minion_name: registered minion name
@@ -150,7 +343,7 @@ class BaseMinion:
         :return:
         '''
         try:
-            buffer_loc = next(i for i,v in enumerate(self.shared_memory[minion_name]) if np.isnan(v))
+            buffer_loc = next(i for i, v in enumerate(self.shared_memory[minion_name]) if np.isnan(v))
         except StopIteration:
             self.log("No empty space on shared memory: [{}] for storing new state".format(minion_name))
             return None
@@ -392,7 +585,7 @@ class LoggerMinion(BaseMinion, QueueListener):
         self.reporter.append(reporter.name)
 
     def poll_reporter(self):
-        return all([self.get_state_from(i,'status') == -2 for i in self.reporter])
+        return all([self.get_state_from(i, 'status') == -2 for i in self.reporter])
 
     def main(self):
         if not self.hasConfig:

@@ -87,8 +87,10 @@ class GLapp:
 
         self._GUI = GUIModule('GUI')
         self._GUI.link_shared_memory(*self._shared_memory_param['GUI'])
+        self._GUI.link_shared_memory(*self._shared_memory_param['OPENGL'])
         self._GL_canvas = CanvasModule('OPENGL')
         self._GL_canvas.link_shared_memory(*self._shared_memory_param['OPENGL'])
+        self._GL_canvas.link_shared_memory(*self._shared_memory_param['GUI'])
 
         self._GUI.display_proc = self._GL_canvas.name
         self._GL_canvas.controller_proc = self._GUI.name

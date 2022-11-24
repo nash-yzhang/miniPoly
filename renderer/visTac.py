@@ -13,7 +13,7 @@ import pyfirmata as fmt
 from multiprocessing import Value, Queue
 
 class Widget(qw.QWidget):
-    def __init__(self,mainW,arduino_port="COM3"):
+    def __init__(self,mainW,arduino_port="COM4"):
         super().__init__()
         self._mainWindow = mainW
         self._processHandler = mainW._processHandler
@@ -97,7 +97,7 @@ class Widget(qw.QWidget):
 
     def change_servo_ori(self,val):
         # try:
-        #     self._servo_pin.write(val)
+        self._servo_pin.write(val)
         # except Exception as e:
         #     self._processHandler.error(traceback.format_exc())
 
@@ -146,6 +146,7 @@ class Renderer(renderer):
         self.program['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)#/2.
         self.program['u_time'] = 0
         self.program['u_alpha'] = np.float32(1)
+
         self.program['u_barpos'] = self.canvas._processHandler.get_state_from(self.canvas._controllerProcName,'u_barpos')
 
         gloo.set_state("translucent")
