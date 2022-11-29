@@ -70,16 +70,19 @@ class SharedBuffer:
                     byte_data = json.dumps(data).encode('utf-8')
                     nbytes_data = len(byte_data)
                     if size < nbytes_data:
-                        raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Input memory size ({size}) is smaller than the '
-                                         f'actual data size ({nbytes_data}).')
+                        raise ValueError(
+                            f'[{self._CLASS_NAME} - {self._name}] Input memory size ({size}) is smaller than the '
+                            f'actual data size ({nbytes_data}).')
                     else:
-                        self._size = min(nbytes_data * 2, self._MAX_BUFFER_SIZE)
+                        self._size = size
 
             self._size += self._READ_OFFSET
             self._shared_memory = shared_memory.SharedMemory(create=True, name=self._name, size=self._size)
             try:
                 if byte_data is not None:
                     self.write(data)
+                else:
+                    self.valid_size = 0
             except Exception:
                 print(traceback.format_exc())
                 self.close()
@@ -88,7 +91,7 @@ class SharedBuffer:
             self._shared_memory = shared_memory.SharedMemory(name=self._name)
             self._size = self._shared_memory.size
             try:
-                identity_string = self._read(-self._READ_OFFSET,self._READ_OFFSET).split('~')
+                identity_string = self._read(-self._READ_OFFSET, self._READ_OFFSET).split('~')
                 if identity_string[0] != self._CLASS_NAME:
                     raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
                 else:
@@ -101,11 +104,12 @@ class SharedBuffer:
             try:
                 if force_write and data is not None:
                     self.write(data)
+                else:
+                    warnings.warn('No data has been written into the buffer according to the [force_write] option')
             except Exception:
                 print(traceback.format_exc())
                 self.close()
                 raise Exception(f'[{self._CLASS_NAME} - {self._name}] Unknown error in writing data')
-
 
     def find(self, data, k=1, offset=0, length=None):
         '''
@@ -124,9 +128,9 @@ class SharedBuffer:
         while iter < k:
             loc = bytes_to_search.find(byte_data)
             if loc > 0:
-                offset_list.append(loc+offset_loc)
-                offset_loc = loc+len(byte_data)
-                bytes_to_search = bytes_to_search[(offset_loc-offset):]
+                offset_list.append(loc + offset_loc)
+                offset_loc = loc + len(byte_data)
+                bytes_to_search = bytes_to_search[(offset_loc - offset):]
                 iter += 1
             else:
                 break
@@ -134,17 +138,29 @@ class SharedBuffer:
         return offset_list
 
     @property
+    def name(self):
+        return self._name
+
+    @property
+    def size(self):
+        return self._size - self._READ_OFFSET
+
+    @property
     def valid_size(self):
         return self._valid_size
+
     @valid_size.setter
-    def valid_size(self,val):
+    def valid_size(self, val):
         self._valid_size = val
         s_val = str(val)
-        place_holder = '~'*(self._READ_OFFSET-len(self._CLASS_NAME+s_val)-2)
+        place_holder = '~' * (self._READ_OFFSET - len(self._CLASS_NAME + s_val) - 2)
         data = self._CLASS_NAME + place_holder + s_val
         byte_data = json.dumps(data).encode('utf-8')
         self._shared_memory.buf[:self._READ_OFFSET] = byte_data
 
+    @property
+    def free_space(self):
+        return self.size-self.valid_size
 
     def read(self):
         return self._read(0, self.valid_size)
@@ -153,7 +169,11 @@ class SharedBuffer:
         offset += self._READ_OFFSET
         _decoded_bytes = bytes(self._shared_memory.buf[offset:(offset + length)])
         if mode == 'obj':
-            return json.loads(_decoded_bytes.decode('utf-8').split('\x00')[0])
+            _decoded_bytes = _decoded_bytes.decode('utf-8').split('\x00')[0]
+            if _decoded_bytes:
+                return json.loads(_decoded_bytes)
+            else:
+                return _decoded_bytes
         elif mode == 'bytes':
             return _decoded_bytes
         else:
@@ -209,8 +229,120 @@ class SharedBuffer:
         self._shared_memory.close()
         self._shared_memory.unlink()
 
-    def __del__(self):
+    def destroy(self):
+        self.clean()
         self.close()
+
+    def __del__(self):
+        self.destroy()
+
+
+class SharedDict(dict):
+    _BUFFER_PREFIX = 'b*'
+    def __init__(self, linked_memory_name:str, *args, create=False, force_write=False, size=2**14, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._linked_memory = SharedBuffer(linked_memory_name, data=self, create=create, force_write=force_write, size=size)
+
+    def __setitem__(self, key, value):
+        value_check = self.get(key)
+        if type(value_check) == str:
+            if self._BUFFER_PREFIX in value_check.lower():
+                raise Exception(f'The item [{key}] cannot be modified/deleted as it is linked with a buffer.')
+
+        super().__setitem__(key, value)
+        self._linked_memory.write(dict(self))
+
+    def __getitem__(self, key):
+        self._refresh()
+        return super().__getitem__(key)
+
+    def get(self,key):
+        self._refresh()
+        return super().get(key)
+
+    def _refresh(self):
+        self._clear()
+        self._update(self._linked_memory.read())
+
+    def _update(self,items):
+        super().update(items)
+
+    def update(self, D:dict):
+        self._refresh()
+        for k,v in D.items():
+            value_check = self.get(k)
+            if type(value_check) == str:
+                if self._BUFFER_PREFIX in value_check:
+                    D.pop(k)
+
+        self._update(D)
+        self._linked_memory.write(dict(self))
+
+    def __delitem__(self, key):
+        value_check = self.get(key)
+        if type(value_check) == str:
+            if self._BUFFER_PREFIX in value_check.lower():
+                raise Exception(f'The item [{key}] cannot be modified/deleted as it is linked with a buffer.')
+
+        super().__delitem__(key)
+        self._linked_memory.write(dict(self))
+
+    def __repr__(self):
+        self._refresh()
+        return super().__repr__()
+
+    def close(self):
+        self._linked_memory.close()
+
+    def __del__(self):
+        self._linked_memory.destroy()
+        self._clear()
+
+    def _clear(self):
+        super().clear()
+
+    def clear(self, clear_buffer=False):
+        self._clear()
+        if clear_buffer:
+            self._linked_memory.write(dict(self))
+        else:
+            warnings.warn('SharedDict.clear() only clear its local dictionary items but not the linked shared buffer.\n'
+                          'Set clear_buffer to True in order to clear the linked buffer')
+
+    def pop(self, key):
+        self._refresh()
+        val = super().pop(key)
+        self._linked_memory.write(dict(self))
+        return val
+    def popitem(self):
+        self._refresh()
+        val = super().popitem()
+        self._linked_memory.write(dict(self))
+        return val
+
+    def copy(self):
+        self._refresh()
+        return super().copy()
+
+    def items(self):
+        self._refresh()
+        return super().items()
+
+    def keys(self):
+        self._refresh()
+        return super().keys()
+
+    def values(self):
+        self._refresh()
+        return super().values()
+
+    def unlink(self,key):
+        if self._BUFFER_PREFIX in key:
+            super().__delitem__(key)
+            self._linked_memory.write(dict(self))
+            print(f'The link to the buffer [{key}] has been closed')
+        else:
+            raise Exception(f'The buffer [{key}] cannot be found.')
 
 
 class BaseMinion:
@@ -237,6 +369,8 @@ class BaseMinion:
             STATE = hook.status
         hook._shutdown()
 
+    _INDEX_SHARED_BUFFER_SIZE = 2 ** 16  # The size allocated for storing small shared values/array, each write takes <2 ms
+
     def __init__(self, name):
         self.name = name
         self._conn = {}  # a dictionary of in/output channels storing rpc function name-value pair (marshalled) E.g.: {'receiver_minion_1':('terminate',True)}
@@ -244,19 +378,31 @@ class BaseMinion:
         self._buffer_lookup_table = {}
         self._log_config = None
         self._is_suspended = False
-        self._shared_memory = None
         self.logger = None
-        self.shared_memory = {}
-        self._shared_memory = {}
         self._elapsed = time()
 
-    # def init_header_buffer(self):
-    #     self._header_buffer = shared_memory.SharedMemory(create=True,name=self.name,size=proto_shared_memory.nbytes)
+        # The _shared_buffer is a dictionary that contains the shared buffer which will be dynamically created and
+        # destroyed. The indices of all shared memories stored in this dictionary will be saved in a dictionary
+        # called _shared_buffer_index_dict, whose content will be updated into the _shared_buffer.
+        self._shared_buffer = SharedBuffer(create=True, name=self.name, size=self._INDEX_SHARED_BUFFER_SIZE)
+        self._shared_buffer_index_dict = SharedDict(self._shared_buffer['index'])
+        self.shared_buffer_index['name'] = self.name
+        self.status = 1
 
-    def create_shared_memory(self, name, shape, dtype):
-        proto_shared_memory = np.ndarray(shape=shape, dtype=dtype)
-        self._shared_memory = shared_memory.SharedMemory(create=True, name=name, size=proto_shared_memory.nbytes)
-        self._shared_memory_param = (name, shape, dtype)
+    @property
+    def shared_buffer_index(self):
+        self._shared_buffer_index_dict.update(self._shared_buffer_index_dict._linked_memory.read())
+        return self._shared_buffer_index_dict
+
+    def add_shared_attribute(self,name,value):
+        self.shared_buffer_index[name] = value
+
+    def del_shared_attribute(self,name):
+        self.shared_buffer_index.__delitem__(name)
+
+    def create_shared_buffer(self, name, shape, dtype):
+        proto_shared_buffer = np.ndarray(shape=shape, dtype=dtype)
+        self._shared_buffer_param = (name, shape, dtype)
 
     def add_connection(self, conn):
         if conn._conn.get(self.name) is not None:
@@ -313,24 +459,16 @@ class BaseMinion:
 
     @property
     def status(self):
-        return self._buffer['{}_status'.format(self.name)]
+        return self.shared_buffer_index['status']
 
     @status.setter
     def status(self, value):
-        self._buffer['{}_status'.format(self.name)] = value
-
-    @property
-    def status_handle(self):
-        return self._buffer['{}_status'.format(self.name)]
-
-    @status_handle.setter
-    def status_handle(self, value):
-        self.log(logging.ERROR, "Status handle is a read-only property that cannot be changed")
+        self.shared_buffer_index['status'] = value
 
     def link_shared_memory(self, buffer_name, shape, dtype):
-        self._shared_memory[buffer_name] = shared_memory.SharedMemory(name=buffer_name)
+        self._shared_buffer[buffer_name] = shared_memory.SharedMemory(name=buffer_name)
         self.shared_memory.update(
-            {buffer_name: np.ndarray(shape, dtype=dtype, buffer=self._shared_memory[buffer_name].buf)})
+            {buffer_name: np.ndarray(shape, dtype=dtype, buffer=self._shared_buffer[buffer_name].buf)})
         self.shared_memory[buffer_name][:] = np.nan
         self._buffer['{}_{}'.format(buffer_name, 'status')] = self.shared_memory[buffer_name][0]
 
