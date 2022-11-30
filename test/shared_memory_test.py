@@ -43,9 +43,9 @@ print(a.b['message'])
 print(a.b['last_message'])
 #%%
 # a.b['asldf'] = '1231'
-a.b.update({'asdfasdfas':1})
+a.b.update({'asdfasdfas': 1})
 #%%
-a.b.update({'asl':'k','message':123123123})
+a.b.update({'asl': 'k', 'message': 123123123})
 #%%
 a.b.close()
 
