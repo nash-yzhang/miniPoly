@@ -4,21 +4,27 @@ from time import sleep,time
 class Victim(mi.BaseMinion):
     def main(self):
         print(f'I am {self.name}, I am ALIVE!')
-        sleep(0.2)
+        sleep(0.5)
 
 class Killer(mi.BaseMinion):
     def main(self):
-        alived = len(self._linked_minion.keys())
-        for victim in self._linked_minion.keys():
-            victim_status = self.get_state_from(victim,'status')
-            if victim_status > 0:
-                print(f'Killing {victim}...')
-                self.set_state_to(victim,'status',-2)
-            else:
-                alived -= 1
-        if alived <= 0:
-            self.shutdown()
-        sleep(0.01)
+        if (time()-self._elapsed) > 3:
+            victums = [i for i in self._linked_minion.keys()]
+            alived = len(victums)
+            for victim in victums:
+                victim_status = self.get_state_from(victim,'status')
+                if not victim_status:
+                    victim_status = 0
+                if victim_status > 0:
+                    print(f'Killing {victim}...')
+                    self.set_state_to(victim,'status',-2)
+                else:
+                    alived -= 1
+            if alived <= 0:
+                self.shutdown()
+            sleep(0.01)
+        else:
+            pass
 
 if __name__ == '__main__':
     v1 = Victim('Victim 1')
@@ -28,5 +34,5 @@ if __name__ == '__main__':
     v2.connect(k1)
     v1.run()
     v2.run()
-    sleep(3)
     k1.run()
+    1

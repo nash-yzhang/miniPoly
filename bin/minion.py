@@ -11,7 +11,6 @@ from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
 from logging.handlers import QueueListener
 from copy import deepcopy
 
-
 DEFAULT_LOGGING_CONFIG = {
     'version': 1,
     'disable_existing_loggers': True,
@@ -49,6 +48,7 @@ class SharedBuffer:
         self._size = None
         self._name = name
         self._valid_size = 0  # The actual size with data loaded
+        self._lock = 0  # Non-negative integer
 
         byte_data = None
 
@@ -173,18 +173,25 @@ class SharedBuffer:
         return self._read(0, self.valid_size)
 
     def _read(self, offset, length, mode='obj'):
-        offset += self._READ_OFFSET
-        _decoded_bytes = bytes(self._shared_memory.buf[offset:(offset + length)])
-        if mode == 'obj':
-            _decoded_bytes = _decoded_bytes.decode('utf-8').split('\x00')[0]
-            if _decoded_bytes:
-                return json.loads(_decoded_bytes)
-            else:
+        if self.request_lock():
+            offset += self._READ_OFFSET
+            _decoded_bytes = bytes(self._shared_memory.buf[offset:(offset + length)])
+            if mode == 'obj':
+                _decoded_bytes = _decoded_bytes.decode('utf-8').split('\x00')[0]
+                if _decoded_bytes:
+                    self._mem_release()
+                    return json.loads(_decoded_bytes)
+                else:
+                    self._mem_release()
+                    return _decoded_bytes
+            elif mode == 'bytes':
+                self._mem_release()
                 return _decoded_bytes
-        elif mode == 'bytes':
-            return _decoded_bytes
+            else:
+                self._mem_release()
+                raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Undefined reading mode {mode}')
         else:
-            raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Undefined reading mode {mode}')
+            raise TimeoutError(f'[{self._CLASS_NAME} - {self._name}]: Cannot get the read lock')
 
     def read_bytes(self):
         return self._read(0, self.valid_size, mode='bytes')
@@ -213,24 +220,49 @@ class SharedBuffer:
         self._set(b'\x00' * (self.valid_size - offset), offset=offset)  # delete everything after offset
         self.valid_size = offset
 
+    def _mem_lock(self):
+        if self.valid_size > -1:
+            self._lock = self.valid_size * 1  # Make sure the value is copied
+            self.valid_size = -1
+
+    def _mem_release(self):
+        self.valid_size = self._lock * 1  # Make sure the value is copied
+        self._lock = 0
+
+    def request_lock(self, timeout: int = 10000):
+        itt = 0
+        while itt < timeout:
+            self._mem_lock()
+            itt += 1
+            if self._lock > -1:
+                break
+
+        return self._lock > -1
+
     def _set(self, byte_data, offset):
+        if self.request_lock():
+            if offset > max(self._lock - 1, 0):
+                self._mem_release()
+                raise IndexError(
+                    f'[{self._CLASS_NAME} - {self._name}] Offset ({offset}) out of range: ({self._lock - 1})')  # To make sure all binary contents are continuous and no gap (b'\x00') in between
 
-        if offset > max(self.valid_size - 1, 0):
-            raise IndexError(
-                f'[{self._CLASS_NAME} - {self._name}] Offset ({offset}) out of range: ({self.valid_size - 1})')  # To make sure all binary contents are continuous and no gap (b'\x00') in between
+            if (offset + len(byte_data)) > self._size:
+                self._mem_release()
+                raise ValueError(
+                    f'[{self._CLASS_NAME} - {self._name}] Data byte end position out of range (Offset: {offset}, Length: {len(byte_data)}). \nCheck if the data size is smaller than the buffer size')
+            else:
+                length = len(byte_data)
 
-        if (offset + len(byte_data)) > self._size:
-            raise ValueError(
-                f'[{self._CLASS_NAME} - {self._name}] Data byte end position out of range (Offset: {offset}, Length: {len(byte_data)}). \nCheck if the data size is smaller than the buffer size')
+            offset += self._READ_OFFSET  # Protect the identity and size info block
+
+            self._shared_memory.buf[offset:(offset + length)] = byte_data
+
+            if offset + length > self._lock:
+                self._lock = offset + length
+
+            self._mem_release()
         else:
-            length = len(byte_data)
-
-        offset += self._READ_OFFSET  # Protect the identity and size info block
-
-        self._shared_memory.buf[offset:(offset + length)] = byte_data
-
-        if offset + length > self.valid_size:
-            self.valid_size = offset + length
+            raise TimeoutError(f'[{self._CLASS_NAME} - {self._name}]: Cannot get the write lock')
 
     def close(self):
         self._shared_memory.close()
@@ -253,7 +285,7 @@ class SharedBuffer:
             tmp_buffer = SharedBuffer(self.name, create=False)
             tmp_buffer.close()
             return True
-        except TypeError:
+        except FileNotFoundError:
             return False
 
 
@@ -262,13 +294,12 @@ class SharedDict(dict):
 
     def __init__(self, linked_memory_name: str, *args, create=False, force_write=False, size=2 ** 14, **kwargs):
         super().__init__(*args, **kwargs)
-        self._depiklify_dict = {"name":linked_memory_name,
-                               "data":dict(self),
-                               "create":create,
-                               "force_write":force_write,
-                               "size":size}
-        self._linked_SharedBuffer = SharedBuffer(**self._depiklify_dict)
-        self._picklified = False
+        self._init_param = {"name": linked_memory_name,
+                            "data": dict(self),
+                            "create": create,
+                            "force_write": force_write,
+                            "size": size}
+        self._linked_SharedBuffer = SharedBuffer(**self._init_param)
         self.is_alive = True
 
     def __setitem__(self, key, value):
@@ -278,8 +309,6 @@ class SharedDict(dict):
 
         super().__setitem__(key, value)
         try:
-            if self._picklified:
-                self.depiklify()
             self._linked_SharedBuffer.write(dict(self))
         except Exception:
             print(traceback.format_exc())
@@ -313,8 +342,6 @@ class SharedDict(dict):
     def _refresh(self):
         self._clear()
         try:
-            if self._picklified:
-                self.depiklify()
             self._update(self._linked_SharedBuffer.read())
         except:
             print(traceback.format_exc())
@@ -340,8 +367,6 @@ class SharedDict(dict):
     def clear(self, clear_buffer=False):
         self._clear()
         if clear_buffer:
-            if self._picklified:
-                self.depiklify()
             self._linked_SharedBuffer.write(dict(self))
         else:
             warnings.warn('SharedDict.clear() only clear its local dictionary items but not the linked shared buffer.\n'
@@ -396,8 +421,6 @@ class SharedDict(dict):
     def unlink(self, key):
         if self._BUFFER_PREFIX in key:
             super().__delitem__(key)
-            if self._picklified:
-                self.depiklify()
             self._linked_SharedBuffer.write(dict(self))
             print(f'The link to the buffer [{key}] has been closed')
         else:
@@ -405,8 +428,6 @@ class SharedDict(dict):
 
     def close(self):
         try:
-            if self._picklified:
-                self.depiklify()
             self._linked_SharedBuffer.close()
             self.is_alive = False
         except:
@@ -414,31 +435,21 @@ class SharedDict(dict):
 
     def terminate(self):
         try:
-            if self._picklified:
-                self.depiklify()
             self._linked_SharedBuffer.terminate()
             self.is_alive = False
         except:
             print(traceback.format_exc())
 
-    def picklify(self):
-        self._linked_SharedBuffer = self._linked_SharedBuffer.name
-        self._picklified = True
-
-    def depiklify(self):
-        self._linked_SharedBuffer = SharedBuffer(**self._depiklify_dict)
-        self._picklified = False
-
 
 class BaseMinion:
     @staticmethod
-    def innerLoop(hook:'BaseMinion'):
+    def innerLoop(hook: 'BaseMinion'):
         '''
         A dirty way to put BaseMinion as a listener when suspended
         :param hook: Insert self as a hook for using self logger, main process and shutdown method
         :return:
         '''
-        hook._shared_dict = SharedDict(f'{hook.name}_shared_dict')
+        hook.prepare_shared_buffer()
         STATE = hook.status
         if hook._log_config is not None:
             logging.config.dictConfig(hook._log_config)
@@ -447,6 +458,7 @@ class BaseMinion:
             if STATE == 1:
                 if hook._is_suspended:
                     hook._is_suspended = False
+                hook.build_init_conn()
                 hook.main()
             elif STATE == 0:
                 if not hook._is_suspended:
@@ -463,16 +475,15 @@ class BaseMinion:
         self._log_config = None
         self._is_suspended = False
         self.logger = None
+        self._shared_dict = None
         self._elapsed = time()
 
         # The _shared_buffer is a dictionary that contains the shared buffer which will be dynamically created and
         # destroyed. The indices of all shared memories stored in this dictionary will be saved in a dictionary
         # called _shared_buffer_index_dict, whose content will be updated into the _shared_buffer.
-        self._shared_dict = SharedDict(f'{self.name}_shared_dict', create=True, name=self.name, size=self._INDEX_SHARED_BUFFER_SIZE)
-        self._shared_dict['name'] = self.name
-        self._shared_dict['status'] = 0
         self._shared_buffer = {}
         self._linked_minion = {}
+        self.minion_to_link = []
 
     ############# Logging module #############
     def attach_logger(self, logger):
@@ -513,6 +524,22 @@ class BaseMinion:
         self.log(logging.ERROR, msg)
 
     ############# shared buffer/state module #############
+    def prepare_shared_buffer(self):
+        self._shared_dict = SharedDict(f'{self.name}_shared_dict', create=True, name=self.name,
+                                       size=self._INDEX_SHARED_BUFFER_SIZE)
+        self._shared_dict['name'] = self.name
+        self._shared_dict['status'] = 1
+
+    def build_init_conn(self, timeout=1000):
+        linked_minion = [False] * len(self.minion_to_link)
+        t0 = time()
+        while (time() - t0) * 1000 < timeout:
+            for i, m in enumerate(self.minion_to_link):
+                linked_minion[i] = self.link_minion(m)
+            if all(linked_minion):
+                break
+            else:
+                sleep(0.1)
 
     def create_shared_buffer(self, name, data, size):
         # The reference name of any shared buffer should have the structure 'b*{minion_name}_{buffer_name}' The
@@ -526,7 +553,8 @@ class BaseMinion:
         shared_buffer_reference_name = f"b*{shared_buffer_name}"
         if shared_buffer_reference_name not in self._shared_dict.keys():
             try:
-                self._shared_buffer[shared_buffer_name] = SharedBuffer(shared_buffer_name, data, size, create=True)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
+                self._shared_buffer[shared_buffer_name] = SharedBuffer(shared_buffer_name, data, size,
+                                                                       create=True)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
             except Exception:
                 self.log(logging.ERROR, f"Error in creating buffer '{shared_buffer_name}'.\n{traceback.format_exc()}")
             self._shared_dict[shared_buffer_reference_name] = shared_buffer_name
@@ -538,18 +566,28 @@ class BaseMinion:
         shared_buffer_reference_name = f"b*{shared_buffer_name}"
         if shared_buffer_reference_name not in self._shared_dict.keys():
             try:
-                with SharedDict(shared_buffer_name) as tmp_dict:  # Just to test if the SharedDict exist and the name is correct
+                with SharedDict(
+                        shared_buffer_name) as tmp_dict:  # Just to test if the SharedDict exist and the name is correct
                     dict_name = tmp_dict['name']
                     if dict_name == minion_name:
                         self.log(logging.INFO, f"Successfully connected to '{minion_name}.")
                         self._shared_dict[shared_buffer_reference_name] = shared_buffer_name
-                        self._linked_minion[minion_name] = ['shared_dict']  # The name of the shared buffer from this minion
+                        self._linked_minion[minion_name] = [
+                            'shared_dict']  # The name of the shared buffer from this minion
+                        return 1
                     else:
-                        raise ValueError(f'The "name" state of the linked shared buffer {dict_name} is inconsistent with input minion name {minion_name}.')
-            except Exception:
+                        self.log(logging.ERROR,
+                                 f'The "name" state of the linked shared buffer {dict_name} is inconsistent with input minion name {minion_name}.')
+                        return 2
+            except FileNotFoundError:
+                self.log(logging.INFO, f"SharedDict '{minion_name} not found'.")
+                return -1
+            except:
                 self.log(logging.ERROR, f"Error when connecting to '{minion_name}'.\n{traceback.format_exc()}")
+                return 2
         else:
             self.log(logging.INFO, f"Already linked to minion: {minion_name}")
+            return 1
 
     def link_foreign_buffer(self, minion_name, buffer_name):
         shared_buffer_reference_name = f"b*{minion_name}_{buffer_name}"
@@ -568,21 +606,57 @@ class BaseMinion:
         else:
             self.log(logging.INFO, f"Already linked to the foreign buffer {buffer_name} from minion {minion_name}")
 
+    def is_minion_alive(self, minion_name):
+        if minion_name in self._linked_minion.keys():
+            try:
+                with SharedDict(f"{minion_name}_shared_dict", create=False):
+                    pass
+                return True
+            except FileNotFoundError:
+                self.log(logging.INFO, f"Linked minion '{minion_name}' is dead. RIP")
+                self.disconnect(minion_name)
+                return False
+            except Exception:
+                self.log(logging.ERROR, f"Unknown error when checking {minion_name} status.\n{traceback.format_exc()}")
+                return None
+        else:
+            print(f"Minion '{minion_name}' is not connected")
+            return None
+
+    def is_buffer_alive(self, minion_name, buffer_name):
+        if minion_name in self._linked_minion.keys():
+            try:
+                with SharedDict(f"{minion_name}_{buffer_name}", create=False) as tmp_dict:
+                    return tmp_dict.is_alive()
+            except FileNotFoundError:
+                self.log(logging.INFO, f"Linked shared buffer '{minion_name}_{buffer_name}' is closed.")
+                self._shared_dict.pop(f"b*{minion_name}_{buffer_name}")
+                return False
+            except Exception:
+                self.log(logging.ERROR,
+                         f"Unknown error when checking shared buffer '{minion_name}_{buffer_name}' status.\n{traceback.format_exc()}")
+                return None
+        else:
+            print(f"Minion '{minion_name}' is not connected")
+            return None
+
     def get_state_from(self, minion_name, state_name):
         state_val = None  # Return None if exception to avoid error
         if minion_name == self.name:
             if state_name in self._shared_dict.keys():
-                state_val = self._shared_dict[state_name]
+                state_val = self._shared_dict.get(state_name)
             else:
                 self.log(logging.ERROR, f"Unknown state: '{state_name}'")
 
         elif minion_name in self._linked_minion.keys():
-            with SharedDict(f"{minion_name}_shared_dict", create=False) as tmp_dict:
-                if state_name in tmp_dict.keys():
-                    state_val = tmp_dict[state_name]
-                else:
-                    self.log(logging.ERROR, f"Unknown foreign state '{state_name}' in minion '{minion_name}'")
-
+            if self.is_minion_alive(minion_name):
+                with SharedDict(f"{minion_name}_shared_dict", create=False) as tmp_dict:
+                    if state_name in tmp_dict.keys():
+                        state_val = tmp_dict[state_name]
+                    else:
+                        self.log(logging.ERROR, f"Unknown foreign state '{state_name}' in minion '{minion_name}'")
+            else:
+                self.log(logging.ERROR, f"Dead minion '{minion_name}' or errors in connecting to its shared buffer")
         else:
             self.log(logging.ERROR, f"Unknown minion: '{minion_name}'")
 
@@ -597,12 +671,14 @@ class BaseMinion:
                 self.log(logging.ERROR, f"Unknown state: '{state_name}'")
 
         elif minion_name in self._linked_minion.keys():
-            with SharedDict(f"{minion_name}_shared_dict", create=False) as tmp_dict:
-                if state_name in tmp_dict.keys():
-                    tmp_dict[state_name] = val
-                else:
-                    self.log(logging.ERROR, f"Unknown foreign state '{state_name}' in minion '{minion_name}'")
-
+            if self.is_minion_alive(minion_name):
+                with SharedDict(f"{minion_name}_shared_dict", create=False) as tmp_dict:
+                    if state_name in tmp_dict.keys():
+                        tmp_dict[state_name] = val
+                    else:
+                        self.log(logging.ERROR, f"Unknown foreign state '{state_name}' in minion '{minion_name}'")
+            else:
+                self.log(logging.ERROR, f"Dead minion '{minion_name}' or errors in connecting to its shared buffer")
         else:
             self.log(logging.ERROR, f"Unknown minion: '{minion_name}'")
 
@@ -615,8 +691,11 @@ class BaseMinion:
         if shared_buffer_reference_name in self._shared_dict.keys():
             shared_buffer_name = self._shared_dict[shared_buffer_reference_name]
             tmp_buffer: SharedBuffer
-            with SharedDict(shared_buffer_name, create=False) as tmp_buffer:
-                buffer_val = tmp_buffer.read()
+            if self.is_buffer_alive(minion_name, buffer_name):
+                with SharedDict(shared_buffer_name, create=False) as tmp_buffer:
+                    buffer_val = tmp_buffer.read()
+            else:
+                self.log(logging.ERROR, f"Invalid buffer '{minion_name}_{buffer_name}' or errors in connections")
         else:
             self.log(logging.ERROR, f"Unknown buffer: '{shared_buffer_reference_name}'")
 
@@ -641,7 +720,8 @@ class BaseMinion:
         else:
             self._queue[minion.name] = Queue()
             minion.connect(self)
-        self.link_minion(minion.name)
+        # self.link_minion(minion.name)
+        self.minion_to_link.append(minion.name)
 
     def disconnect(self, minion_name):
         k = [i for i in self._shared_dict.keys()]
@@ -700,12 +780,7 @@ class BaseMinion:
         self._shared_dict['status'] = value
 
     def run(self):
-        self.status = 1
-        shared_dict_name = self._shared_dict._linked_SharedBuffer.name
-        with SharedDict(shared_dict_name, create=False):
-            self._shared_dict = None
-            self.Process = mp.Process(target=BaseMinion.innerLoop, args=(self,))
-            self._shared_dict = SharedDict(shared_dict_name, create=False)
+        self.Process = mp.Process(target=BaseMinion.innerLoop, args=(self,))
         self.Process.start()
 
     def main(self):
@@ -723,17 +798,16 @@ class BaseMinion:
         for i in list(self._queue.keys()):
             self.disconnect(i)
 
-        # if self.Process._popen:
-        #     self.Process.join()  # _popen is a protected attribute. Maybe test with .is_alive()?
-
-        if self.Process.is_alive():
-            self.Process.close()
-
         bv: SharedBuffer
         for bk, bv in self._shared_buffer:
             bv.terminate()
         self._shared_dict.terminate()
 
+        # if self.Process._popen:
+        #     self.Process.join()  # _popen is a protected attribute. Maybe test with .is_alive()?
+
+        if self.Process.is_alive():
+            self.Process.close()
 
 
 class MinionLogHandler:
