@@ -3,7 +3,7 @@ from time import sleep,time
 
 class Victim(mi.BaseMinion):
     def main(self):
-        print(f'I am {self.name}, I am ALIVE!')
+        print(f'I am {self.name}, I am ALIVE [{self.status}]!')
         sleep(0.5)
 
 class Killer(mi.BaseMinion):

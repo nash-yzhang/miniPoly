@@ -92,7 +92,7 @@ class SharedBuffer:
             self._shared_memory = shared_memory.SharedMemory(name=self._name)
             self._size = self._shared_memory.size
             try:
-                identity_string = self._read(-self._READ_OFFSET, self._READ_OFFSET).split('~')
+                identity_string = self._read(-self._READ_OFFSET, self._READ_OFFSET, sudo=True).split('~')
                 if identity_string[0] != self._CLASS_NAME:
                     raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
                 else:
@@ -172,23 +172,31 @@ class SharedBuffer:
     def read(self):
         return self._read(0, self.valid_size)
 
-    def _read(self, offset, length, mode='obj'):
-        if self.request_lock():
+    def _read(self, offset, length, mode='obj',sudo=False):
+        if sudo:
+            lock_gained = True
+        else:
+            lock_gained = self.request_lock()
+        if lock_gained:
             offset += self._READ_OFFSET
             _decoded_bytes = bytes(self._shared_memory.buf[offset:(offset + length)])
             if mode == 'obj':
                 _decoded_bytes = _decoded_bytes.decode('utf-8').split('\x00')[0]
                 if _decoded_bytes:
-                    self._mem_release()
+                    if not sudo:
+                        self._mem_release()
                     return json.loads(_decoded_bytes)
                 else:
-                    self._mem_release()
+                    if not sudo:
+                        self._mem_release()
                     return _decoded_bytes
             elif mode == 'bytes':
-                self._mem_release()
+                if not sudo:
+                    self._mem_release()
                 return _decoded_bytes
             else:
-                self._mem_release()
+                if not sudo:
+                    self._mem_release()
                 raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Undefined reading mode {mode}')
         else:
             raise TimeoutError(f'[{self._CLASS_NAME} - {self._name}]: Cannot get the read lock')
@@ -222,7 +230,7 @@ class SharedBuffer:
 
     def _mem_lock(self):
         if self.valid_size > -1:
-            self._lock = self.valid_size * 1  # Make sure the value is copied
+            self._lock = self._valid_size * 1  # Make sure the value is copied
             self.valid_size = -1
 
     def _mem_release(self):
@@ -450,6 +458,7 @@ class BaseMinion:
         :return:
         '''
         hook.prepare_shared_buffer()
+        hook.build_init_conn()
         STATE = hook.status
         if hook._log_config is not None:
             logging.config.dictConfig(hook._log_config)
@@ -458,7 +467,6 @@ class BaseMinion:
             if STATE == 1:
                 if hook._is_suspended:
                     hook._is_suspended = False
-                hook.build_init_conn()
                 hook.main()
             elif STATE == 0:
                 if not hook._is_suspended:
@@ -531,12 +539,12 @@ class BaseMinion:
         self._shared_dict['status'] = 1
 
     def build_init_conn(self, timeout=1000):
-        linked_minion = [False] * len(self.minion_to_link)
+        linked_minion = [0] * len(self.minion_to_link)
         t0 = time()
         while (time() - t0) * 1000 < timeout:
             for i, m in enumerate(self.minion_to_link):
                 linked_minion[i] = self.link_minion(m)
-            if all(linked_minion):
+            if all(i == 1 for i in linked_minion):
                 break
             else:
                 sleep(0.1)
@@ -584,7 +592,7 @@ class BaseMinion:
                 return -1
             except:
                 self.log(logging.ERROR, f"Error when connecting to '{minion_name}'.\n{traceback.format_exc()}")
-                return 2
+                return 3
         else:
             self.log(logging.INFO, f"Already linked to minion: {minion_name}")
             return 1
