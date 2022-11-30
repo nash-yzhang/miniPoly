@@ -494,7 +494,7 @@ class BaseMinion:
         self.minion_to_link = []
 
     ############# Logging module #############
-    def attach_logger(self, logger):
+    def attach_logger(self, logger:'LoggerMinion'):
         config_worker = {
             'version': 1,
             'disable_existing_loggers': True,
@@ -882,7 +882,7 @@ class LoggerMinion(BaseMinion, QueueListener):
                 'filename': 'minions-errors.log',
                 'mode': 'w',
                 'formatter': 'detailed',
-                'level': 'ERROR'
+                'level': 'INFO'
             }
         },
         'root': {
@@ -927,6 +927,7 @@ class LoggerMinion(BaseMinion, QueueListener):
             self.hasConfig = True
         record = self.dequeue(True)
         self.handle(record)
+
         if self.poll_reporter():
             self.shutdown()
 
