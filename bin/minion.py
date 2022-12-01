@@ -172,7 +172,7 @@ class SharedBuffer:
     def read(self):
         return self._read(0, self.valid_size)
 
-    def _read(self, offset, length, mode='obj',sudo=False):
+    def _read(self, offset, length, mode='obj', sudo=False):
         if sudo:
             lock_gained = True
         else:
@@ -494,7 +494,7 @@ class BaseMinion:
         self.minion_to_link = []
 
     ############# Logging module #############
-    def attach_logger(self, logger:'LoggerMinion'):
+    def attach_logger(self, logger: 'LoggerMinion'):
         config_worker = {
             'version': 1,
             'disable_existing_loggers': True,
@@ -574,9 +574,11 @@ class BaseMinion:
         shared_buffer_reference_name = f"b*{shared_buffer_name}"
         if shared_buffer_reference_name not in self._shared_dict.keys():
             try:
-                with SharedDict(
-                        shared_buffer_name) as tmp_dict:  # Just to test if the SharedDict exist and the name is correct
-                    dict_name = tmp_dict['name']
+                with SharedDict(shared_buffer_name) as tmp_dict:
+                    # Just to test if the SharedDict exist and the name is correct
+                    dict_name = tmp_dict.get('name')
+                    if dict_name is None:
+                        dict_name = 'N/A'
                     if dict_name == minion_name:
                         self.log(logging.INFO, f"Successfully connected to '{minion_name}.")
                         self._shared_dict[shared_buffer_reference_name] = shared_buffer_name
@@ -585,7 +587,7 @@ class BaseMinion:
                         return 1
                     else:
                         self.log(logging.ERROR,
-                                 f'The "name" state of the linked shared buffer {dict_name} is inconsistent with input minion name {minion_name}.')
+                                 f'[{self.name}] Pre-execution error: The "name" state of the linked shared buffer {dict_name} is inconsistent with input minion name {minion_name}.')
                         return 2
             except FileNotFoundError:
                 self.log(logging.INFO, f"SharedDict '{minion_name} not found'.")
@@ -621,14 +623,14 @@ class BaseMinion:
                     pass
                 return True
             except FileNotFoundError:
-                self.log(logging.INFO, f"Linked minion '{minion_name}' is dead. RIP")
+                self.log(logging.DEBUG, f"Linked minion '{minion_name}' is dead. RIP")
                 self.disconnect(minion_name)
                 return False
             except Exception:
                 self.log(logging.ERROR, f"Unknown error when checking {minion_name} status.\n{traceback.format_exc()}")
                 return None
         else:
-            print(f"Minion '{minion_name}' is not connected")
+            self.log(logging.DEBUG, f"Minion '{minion_name}' is not connected")
             return None
 
     def is_buffer_alive(self, minion_name, buffer_name):
@@ -891,17 +893,30 @@ class LoggerMinion(BaseMinion, QueueListener):
         }
     }
 
-    def __init__(self, name, logger_config=DEFAULT_LOGGER_CONFIG, listener_config=DEFAULT_LISTENER_CONFIG):
+    def __init__(self, name, logger_config=None, listener_config=None):
         self.name = name
         super(LoggerMinion, self).__init__(name=self.name)
+
+        if logger_config is None:
+            logger_config = self.DEFAULT_LOGGER_CONFIG
+        if listener_config is None:
+            listener_config = self.DEFAULT_LISTENER_CONFIG
+
         logging.config.dictConfig(logger_config)
-        self.logger = logging.getLogger(self.name)
+        self.logger = None
+        # Start logger after run() as logger object won't pass the pickling process and will be switched off
         self.queue = Queue()
         self.handlers = [MinionLogHandler()]
         self.respect_handler_level = False
         self.listener_config = listener_config
         self.hasConfig = False
         self.reporter = []
+
+    def autobiography(self, level, msg):
+        fn, lno, func, sinfo = self.logger.findCaller(stack_info=False, stacklevel=1)
+        record = self.logger.makeRecord(self.name, level, fn, lno, msg, args=None,
+                                        exc_info=None, func=func, extra=None, sinfo=None)
+        self.queue.put(record)
 
     def set_level(self, logger_name, level):
         level = level.upper()
@@ -912,22 +927,43 @@ class LoggerMinion(BaseMinion, QueueListener):
             for handler in logger.handlers:
                 handler.setLevel(logLevel)
         else:
-            self.debug(f"Unknown logging level: {level}")
+            self.warning(f"Unknown logging level: {level}")
 
     def register_reporter(self, reporter):
         self.connect(reporter)
         self.reporter.append(reporter.name)
 
     def poll_reporter(self):
-        return all([self.get_state_from(i, 'status') == -2 for i in self.reporter])
+        reporter_is_dead = [True] * len(self.reporter)
+        for i, m in enumerate(self.reporter):
+            err_counter = 0
+            while err_counter < 3:
+                # Request for 3 times, if all return None (error), then consider alive to receive further error messages
+                is_alive = self.is_minion_alive(m)
+                if is_alive is True:
+                    reporter_is_dead[i] = False
+                    break
+                elif is_alive is False:
+                    reporter_is_dead[i] = True
+                    break
+                elif is_alive is None:
+                    err_counter += 1
+
+        return all(reporter_is_dead)
 
     def main(self):
         if not self.hasConfig:
             logging.config.dictConfig(self.listener_config)
             self.hasConfig = True
+
+        if self.logger is None:
+            # self.logger starts only after the process has started
+            self.logger = logging.getLogger(self.name)
+            self.logger.setLevel(logging.INFO)
+            self.info('----------------- START LOGGING -----------------')
+
         record = self.dequeue(True)
         self.handle(record)
-
         if self.poll_reporter():
             self.shutdown()
 
@@ -935,6 +971,7 @@ class LoggerMinion(BaseMinion, QueueListener):
         while not self.queue.empty():
             record = self.dequeue(True)
             self.handle(record)
+        self.info('----------------- STOP LOGGING -----------------')
         self.set_state_to(self.name, "status", -1)
 
 

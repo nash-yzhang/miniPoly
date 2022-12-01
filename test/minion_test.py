@@ -11,7 +11,7 @@ class Victim(mi.BaseMinion):
 
 class Killer(mi.BaseMinion):
     def main(self):
-        if (time() - self._elapsed) > .5:
+        if (time() - self._elapsed) > .2:
             victums = [i for i in self._linked_minion.keys() if 'logger' not in i.lower()]
             alived = len(victums)
             for victim in victums:
