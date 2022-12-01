@@ -1,9 +1,12 @@
-# import PyQt5.Qt
+import logging
+
+import PyQt5.Qt
+
 import traceback, sys
 from vispy import gloo
 import os
 import numpy as np
-from bin.glsl_preset import renderer
+from bin.glsl_preset import Renderer
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 from PyQt5.Qt import Qt as qt
@@ -13,8 +16,9 @@ from time import sleep
 
 from multiprocessing import Value, Queue
 
+
 class Widget(qw.QWidget):
-    def __init__(self,mainW,arduino_port="COM3"):
+    def __init__(self, mainW, arduino_port="COM4"):
         super().__init__()
         self.timer = qc.QTimer()
         self.timer.setInterval(10)
@@ -23,7 +27,6 @@ class Widget(qw.QWidget):
         self._mainWindow = mainW
         self._processHandler = mainW._processHandler
         self._arduino_port = arduino_port
-        self._processHandler.create_shared_buffer('u_barpos',Value('i',0))
         self.init_arduino()
         self.init_gui()
 
@@ -32,8 +35,8 @@ class Widget(qw.QWidget):
             self._arduino_board = fmt.Arduino(self._arduino_port)
             self._arduino_iterator = fmt.util.Iterator(self._arduino_board)
             self._arduino_iterator.start()
-            self._servo_pin_number = 9
-            self._servo_pin = self._arduino_board.get_pin('d:{}:s'.format(self._servo_pin_number))
+            self._servo_pin_8 = self._arduino_board.get_pin('d:{}:s'.format(8))
+            self._servo_pin_9 = self._arduino_board.get_pin('d:{}:s'.format(9))
         except Exception as e:
             self._processHandler.error(traceback.format_exc())
 
@@ -43,7 +46,7 @@ class Widget(qw.QWidget):
         self.load_button = qw.QPushButton("Load Shader")
         self.load_button.setShortcut("Ctrl+Shift+O")
         self.load_button.clicked.connect(self.loadfile)
-        self.layout().addWidget(self.load_button,1)
+        self.layout().addWidget(self.load_button, 1)
         self._autoR_box = qw.QCheckBox("auto refresh")
         self._autoR_box.setChecked(False)
         self._autoR_box.clicked.connect(self.auto_refresh)
@@ -52,15 +55,25 @@ class Widget(qw.QWidget):
         self.refresh_button.clicked.connect(self.refresh)
         self._sublayout = qw.QHBoxLayout()
         self._sublayout.addWidget(self._autoR_box)
-        self._sublayout.addWidget(self.refresh_button,1)
+        self._sublayout.addWidget(self.refresh_button, 1)
         self.layout().addLayout(self._sublayout)
         self._servo_ori_slider = qw.QSlider(qt.Horizontal)
         self._servo_ori_slider.setMinimum(0)
         self._servo_ori_slider.setMaximum(180)
-        self._servo_ori_slider.valueChanged.connect(self.change_servo_ori)
+        self._servo_ori_slider.valueChanged.connect(self.change_servo_ori_1)
+        self._servo_ori_slider_2 = qw.QSlider(qt.Horizontal)
+        self._servo_ori_slider_2.setMinimum(0)
+        self._servo_ori_slider_2.setMaximum(180)
+        self._servo_ori_slider_2.valueChanged.connect(self.change_servo_ori_2)
+        self._servo_ori_slider_3 = qw.QSlider(qt.Horizontal)
+        self._servo_ori_slider_3.setMinimum(0)
+        self._servo_ori_slider_3.setMaximum(180)
+        self._servo_ori_slider_3.valueChanged.connect(self.change_both)
         self.layout().addWidget(self._servo_ori_slider)
+        self.layout().addWidget(self._servo_ori_slider_2)
+        self.layout().addWidget(self._servo_ori_slider_3)
 
-        spacer = qw.QSpacerItem(1,1,qw.QSizePolicy.Minimum, qw.QSizePolicy.MinimumExpanding)
+        spacer = qw.QSpacerItem(1, 1, qw.QSizePolicy.Minimum, qw.QSizePolicy.MinimumExpanding)
         self.layout().addItem(spacer)
 
         self._fs = None
@@ -69,13 +82,15 @@ class Widget(qw.QWidget):
         self.FSwatcher = qc.QFileSystemWatcher([])
         self.FSwatcher.fileChanged.connect(self.refresh)
 
+        self._processHandler.create_state('u_barpos', 0.)
+
     def loadfile(self):
         if self.FSname is not None:
             self.FSwatcher.removePath(self.FSname)
         self._autoR_box.setChecked(False)
         self.FSname = qw.QFileDialog.getOpenFileName(self, 'Open File', './shader',
                                                      "frag shader (*.frag)", ""
-                                                     ,qw.QFileDialog.DontUseNativeDialog)
+                                                     , qw.QFileDialog.DontUseNativeDialog)
         self.FSname = self.FSname[0]
         if self.FSname:
             self._fs = load_shaderfile(self.FSname)
@@ -99,17 +114,24 @@ class Widget(qw.QWidget):
             self._fs = load_shaderfile(self.FSname)
             self.rpc_reload()
 
-    def change_servo_ori(self,val):
-        self._processHandler.send(self._mainWindow._displayProcName,'uniform',{'u_barpos':val/90-1})
-        self._servo_pin.write(val)
 
+    def change_servo_ori_1(self, val):
+        self._servo_pin_8.write(val)
+        self._processHandler.set_state_to(self._processHandler.name, 'u_barpos', (val / 90) - 1)
+    def change_servo_ori_2(self, val):
+        self._servo_pin_9.write(val)
+
+    def change_both(self, val):
+        self._servo_pin_8.write(val)
+        self._servo_pin_9.write(val)
+        self._processHandler.set_state_to(self._processHandler.name, 'u_barpos', (val / 90) - 1)
 
     def close(self):
         self._arduino_board.exit()
 
 
-class Renderer(renderer):
-    def __init__(self,canvas):
+class Renderer(Renderer):
+    def __init__(self, canvas):
         super().__init__(canvas)
         self.VS = """
             #version 130
@@ -134,30 +156,23 @@ class Renderer(renderer):
                 gl_FragColor = vec4(vec3(mask), u_alpha);
             }
         """
-        # self.FS2 = """
-        #     varying vec2 v_pos;
-        #     void main() {
-        #      float color = min(step(abs(v_pos.x),.97),step(abs(v_pos.y),.965));
-        #      gl_FragColor = vec4(vec3(color), .5); }
-        # """
-        self.program = gloo.Program(self.VS,self.FS)
+        self.program = gloo.Program(self.VS, self.FS)
 
     def init_renderer(self):
-        self.program['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)#/2.
+        self.program['a_pos'] = np.array([[-1., -1.], [-1., 1.], [1., -1.], [1., 1.]], np.float32)  # /2.
         self.program['u_time'] = 0
         self.program['u_alpha'] = np.float32(1)
-        self.program['u_barpos'] = 0
 
+        self.program['u_barpos'] = self.canvas._processHandler.get_state_from(self.canvas._controllerProcName,
+                                                                              'u_barpos')
+        self.canvas.logger.setlevel(logging.DEBUG)
         gloo.set_state("translucent")
-        self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
+        self.program['u_resolution'] = (self.canvas.size[0], self.canvas.size[1])
 
-    def on_draw(self,event):
-        msg_type,msg = self.canvas._processHandler.get(self.canvas._controllerProcName)
-        if msg is not None:
-            if msg_type == 'uniform':
-                for k,v in msg.items():
-                    self.program[k] = v
+    def on_draw(self, event):
         gloo.clear('white')
         u_time = self.canvas.timer.elapsed
         self.program['u_time'] = u_time
+        self.program['u_barpos'] = self.canvas._processHandler.get_state_from(self.canvas._controllerProcName,
+                                                                              'u_barpos')
         self.program.draw('triangle_strip')

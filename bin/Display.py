@@ -1,16 +1,17 @@
 import numpy as np
 from importlib import util, reload
-import sys,os
+import sys, os
 
-from vispy import gloo,app
+from vispy import gloo, app
 import PyQt5.QtWidgets as qw
 
-from bin.glsl_preset import glCanvas,renderer
+from bin.glsl_preset import GLCanvas, Renderer
 from bin.minion import AbstractMinionMixin
 
-class GLDisplay(glCanvas, AbstractMinionMixin):
-    def __init__(self,handler,*args,controllerProcName=None,**kwargs):
-        super().__init__(*args,**kwargs)
+
+class GLDisplay(GLCanvas, AbstractMinionMixin):
+    def __init__(self, handler, *args, controllerProcName=None, **kwargs):
+        super().__init__(*args, **kwargs)
         self._processHandler = handler
         self._setTime = 0
         self._tic = 0
@@ -23,14 +24,15 @@ class GLDisplay(glCanvas, AbstractMinionMixin):
         return self._controllerProcName
 
     @controllerProcName.setter
-    def controllerProcName(self,value):
-       self._controllerProcName = value
+    def controllerProcName(self, value):
+        self._controllerProcName = value
 
-    def parse_msg(self,msg_type,msg):
+    def parse_msg(self, msg_type, msg):
         if msg_type == 'rendering_script':
             self.rendererScriptName = msg
             self.rendererName = self.rendererScriptName.split("/")[-1][:-3]
-            self._processHandler.info("Received rendering script [{}] from [{}]".format(self.rendererScriptName,self.controllerProcName))
+            self._processHandler.info(
+                "Received rendering script [{}] from [{}]".format(self.rendererScriptName, self.controllerProcName))
             self.importModuleFromPath()
             self._renderer = self.imported.Renderer(self)
             self.load(self._renderer)
@@ -39,13 +41,16 @@ class GLDisplay(glCanvas, AbstractMinionMixin):
             self._renderer.reload(msg)
 
     def on_timer(self, event):
-        if self._processHandler.get_state() == -1:
-            self._rmtShutdown = True
-            self.on_close()
-        elif self._processHandler.get_state() == 0:
-            self.on_close()
 
-        if self.timer.elapsed - self._setTime > 1/60:
+        if self.timer.elapsed - self._setTime > .01:  # Limit the call frequency to 1 second
+
+            # Check if any remote calls have been set first before further processing
+            if self._processHandler.status == -1:
+                self._rmtShutdown = True
+                self.on_close()
+            elif self._processHandler.status == 0:
+                self.on_close()
+
             self._setTime = np.floor(self.timer.elapsed)
             self.get(self.controllerProcName)
             # msg,_ = self._processHandler.get(self.controllerProcName)
@@ -73,8 +78,9 @@ class GLDisplay(glCanvas, AbstractMinionMixin):
         sys.modules[self.rendererName] = self.imported
         spec.loader.exec_module(self.imported)
 
+
 class customWidget(qw.QWidget):
-    def __init__(self,mainW):
+    def __init__(self, mainW):
         super().__init__()
         self._mainWindow = mainW
         self._processHandler = self._mainWindow._processHandler
@@ -83,7 +89,7 @@ class customWidget(qw.QWidget):
         self.load_button = qw.QPushButton("Load Shader")
         self.load_button.setShortcut("Ctrl+Shift+O")
         self.load_button.clicked.connect(self.loadfile)
-        self._layout.addWidget(self.load_button,1)
+        self._layout.addWidget(self.load_button, 1)
         self._autoR_box = qw.QCheckBox("auto refresh")
         self._autoR_box.setChecked(False)
         self._autoR_box.clicked.connect(self.auto_refresh)
@@ -92,10 +98,10 @@ class customWidget(qw.QWidget):
         self.refresh_button.clicked.connect(self.refresh)
         self._sublayout = qw.QHBoxLayout()
         self._sublayout.addWidget(self._autoR_box)
-        self._sublayout.addWidget(self.refresh_button,1)
+        self._sublayout.addWidget(self.refresh_button, 1)
         self._layout.addLayout(self._sublayout)
 
-        spacer = qw.QSpacerItem(1,1,qw.QSizePolicy.Minimum, qw.QSizePolicy.MinimumExpanding)
+        spacer = qw.QSpacerItem(1, 1, qw.QSizePolicy.Minimum, qw.QSizePolicy.MinimumExpanding)
         self.layout().addItem(spacer)
 
         self._fs = None
@@ -110,12 +116,12 @@ class customWidget(qw.QWidget):
         self._autoR_box.setChecked(False)
         self.FSname = qw.QFileDialog.getOpenFileName(self, 'Open File', './shader',
                                                      "frag shader (*.frag)", ""
-                                                     ,qw.QFileDialog.DontUseNativeDialog)
+                                                     , qw.QFileDialog.DontUseNativeDialog)
         self.FSname = self.FSname[0]
         if self.FSname:
             self._fs = load_shaderfile(self.FSname)
             # self._processHandler.reload(self._fs)
-            self._processHandler.send('Display',('rendering_shader',self._fs))
+            self._processHandler.send('Display', ('rendering_shader', self._fs))
 
     def auto_refresh(self, checked):
         if checked and self.FSname is not None:
@@ -129,12 +135,12 @@ class customWidget(qw.QWidget):
         if self.FSname is not None:
             self._fs = load_shaderfile(self.FSname)
             # self._mainWindow._renderer.reload(self._fs)
-            self._processHandler.send('Display',('rendering_shader',self._fs))
+            self._processHandler.send('Display', ('rendering_shader', self._fs))
 
 
-class Renderer(renderer):
+class Renderer(Renderer):
 
-    def __init__(self,canvas):
+    def __init__(self, canvas):
         super().__init__(canvas)
         self.VS = """
             #version 130
@@ -163,19 +169,19 @@ class Renderer(renderer):
              float color = min(step(abs(v_pos.x),.97),step(abs(v_pos.y),.965));
              gl_FragColor = vec4(vec3(color), .5); }
         """
-        self.program = gloo.Program(self.VS,self.FS)
-        self.bg = gloo.Program(self.VS,self.FS)
+        self.program = gloo.Program(self.VS, self.FS)
+        self.bg = gloo.Program(self.VS, self.FS)
 
     def init_renderer(self):
-        self.program['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)#/2.
+        self.program['a_pos'] = np.array([[-1., -1.], [-1., 1.], [1., -1.], [1., 1.]], np.float32)  # /2.
         # self.bg['a_pos'] = np.array([[-1.,-1.],[-1.,1.],[1.,-1.],[1.,1.]],np.float32)
         self.program['u_time'] = 0
         self.program['u_alpha'] = np.float32(1)
         # self.bg['u_alpha'] = np.float32(.15)
         gloo.set_state("translucent")
-        self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
+        self.program['u_resolution'] = (self.canvas.size[0], self.canvas.size[1])
 
-    def on_draw(self,event):
+    def on_draw(self, event):
         gloo.clear('white')
         u_time = self.canvas.timer.elapsed
         self.program['u_time'] = u_time

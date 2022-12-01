@@ -1,4 +1,7 @@
+import numpy as np
+
 from bin.minion import BaseMinion, LoggerMinion
+from multiprocessing import shared_memory
 import logging, sys
 from vispy import app
 import vispy
@@ -35,10 +38,14 @@ class GUIModule(BaseMinion):
         self.shutdown()
 
     def shutdown(self):
-        for tgt in self.target.keys():
-            while self.get_state_from(tgt, "status") != -1:
-                self.set_state(tgt, "status", -1)
-        self.set_state(self.name, "status", -1)
+        def kill_minion(minion_name):
+            self.set_state_to(minion_name,'status',-1)
+        safe_to_shutdown = False
+        while not safe_to_shutdown:
+            minion_status = self.poll_minion(kill_minion)
+            if not any(minion_status):
+                safe_to_shutdown = True
+        self.set_state_to(self.name, "status", -1)
 
 
 class CanvasModule(BaseMinion):
@@ -74,42 +81,24 @@ class CanvasModule(BaseMinion):
 class GLapp:
     def __init__(self, name):
         self.name = name
+        self._connections = {}
+        self._shared_memory = {}
+        self._shared_memory_param = {}
+
         self._GUI = GUIModule('GUI')
         self._GL_canvas = CanvasModule('OPENGL')
+        self._GL_canvas.connect(self._GUI)
+
         self._GUI.display_proc = self._GL_canvas.name
         self._GL_canvas.controller_proc = self._GUI.name
         self._logger = LoggerMinion('MAIN LOGGER')
-        self._logger.set_level(self._GUI.display_proc,'debug')
+
         self._GUI.attach_logger(self._logger)
         self._GL_canvas.attach_logger(self._logger)
-        self._connections = {}
-        self.connect(self._GUI,self._GL_canvas)
+        self._logger.set_level(self._GL_canvas.name,'debug')
 
     def log(self, *args):
         self._logger.log(*args)
-
-    def connect(self, source, target, conn_type="uni"):
-        source.add_target(target)
-        if source.name not in self._connections.keys():
-            self._connections[source.name] = [target.name]
-        else:
-            self._connections[source.name].append(target.name)
-        self.log(logging.INFO, "[{}] Connection [{} -> {}] has been set up".format(self.name, source.name, target.name))
-
-        if conn_type == "mutual":
-            target.add_target(source)
-            if target.name not in self._connections.keys():
-                self._connections[target.name] = [source.name]
-
-            else:
-                self._connections[target.name].append(source.name)
-            self.log(logging.INFO,
-                     "[{}] Connection [{} -> {}] has been set up".format(self.name, target.name, source.name))
-        elif conn_type == "uni":
-            pass
-        else:
-            self.log(logging.INFO,
-                     "[{}] Failed to setup connection: Unknown connection type '{}'".format(self.name, conn_type))
 
     def run(self):
         self._GUI.run()
