@@ -29,8 +29,8 @@ class Widget(qw.QWidget):
             self._arduino_board = fmt.Arduino(self._arduino_port)
             self._arduino_iterator = fmt.util.Iterator(self._arduino_board)
             self._arduino_iterator.start()
-            self._servo_pin_number = 9
-            self._servo_pin = self._arduino_board.get_pin('d:{}:s'.format(self._servo_pin_number))
+            self._servo_pin_8 = self._arduino_board.get_pin('d:{}:s'.format(8))
+            self._servo_pin_9 = self._arduino_board.get_pin('d:{}:s'.format(9))
         except Exception as e:
             self._processHandler.error(traceback.format_exc())
 
@@ -54,8 +54,18 @@ class Widget(qw.QWidget):
         self._servo_ori_slider = qw.QSlider(qt.Horizontal)
         self._servo_ori_slider.setMinimum(0)
         self._servo_ori_slider.setMaximum(180)
-        self._servo_ori_slider.valueChanged.connect(self.change_servo_ori)
+        self._servo_ori_slider.valueChanged.connect(self.change_servo_ori_1)
+        self._servo_ori_slider_2 = qw.QSlider(qt.Horizontal)
+        self._servo_ori_slider_2.setMinimum(0)
+        self._servo_ori_slider_2.setMaximum(180)
+        self._servo_ori_slider_2.valueChanged.connect(self.change_servo_ori_2)
+        self._servo_ori_slider_3 = qw.QSlider(qt.Horizontal)
+        self._servo_ori_slider_3.setMinimum(0)
+        self._servo_ori_slider_3.setMaximum(180)
+        self._servo_ori_slider_3.valueChanged.connect(self.change_both)
         self.layout().addWidget(self._servo_ori_slider)
+        self.layout().addWidget(self._servo_ori_slider_2)
+        self.layout().addWidget(self._servo_ori_slider_3)
 
         spacer = qw.QSpacerItem(1, 1, qw.QSizePolicy.Minimum, qw.QSizePolicy.MinimumExpanding)
         self.layout().addItem(spacer)
@@ -99,14 +109,16 @@ class Widget(qw.QWidget):
             # self._mainWindow._renderer.reload(self._fs)
             self.rpc_reload()
 
-    def change_servo_ori(self, val):
-        # try:
-        # self._servo_pin.write(val)
-        # except Exception as e:
-        #     self._processHandler.error(traceback.format_exc())
-
+    def change_servo_ori_1(self, val):
+        self._servo_pin_8.write(val)
         self._processHandler.set_state_to(self._processHandler.name, 'u_barpos', (val / 90) - 1)
-        # self._processHandler.send(self._mainWindow._displayProcName,'uniform',{'u_barpos':(val/90)-1})
+    def change_servo_ori_2(self, val):
+        self._servo_pin_9.write(val)
+
+    def change_both(self, val):
+        self._servo_pin_8.write(val)
+        self._servo_pin_9.write(val)
+        self._processHandler.set_state_to(self._processHandler.name, 'u_barpos', (val / 90) - 1)
 
     def close(self):
         self._arduino_board.exit()
