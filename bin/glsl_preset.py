@@ -1,3 +1,5 @@
+import os
+
 from sphModel import *
 import numpy as np
 from vispy import app,gloo
@@ -39,7 +41,7 @@ _default_sphere_FS = """
         gl_FragColor = vec4(vec3(sin(u_time),cos(u_time),sin(u_time+1.57/2))/2.+.5, 1.);
     }
     """
-class glCanvas(app.Canvas):
+class GLCanvas(app.Canvas):
     def __init__(self,*args,**kwargs):
         app.Canvas.__init__(self, *args, **kwargs)
         self.timer = app.Timer('auto', self.on_timer, start=True)
@@ -57,10 +59,13 @@ class glCanvas(app.Canvas):
         self.update()
 
 
-class renderer:
+class Renderer:
 
     def __init__(self,canvas):
         self.canvas = canvas
+
+    def init_renderer(self):
+        pass
 
     def reload(self,FS):
         self.FS = FS
@@ -71,7 +76,7 @@ class renderer:
         gloo.set_viewport(0, 0, *self.canvas.physical_size)
         self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
 
-class planeRenderer(renderer):
+class planeRenderer(Renderer):
 
     def __init__(self,canvas):
         super().__init__(canvas)
@@ -92,7 +97,7 @@ class planeRenderer(renderer):
         self.program.draw('triangle_strip')
 
 
-class sphereRenderer(renderer):
+class sphereRenderer(Renderer):
 
     def __init__(self,canvas):
         super().__init__(canvas)

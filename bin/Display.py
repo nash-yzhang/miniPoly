@@ -5,11 +5,11 @@ import sys, os
 from vispy import gloo, app
 import PyQt5.QtWidgets as qw
 
-from bin.glsl_preset import glCanvas, renderer
+from bin.glsl_preset import GLCanvas, Renderer
 from bin.minion import AbstractMinionMixin
 
 
-class GLDisplay(glCanvas, AbstractMinionMixin):
+class GLDisplay(GLCanvas, AbstractMinionMixin):
     def __init__(self, handler, *args, controllerProcName=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._processHandler = handler
@@ -137,7 +137,7 @@ class customWidget(qw.QWidget):
             self._processHandler.send('Display', ('rendering_shader', self._fs))
 
 
-class Renderer(renderer):
+class Renderer(Renderer):
 
     def __init__(self, canvas):
         super().__init__(canvas)

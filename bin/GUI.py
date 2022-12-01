@@ -3,13 +3,15 @@ import PyQt5.QtCore as qc
 import traceback, sys
 from importlib import util, reload
 
-from bin.minion import AbstractMinionMixin
+from bin.minion import BaseMinion, AbstractMinionMixin
+
 
 class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
-    '''
+    """
     Base class serving as an interface between "minion" process handler and Qt GUI
-    '''
-    def __init__(self, processHandler=None, windowSize=(400, 400), rendererPath=None):
+    """
+
+    def __init__(self, processHandler: BaseMinion = None, windowSize=(400, 400), rendererPath=None):
         super().__init__()
         self._processHandler = processHandler
         self._windowSize = windowSize
@@ -68,7 +70,7 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
         # self.customWidget = None
 
     def init_default_custom_widget(self):
-        self.customWidget = qw.QWidget() # define custom widget
+        self.customWidget = qw.QWidget()  # define custom widget
         self.customWidgetLayout = qw.QVBoxLayout()
         self.customWidget.setLayout(self.customWidgetLayout)
         self.canvasLabel = qw.QLabel("Load stimulus via File (Ctrl+O)")

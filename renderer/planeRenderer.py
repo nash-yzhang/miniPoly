@@ -1,7 +1,7 @@
 from vispy import gloo
 import os
 import numpy as np
-from bin.glsl_preset import renderer
+from bin.glsl_preset import Renderer
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 from utils import load_shaderfile
@@ -69,7 +69,7 @@ class Widget(qw.QWidget):
             self.rpc_reload()
 
 
-class Renderer(renderer):
+class Renderer(Renderer):
     def __init__(self,canvas):
         super().__init__(canvas)
         self.VS = """

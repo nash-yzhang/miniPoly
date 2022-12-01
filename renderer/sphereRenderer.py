@@ -2,7 +2,7 @@ from vispy import gloo
 from vispy.util.transforms import translate, rotate, perspective
 import os
 from sphModel import *
-from bin.glsl_preset import renderer, _default_sphere_VS, _default_sphere_FS
+from bin.glsl_preset import Renderer, _default_sphere_VS, _default_sphere_FS
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 from utils import load_shaderfile
@@ -74,7 +74,7 @@ def loadshader():
         self._fs = load_shaderfile(self.FSname)
         self._renderer.reload(self._fs)
 
-class Renderer(renderer):
+class Renderer(Renderer):
 
     def __init__(self,canvas):
         super().__init__(canvas)

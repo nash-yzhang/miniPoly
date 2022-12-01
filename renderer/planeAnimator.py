@@ -1,6 +1,6 @@
 from vispy import gloo
 import numpy as np
-from bin.glsl_preset import renderer
+from bin.glsl_preset import Renderer
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 
@@ -18,7 +18,7 @@ class Widget(qw.QWidget):
         self.canvasLabel.setAlignment(qc.Qt.AlignCenter)
         self.layout().addWidget(self.canvasLabel)
 
-class Renderer(renderer):
+class Renderer(Renderer):
 
     def __init__(self, canvas):
         super().__init__(canvas)
