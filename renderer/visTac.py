@@ -1,6 +1,7 @@
 import logging
 
 import PyQt5.Qt
+
 import traceback, sys
 from vispy import gloo
 import os
@@ -11,6 +12,7 @@ import PyQt5.QtCore as qc
 from PyQt5.Qt import Qt as qt
 from utils import load_shaderfile
 import pyfirmata as fmt
+from time import sleep
 
 from multiprocessing import Value, Queue
 
@@ -18,6 +20,10 @@ from multiprocessing import Value, Queue
 class Widget(qw.QWidget):
     def __init__(self, mainW, arduino_port="COM4"):
         super().__init__()
+        self.timer = qc.QTimer()
+        self.timer.setInterval(10)
+        self.timer.timeout.connect(self.update)
+        self.timer.start()
         self._mainWindow = mainW
         self._processHandler = mainW._processHandler
         self._arduino_port = arduino_port
@@ -106,8 +112,8 @@ class Widget(qw.QWidget):
     def refresh(self, checked):
         if self.FSname is not None:
             self._fs = load_shaderfile(self.FSname)
-            # self._mainWindow._renderer.reload(self._fs)
             self.rpc_reload()
+
 
     def change_servo_ori_1(self, val):
         self._servo_pin_8.write(val)

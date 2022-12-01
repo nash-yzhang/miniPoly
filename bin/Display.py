@@ -41,6 +41,7 @@ class GLDisplay(GLCanvas, AbstractMinionMixin):
             self._renderer.reload(msg)
 
     def on_timer(self, event):
+
         if self.timer.elapsed - self._setTime > .01:  # Limit the call frequency to 1 second
 
             # Check if any remote calls have been set first before further processing
