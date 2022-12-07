@@ -1,13 +1,12 @@
-import numpy as np
-
-from bin.minion import BaseMinion, LoggerMinion
-from multiprocessing import shared_memory
-import logging, sys
+from bin.minion import BaseMinion
+import sys
+from time import time
 from vispy import app
 import vispy
 import PyQt5.QtWidgets as qw
 from bin.gui import BaseGUI
 from bin.display import GLDisplay
+
 
 class GUIModule(BaseMinion):
     def __init__(self, *args, **kwargs):
@@ -39,7 +38,8 @@ class GUIModule(BaseMinion):
 
     def shutdown(self):
         def kill_minion(minion_name):
-            self.set_state_to(minion_name,'status',-1)
+            self.set_state_to(minion_name, 'status', -1)
+
         safe_to_shutdown = False
         while not safe_to_shutdown:
             minion_status = self.poll_minion(kill_minion)

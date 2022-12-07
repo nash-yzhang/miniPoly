@@ -19,7 +19,7 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
         self._displayProcName = ''
         self.rendererName = ''
         self._renderer_path = ''
-        self._vcanvas = None
+        # self._vcanvas = None
 
         self._init_main_win()
         self._init_menu()
@@ -46,18 +46,18 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
         Exit.setShortcut("Ctrl+Q")
         Exit.setStatusTip("Exit program")
         Exit.triggered.connect(self.close)
-        restartDisplay = qw.QAction("Restart Display", self)
-        restartDisplay.setShortcut("Ctrl+Shift+R")
-        restartDisplay.setStatusTip("Restart display process")
-        restartDisplay.triggered.connect(self.restartDisplay)
-        haltDisplay = qw.QAction("Suspend Display", self)
-        haltDisplay.setShortcut("Ctrl+Shift+H")
-        haltDisplay.setStatusTip("Suspend display process")
-        haltDisplay.triggered.connect(self.suspendDisplay)
         self._menu_file.addAction(loadfile)
         self._menu_file.addAction(Exit)
-        self._menu_display.addAction(restartDisplay)
-        self._menu_display.addAction(haltDisplay)
+        # restartDisplay = qw.QAction("Restart Display", self)
+        # restartDisplay.setShortcut("Ctrl+Shift+R")
+        # restartDisplay.setStatusTip("Restart display process")
+        # restartDisplay.triggered.connect(self.restartDisplay)
+        # haltDisplay = qw.QAction("Suspend Display", self)
+        # haltDisplay.setShortcut("Ctrl+Shift+H")
+        # haltDisplay.setStatusTip("Suspend display process")
+        # haltDisplay.triggered.connect(self.suspendDisplay)
+        # self._menu_display.addAction(restartDisplay)
+        # self._menu_display.addAction(haltDisplay)
         self.central_widget = qw.QWidget()  # define central widget
         self.setCentralWidget(self.central_widget)
 
@@ -144,25 +144,25 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
         except:
             self._processHandler.error(traceback.format_exc())
 
-    def restartDisplay(self):
-        suspended = self.suspendDisplay()
-        if suspended == 0:
-            while self._processHandler.get_state_from(self._displayProcName, 'status') == 0:
-                self._processHandler.set_state_to(self._displayProcName, 'status', 1)
-            self.reload()
-            self._processHandler.info("Restarted [{}] process".format(self._displayProcName))
-        else:
-            self._processHandler.error(f'Unknown Error. Please retry to restart.')
-
-    def suspendDisplay(self):
-        try:
-            while self._processHandler.get_state_from(self._displayProcName, 'status') > 0:
-                self._processHandler.set_state_to(self._displayProcName, 'status', 0)
-            self._processHandler.info("Suspended [{}] process".format(self._displayProcName))
-            return 0
-        except:
-            self._processHandler.error(f'Failed to suspend [{self._displayProcName}] process')
-            return -1
+    # def restartDisplay(self):
+    #     suspended = self.suspendDisplay()
+    #     if suspended == 0:
+    #         while self._processHandler.get_state_from(self._displayProcName, 'status') == 0:
+    #             self._processHandler.set_state_to(self._displayProcName, 'status', 1)
+    #         self.reload()
+    #         self._processHandler.info("Restarted [{}] process".format(self._displayProcName))
+    #     else:
+    #         self._processHandler.error(f'Unknown Error. Please retry to restart.')
+    #
+    # def suspendDisplay(self):
+    #     try:
+    #         while self._processHandler.get_state_from(self._displayProcName, 'status') > 0:
+    #             self._processHandler.set_state_to(self._displayProcName, 'status', 0)
+    #         self._processHandler.info("Suspended [{}] process".format(self._displayProcName))
+    #         return 0
+    #     except:
+    #         self._processHandler.error(f'Failed to suspend [{self._displayProcName}] process')
+    #         return -1
 
     def shutdown(self):
         while self._processHandler.get_state_from(self._displayProcName, "status") != -1:
