@@ -2,7 +2,7 @@ from vispy import gloo
 from vispy.util.transforms import translate, rotate, perspective
 import os
 from sphModel import *
-from bin.glsl_preset import Renderer, _default_sphere_VS, _default_sphere_FS
+from bin.display import GLRenderer, DEFAULT_SPHERE_VS, DEFAULT_SPHERE_FS
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 from utils import load_shaderfile
@@ -10,7 +10,7 @@ from utils import load_shaderfile
 import_func_name = ['setGUI','loadshader']
 self = None
 
-class customWidget(qw.QWidget):
+class Widget(qw.QWidget):
     def __init__(self,mainW):
         super().__init__()
         self._mainWindow = mainW
@@ -74,12 +74,12 @@ def loadshader():
         self._fs = load_shaderfile(self.FSname)
         self._renderer.reload(self._fs)
 
-class Renderer(Renderer):
+class Renderer(GLRenderer):
 
     def __init__(self,canvas):
         super().__init__(canvas)
-        self.VS = _default_sphere_VS
-        self.FS = _default_sphere_FS
+        self.VS = DEFAULT_SPHERE_VS
+        self.FS = DEFAULT_SPHERE_FS
         self.program = gloo.Program(self.VS,self.FS)
 
 
@@ -129,4 +129,3 @@ class Renderer(Renderer):
         self.translate += event.delta[1] / 10
         self.view = translate((0, 0, self.translate))
         self.program['u_view'] = self.view
-        self.canvas.update()

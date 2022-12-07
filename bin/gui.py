@@ -145,17 +145,25 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
             self._processHandler.error(traceback.format_exc())
 
     def restartDisplay(self):
-        self.suspendDisplay()
-        while self._processHandler.get_state_from(self._displayProcName, 'status') == 0:
-            self._processHandler.set_state(self._displayProcName, 'status', 1)
-        self.reload()
-        self._processHandler.info("Restarted [{}] process".format(self._displayProcName))
+        suspended = self.suspendDisplay()
+        if suspended == 0:
+            while self._processHandler.get_state_from(self._displayProcName, 'status') == 0:
+                self._processHandler.set_state_to(self._displayProcName, 'status', 1)
+            self.reload()
+            self._processHandler.info("Restarted [{}] process".format(self._displayProcName))
+        else:
+            self._processHandler.error(f'Unknown Error. Please retry to restart.')
 
     def suspendDisplay(self):
-        while self._processHandler.get_state_from(self._displayProcName, 'status') > 0:
-            self._processHandler.set_state(self._displayProcName, 'status', 0)
-        self._processHandler.info("Suspended [{}] process".format(self._displayProcName))
+        try:
+            while self._processHandler.get_state_from(self._displayProcName, 'status') > 0:
+                self._processHandler.set_state_to(self._displayProcName, 'status', 0)
+            self._processHandler.info("Suspended [{}] process".format(self._displayProcName))
+            return 0
+        except:
+            self._processHandler.error(f'Failed to suspend [{self._displayProcName}] process')
+            return -1
 
     def shutdown(self):
         while self._processHandler.get_state_from(self._displayProcName, "status") != -1:
-            self._processHandler.set_state(self._displayProcName, "status", -11)
+            self._processHandler.set_state_to(self._displayProcName, "status", -11)

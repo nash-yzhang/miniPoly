@@ -1,6 +1,6 @@
 import logging
 
-import traceback
+import traceback, sys
 from vispy import gloo
 import os
 import numpy as np
@@ -9,8 +9,6 @@ import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 from PyQt5.Qt import Qt as qt
 from utils import load_shaderfile
-import pyfirmata as fmt
-
 
 class Widget(qw.QWidget):
     def __init__(self, mainW, arduino_port="COM4"):

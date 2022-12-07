@@ -1,8 +1,8 @@
 from vispy import gloo
 import numpy as np
-from bin.glsl_preset import Renderer
+from bin.display import GLRenderer
 
-class Renderer(Renderer):
+class Renderer(GLRenderer):
 
     def __init__(self,canvas):
         super().__init__(canvas)
