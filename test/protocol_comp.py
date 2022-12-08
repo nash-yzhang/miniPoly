@@ -1,20 +1,19 @@
+from bin.app import AbstractGUIModule
+from bin.minion import BaseMinion, AbstractMinionMixin, LoggerMinion, TimerMinion
 import pandas as pd
-from time import perf_counter
 import numpy as np
+import sys
+from time import perf_counter
 
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
-import sys
 
-from bin.minion import BaseMinion, AbstractMinionMixin
-import sys
+class TestGUI(AbstractGUIModule):
 
-import PyQt5.QtWidgets as qw
-import PyQt5.QtCore as qc
-import pandas as pd
+    def gui_init(self):
+        self._win = ProtocolCommander(self)
 
-
-class ProtocolCommander(qw.QMainWindow):
+class ProtocolCommander(qw.QMainWindow, AbstractMinionMixin):
     def __init__(self, processHandler: BaseMinion = None, windowSize=(400, 400), refresh_rate=200):
         super().__init__()
         self._processHandler = processHandler
@@ -25,12 +24,13 @@ class ProtocolCommander(qw.QMainWindow):
 
         self._timer = qc.QTimer()
         self._timer.timeout.connect(self.on_time)
-        self._time = perf_counter()
+        self._init_time = -1
+        self._elapsed = 0
         self._timer.setInterval(int(1000/refresh_rate))
         self._timer_started = False
 
         self.table = qw.QTableView()
-        self.model = DataframeModel(data=None)
+        self.model = DataframeModel(data=pd.DataFrame({}))
         self.table.setModel(self.model)
         self.timer_switcher = qw.QPushButton('Start')
         self.timer_switcher.clicked.connect(self.switch_timer)
@@ -45,6 +45,15 @@ class ProtocolCommander(qw.QMainWindow):
         self.protocol_params = {}
         self.protocols = {}
 
+        self._watching_state = {}
+
+        self._init_menu()
+
+    @property
+    def elapsed(self):
+        self._elapsed = perf_counter()-self._init_time
+        return self._elapsed
+
     def switch_timer(self):
         if self._timer_started:
             self._timer.stop()
@@ -52,16 +61,30 @@ class ProtocolCommander(qw.QMainWindow):
             self.timer_switcher.setText('Start')
         else:
             self._timer_started = True
-            self._time = perf_counter()
+            self._init_time = perf_counter()
             self._timer.start()
             self.timer_switcher.setText('Stop')
 
     def on_time(self):
         try:
-            row_idx = next(i for i, v in enumerate(self.model._data['time']) if v > self._time.elapsed()/1000)
-            self.table.selectRow(row_idx)
+            cur_time = self.elapsed
+            row_idx = next(i-1 for i, v in enumerate(self.model._data['time']) if v > cur_time)
+            if self.watch_state('row_idx',row_idx):
+                self.table.selectRow(row_idx)
+                print(f"{(cur_time-self.model._data['time'][row_idx])*1000}")
         except:
             self.table.clearSelection()
+
+    def watch_state(self,name,val):
+        if name not in self._watching_state.keys():
+            self._watching_state[name] = val
+            return True
+        else:
+            changed = val != self._watching_state[name]
+            self._watching_state[name] = val
+            return changed
+
+
 
     def _init_menu(self):
         self._menubar = self.menuBar()
@@ -86,8 +109,6 @@ class ProtocolCommander(qw.QMainWindow):
             self.table.setModel(self.model)
             self.main_widget.update()
 
-
-
 class DataframeModel(qc.QAbstractTableModel):
     def __init__(self, data, parent=None):
         qc.QAbstractTableModel.__init__(self, parent)
@@ -110,23 +131,28 @@ class DataframeModel(qc.QAbstractTableModel):
             return self._data.columns[col]
         return None
 
-class ProtocolCommander(qw.QMainWindow, AbstractMinionMixin):
+class TestCompiler(TimerMinion):
 
-    def add_protocol(self, minion_name: str, protocol: [dict, pd.DataFrame]):
-        '''
-        :param minion_name: protocol_compiler name
-        :param protocol: a dictionary or pandas dataframe whose index column should be named 'cmd_time'
-                         and the other columns correspond to the parameters registered.
-        :return:
-        '''
-        self.link_minion(minion_name)
+    def initialize(self):
+        self._mainfunc = ProtocolCompiler(self)
+        self.on_time = self._mainfunc.on_time
 
-        if type(protocol) == dict:
-            protocol = pd.DataFrame(protocol)
-            protocol = protocol.set_index('cmd_time')
-            protocol = protocol.sort_index()
 
-        self.protocols[minion_name] = protocol
+class ProtocolCompiler(AbstractMinionMixin):
+
+    def __init__(self,processHandler: BaseMinion=None):
+        super().__init__()
+        self._processHandler = processHandler
+        self._name = self._processHandler.name
 
     def on_time(self):
-        print(qc.QTime.currentTime())
+        self._processHandler.info('Testing')
+
+
+if __name__ == '__main__':
+    # GUI = TestGUI('testgui')
+    GUI = TestCompiler('test')
+    logger = LoggerMinion('TestGUI logger')
+    GUI.attach_logger(logger)
+    logger.run()
+    GUI.run()

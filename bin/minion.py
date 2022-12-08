@@ -1,5 +1,6 @@
 import os
-from time import sleep, time
+import sys
+from time import sleep, time, perf_counter
 
 import multiprocessing as mp
 from multiprocessing import Queue
@@ -8,12 +9,13 @@ import logging
 import logging.config
 from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
 from logging.handlers import QueueListener
+from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QApplication, QLabel
+
 
 from typing import Callable
 
 from bin.buffer import *
-
-
 
 DEFAULT_LOGGING_CONFIG = {
     'version': 1,
@@ -172,15 +174,13 @@ class BaseMinion:
                     self._shared_buffer[shared_buffer_name] = SharedBuffer(shared_buffer_name, data, size,
                                                                            create=True)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
                 except Exception:
-                    self.log(logging.ERROR, f"Error in creating buffer '{shared_buffer_name}'.\n{traceback.format_exc()}")
+                    self.log(logging.ERROR,
+                             f"Error in creating buffer '{shared_buffer_name}'.\n{traceback.format_exc()}")
                 self._shared_dict[shared_buffer_reference_name] = shared_buffer_name
             else:
                 self.log(logging.ERROR, f"SharedBuffer '{shared_buffer_name}' already exist")
         else:
             self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
-
-
-
 
     def link_minion(self, minion_name):
         pid, pid_checked = self.pid_check()
@@ -233,7 +233,8 @@ class BaseMinion:
                             self._shared_dict[shared_buffer_reference_name] = tmp_dict[shared_buffer_reference_name]
                         else:
                             self.log(logging.ERROR, f"Unknown foreign buffer '{buffer_name}' in minion '{minion_name}'")
-                    self._linked_minion[minion_name].append(buffer_name)  # The name of the shared buffer from this minion
+                    self._linked_minion[minion_name].append(
+                        buffer_name)  # The name of the shared buffer from this minion
                 else:
                     self.log(logging.ERROR, f"Unknown minion: '{minion_name}'")
 
@@ -343,7 +344,6 @@ class BaseMinion:
                 self.log(logging.ERROR, f"Unknown buffer: '{shared_buffer_reference_name}'")
         else:
             self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
-
 
         return buffer_val
 
@@ -687,6 +687,36 @@ class LoggerMinion(BaseMinion, QueueListener):
             self.handle(record)
         self.info('----------------- STOP LOGGING -----------------')
         self.set_state_to(self.name, "status", -1)
+
+
+class TimerMinion(BaseMinion):
+
+    def __init__(self, *args, interval=10, **kwargs):
+        super(TimerMinion, self).__init__(*args, **kwargs)
+        self._time = None
+        self._init_time = None
+        self._isrunning = False
+        self._interval = interval/1000
+
+    def main(self):
+        if not self._isrunning:
+            self.initialize()
+            self._init_time = perf_counter()
+            self._isrunning = True
+            self._time = perf_counter()
+        cur_time = perf_counter()
+        if cur_time-self._time > self._interval:
+            self._time = cur_time
+            self.on_time()
+
+    @property
+    def elapsed(self):
+        return perf_counter()-self._init_time
+
+    def initialize(self):
+        pass
+    def on_time(self):
+        pass
 
 
 class AbstractMinionMixin:
