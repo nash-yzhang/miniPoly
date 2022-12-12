@@ -3,7 +3,7 @@ import sys
 from time import sleep, time, perf_counter
 
 import multiprocessing as mp
-from multiprocessing import Queue
+from multiprocessing import Queue, Lock
 
 import logging
 import logging.config
@@ -11,7 +11,6 @@ from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
 from logging.handlers import QueueListener
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QApplication, QLabel
-
 
 from typing import Callable
 
@@ -73,7 +72,7 @@ class BaseMinion:
 
     _INDEX_SHARED_BUFFER_SIZE = 2 ** 16  # The size allocated for storing small shared values/array, each write takes <2 ms
 
-    def __init__(self, name):
+    def __init__(self, name, lock: Lock):
 
         self.logger = None
         self._log_config = None
@@ -83,6 +82,7 @@ class BaseMinion:
         self._pid = None
 
         self.name = name
+        self.lock = lock
         self._queue = {}  # a dictionary of in/output channels storing rpc function name-value pair (marshalled) E.g.: {'receiver_minion_1':('terminate',True)}
         self._elapsed = time()
 
@@ -141,7 +141,7 @@ class BaseMinion:
             return None, None
 
     def prepare_shared_buffer(self):
-        self._shared_dict = SharedDict(f'{self.name}_shared_dict', create=True, name=self.name,
+        self._shared_dict = SharedDict(f'{self.name}_shared_dict', lock=self.lock, create=True, name=self.name,
                                        size=self._INDEX_SHARED_BUFFER_SIZE)
         self._shared_dict['name'] = self.name
         self._shared_dict['status'] = 1
@@ -189,7 +189,7 @@ class BaseMinion:
             shared_buffer_reference_name = f"b*{shared_buffer_name}"
             if shared_buffer_reference_name not in self._shared_dict.keys():
                 try:
-                    with SharedDict(shared_buffer_name) as tmp_dict:
+                    with SharedDict(shared_buffer_name,lock=self.lock) as tmp_dict:
                         # Just to test if the SharedDict exist and the name is correct
                         dict_name = tmp_dict.get('name')
                         if dict_name is None:
@@ -228,7 +228,7 @@ class BaseMinion:
             shared_buffer_reference_name = f"b*{minion_name}_{buffer_name}"
             if shared_buffer_reference_name not in self._shared_dict.keys():
                 if minion_name in self._linked_minion.keys():
-                    with SharedDict(f"{minion_name}_shared_dict", create=False) as tmp_dict:
+                    with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
                         if shared_buffer_reference_name in tmp_dict.keys():
                             self._shared_dict[shared_buffer_reference_name] = tmp_dict[shared_buffer_reference_name]
                         else:
@@ -273,7 +273,7 @@ class BaseMinion:
 
             elif minion_name in self._linked_minion.keys():
                 if self.is_minion_alive(minion_name):
-                    with SharedDict(f"{minion_name}_shared_dict", create=False) as tmp_dict:
+                    with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
                         if state_name in tmp_dict.keys():
                             state_val = tmp_dict[state_name]
                         else:
@@ -304,7 +304,7 @@ class BaseMinion:
 
             elif minion_name in self._linked_minion.keys():
                 if self.is_minion_alive(minion_name):
-                    with SharedDict(f"{minion_name}_shared_dict", create=False) as tmp_dict:
+                    with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
                         if state_name in tmp_dict.keys():
                             tmp_dict[state_name] = val
                         else:
@@ -336,7 +336,7 @@ class BaseMinion:
                 shared_buffer_name = self._shared_dict[shared_buffer_reference_name]
                 tmp_buffer: SharedBuffer
                 if self.is_buffer_alive(minion_name, buffer_name):
-                    with SharedDict(shared_buffer_name, create=False) as tmp_buffer:
+                    with SharedDict(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
                         buffer_val = tmp_buffer.read()
                 else:
                     self.log(logging.ERROR, f"Invalid buffer '{minion_name}_{buffer_name}' or errors in connections")
@@ -361,7 +361,7 @@ class BaseMinion:
             if shared_buffer_reference_name in self._shared_dict.keys():
                 shared_buffer_name = self._shared_dict[shared_buffer_reference_name]
                 tmp_buffer: SharedBuffer
-                with SharedDict(shared_buffer_name, create=False) as tmp_buffer:
+                with SharedDict(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
                     try:
                         buffer_val = tmp_buffer.write(val)
                     except:
@@ -452,7 +452,7 @@ class BaseMinion:
 
         if minion_name in self._linked_minion.keys():
             try:
-                with SharedDict(f"{minion_name}_shared_dict", create=False):
+                with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False):
                     pass
                 return True
             except FileNotFoundError:
@@ -476,7 +476,7 @@ class BaseMinion:
         """
         if minion_name in self._linked_minion.keys():
             try:
-                with SharedDict(f"{minion_name}_{buffer_name}", create=False) as tmp_dict:
+                with SharedDict(f"{minion_name}_{buffer_name}", lock=self.lock, create=False) as tmp_dict:
                     return tmp_dict.is_alive
             except FileNotFoundError:
                 self.log(logging.INFO, f"Linked shared buffer '{minion_name}_{buffer_name}' is closed.")
@@ -613,9 +613,9 @@ class LoggerMinion(BaseMinion, QueueListener):
         }
     }
 
-    def __init__(self, name, logger_config=None, listener_config=None):
-        self.name = name
-        super(LoggerMinion, self).__init__(name=self.name)
+    def __init__(self, name, lock, logger_config=None, listener_config=None):
+        # self.name = name
+        super(LoggerMinion, self).__init__(name=name, lock=lock)
 
         if logger_config is None:
             logger_config = self.DEFAULT_LOGGER_CONFIG
@@ -696,7 +696,7 @@ class TimerMinion(BaseMinion):
         self._time = None
         self._init_time = None
         self._isrunning = False
-        self._interval = interval/1000
+        self._interval = interval / 1000
 
     def main(self):
         if not self._isrunning:
@@ -705,16 +705,17 @@ class TimerMinion(BaseMinion):
             self._isrunning = True
             self._time = perf_counter()
         cur_time = perf_counter()
-        if cur_time-self._time > self._interval:
+        if cur_time - self._time > self._interval:
             self._time = cur_time
             self.on_time()
 
     @property
     def elapsed(self):
-        return perf_counter()-self._init_time
+        return perf_counter() - self._init_time
 
     def initialize(self):
         pass
+
     def on_time(self):
         pass
 

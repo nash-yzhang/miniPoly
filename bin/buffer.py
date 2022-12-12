@@ -1,7 +1,7 @@
 import json
 import traceback
 import warnings
-from multiprocessing import shared_memory
+from multiprocessing import shared_memory, Lock
 
 
 class SharedBuffer:
@@ -12,11 +12,12 @@ class SharedBuffer:
     _MAX_BUFFER_SIZE = 2 ** 32  # Maximum shared memory: 4 GB
     _READ_OFFSET = 30  # The first 30 bytes represents the valid size of the shared buffer
 
-    def __init__(self, name, data=None, size=None, create=True, force_write=False):
+    def __init__(self, name, lock: Lock, data=None, size=None, create=True, force_write=False):
         self._size = None
         self._name = name
+        self._lock = lock
         self._valid_size = 0  # The actual size with data loaded
-        self._lock = 0  # Non-negative integer
+        # self._lock = 0  # Non-negative integer
 
         byte_data = None
 
@@ -60,7 +61,7 @@ class SharedBuffer:
             self._shared_memory = shared_memory.SharedMemory(name=self._name)
             self._size = self._shared_memory.size
             try:
-                identity_string = self._read(-self._READ_OFFSET, self._READ_OFFSET, sudo=True).split('~')
+                identity_string = self._read(-self._READ_OFFSET, self._READ_OFFSET).split('~')
                 if identity_string[0] != self._CLASS_NAME:
                     raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
                 else:
@@ -141,34 +142,41 @@ class SharedBuffer:
     def read(self):
         return self._read(0, self.valid_size)
 
-    def _read(self, offset, length, mode='obj', sudo=False):
-        if sudo:
-            lock_gained = True
-        else:
-            lock_gained = self.request_lock()
-        if lock_gained:
-            offset += self._READ_OFFSET
-            _decoded_bytes = bytes(self._shared_memory.buf[offset:(offset + length)])
-            if mode == 'obj':
-                _decoded_bytes = _decoded_bytes.decode('utf-8').split('\x00')[0]
-                if _decoded_bytes:
-                    if not sudo:
-                        self._mem_release()
-                    return json.loads(_decoded_bytes)
-                else:
-                    if not sudo:
-                        self._mem_release()
-                    return _decoded_bytes
-            elif mode == 'bytes':
-                if not sudo:
-                    self._mem_release()
-                return _decoded_bytes
+    def _read(self, offset, length, mode='obj'):
+    # def _read(self, offset, length, mode='obj', sudo=False):
+        # if sudo:
+        #     lock_gained = True
+        # else:
+        #     lock_gained = self.request_lock()
+        # if lock_gained:
+        self._lock.acquire()
+        offset += self._READ_OFFSET
+        _decoded_bytes = bytes(self._shared_memory.buf[offset:(offset + length)])
+        if mode == 'obj':
+            _decoded_bytes = _decoded_bytes.decode('utf-8').split('\x00')[0]
+            if _decoded_bytes:
+                decoded = json.loads(_decoded_bytes)
+                self._lock.release()
+                # if not sudo:
+                #     self._mem_release()
+                return decoded
             else:
-                if not sudo:
-                    self._mem_release()
-                raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Undefined reading mode {mode}')
+                self._lock.release()
+                # if not sudo:
+                #     self._mem_release()
+                return _decoded_bytes
+        elif mode == 'bytes':
+            self._lock.release()
+            # if not sudo:
+            #     self._mem_release()
+            return _decoded_bytes
         else:
-            raise TimeoutError(f'[{self._CLASS_NAME} - {self._name}]: Cannot get the read lock')
+            self._lock.release()
+            # if not sudo:
+            #     self._mem_release()
+            raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Undefined reading mode {mode}')
+        # else:
+        #     raise TimeoutError(f'[{self._CLASS_NAME} - {self._name}]: Cannot get the read lock')
 
     def read_bytes(self):
         return self._read(0, self.valid_size, mode='bytes')
@@ -196,49 +204,53 @@ class SharedBuffer:
         self._set(b'\x00' * (self.valid_size - offset), offset=offset)  # delete everything after offset
         self.valid_size = offset
 
-    def _mem_lock(self):
-        if self.valid_size > -1:
-            self._lock = self._valid_size * 1  # Make sure the value is copied
-            self.valid_size = -1
-
-    def _mem_release(self):
-        self.valid_size = self._lock * 1  # Make sure the value is copied
-        self._lock = 0
-
-    def request_lock(self, timeout: int = 10000):
-        itt = 0
-        while itt < timeout:
-            self._mem_lock()
-            itt += 1
-            if self._lock > -1:
-                break
-
-        return self._lock > -1
+    # def _mem_lock(self):
+    #     if self.valid_size > -1:
+    #         self._lock = self._valid_size * 1  # Make sure the value is copied
+    #         self.valid_size = -1
+    #
+    # def _mem_release(self):
+    #     self.valid_size = self._lock * 1  # Make sure the value is copied
+    #     self._lock = 0
+    #
+    # def request_lock(self, timeout: int = 10000):
+    #     itt = 0
+    #     while itt < timeout:
+    #         self._mem_lock()
+    #         itt += 1
+    #         if self._lock > -1:
+    #             break
+    #
+    #     return self._lock > -1
 
     def _set(self, byte_data, offset):
-        if self.request_lock():
-            if offset > max(self._lock - 1, 0):
-                self._mem_release()
-                raise IndexError(
-                    f'[{self._CLASS_NAME} - {self._name}] Offset ({offset}) out of range: ({self._lock - 1})')  # To make sure all binary contents are continuous and no gap (b'\x00') in between
+        self._lock.acquire()
+        if offset > max(self._valid_size - 1, 0):
+            self._lock.release()
+            # self._mem_release()
+            raise IndexError(
+                f'[{self._CLASS_NAME} - {self._name}] Offset ({offset}) out of range: ({self._valid_size - 1})')  # To make sure all binary contents are continuous and no gap (b'\x00') in between
 
-            if (offset + len(byte_data)) > self._size:
-                self._mem_release()
-                raise ValueError(
-                    f'[{self._CLASS_NAME} - {self._name}] Data byte end position out of range (Offset: {offset}, Length: {len(byte_data)}). \nCheck if the data size is smaller than the buffer size')
-            else:
-                length = len(byte_data)
-
-            offset += self._READ_OFFSET  # Protect the identity and size info block
-
-            self._shared_memory.buf[offset:(offset + length)] = byte_data
-
-            if offset + length > self._lock:
-                self._lock = offset + length
-
-            self._mem_release()
+        if (offset + len(byte_data)) > self._size:
+            self._lock.release()
+            # self._mem_release()
+            raise ValueError(
+                f'[{self._CLASS_NAME} - {self._name}] Data byte end position out of range (Offset: {offset}, Length: {len(byte_data)}). \nCheck if the data size is smaller than the buffer size')
         else:
-            raise TimeoutError(f'[{self._CLASS_NAME} - {self._name}]: Cannot get the write lock')
+            length = len(byte_data)
+
+        offset += self._READ_OFFSET  # Protect the identity and size info block
+
+        self._shared_memory.buf[offset:(offset + length)] = byte_data
+        self.valid_size = offset + length
+        self._lock.release()
+
+        # if offset + length > self._lock:
+        #     self._lock = offset + length
+
+        # self._mem_release()
+        # else:
+        #     raise TimeoutError(f'[{self._CLASS_NAME} - {self._name}]: Cannot get the write lock')
 
     def close(self):
         self._shared_memory.close()
@@ -258,7 +270,7 @@ class SharedBuffer:
 
     def is_alive(self):
         try:
-            tmp_buffer = SharedBuffer(self.name, create=False)
+            tmp_buffer = SharedBuffer(self.name, lock=self._lock,create=False)
             tmp_buffer.close()
             return True
         except FileNotFoundError:
@@ -268,9 +280,10 @@ class SharedBuffer:
 class SharedDict(dict):
     _BUFFER_PREFIX = 'b*'
 
-    def __init__(self, linked_memory_name: str, *args, create=False, force_write=False, size=2 ** 14, **kwargs):
+    def __init__(self, linked_memory_name: str, lock, *args, create=False, force_write=False, size=2 ** 14, **kwargs):
         super().__init__(*args, **kwargs)
         self._init_param = {"name": linked_memory_name,
+                            "lock": lock,
                             "data": dict(self),
                             "create": create,
                             "force_write": force_write,
@@ -294,7 +307,7 @@ class SharedDict(dict):
         return super().__getitem__(key)
 
     def __repr__(self):
-        self._refresh()
+        # self._refresh()
         return super().__repr__()
 
     def __delitem__(self, key):
