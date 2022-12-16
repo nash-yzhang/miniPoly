@@ -1,19 +1,21 @@
 from bin.app import GUIModule, CanvasModule
 from bin.minion import LoggerMinion
+from multiprocessing import Lock
 class GLapp:
     def __init__(self, name):
         self.name = name
+        self._lock = Lock()
         self._connections = {}
         self._shared_memory = {}
         self._shared_memory_param = {}
 
-        self._GUI = GUIModule('GUI')
-        self._GL_canvas = CanvasModule('OPENGL')
+        self._GUI = GUIModule('GUI',lock=self._lock)
+        self._GL_canvas = CanvasModule('OPENGL',lock=self._lock)
         self._GL_canvas.connect(self._GUI)
 
         self._GUI.display_proc = self._GL_canvas.name
         self._GL_canvas.controller_proc = self._GUI.name
-        self._logger = LoggerMinion('MAIN LOGGER')
+        self._logger = LoggerMinion('MAIN LOGGER',lock=self._lock)
 
         self._GUI.attach_logger(self._logger)
         self._GL_canvas.attach_logger(self._logger)

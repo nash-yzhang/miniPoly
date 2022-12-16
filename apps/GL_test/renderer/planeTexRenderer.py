@@ -35,6 +35,7 @@ class Renderer(GLRenderer):
 
     def on_draw(self,event):
         gloo.clear('white')
+        print(212121212)
         u_time = self.canvas.timer.elapsed
         self.imageToRender = np.sin(self.imCoordToRender+u_time%(2.*np.pi)*2.).astype(np.float32)
         self.program['u_tex'] = self.imageToRender

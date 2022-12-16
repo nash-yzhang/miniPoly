@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 from time import sleep, time, perf_counter
 
 import multiprocessing as mp
@@ -64,10 +65,12 @@ class BaseMinion:
                 if not hook._is_suspended:
                     hook.info(hook.name + " is suspended\n")
                     hook._is_suspended = True
+                sleep(.1)
             try:
                 STATE = hook.status
             except:
-                print(f'{hook.name}_{hook.status}')
+                pass
+                # print(f'{hook.name}: {traceback.format_exc()}')
         hook._shutdown()
 
     _INDEX_SHARED_BUFFER_SIZE = 2 ** 16  # The size allocated for storing small shared values/array, each write takes <2 ms
@@ -413,14 +416,14 @@ class BaseMinion:
         if chn is None:
             self.log(logging.ERROR, "Receive failed: Queue [{}] does not exist".format(src_name))
             return None
-        if self.status > 0:
+        if self.status >= 0:
             if not chn.empty():
                 received = chn.get()
             else:
                 self.log(logging.DEBUG, "Empty Queue")
                 received = None
         else:
-            self.log(logging.ERROR, "Receive failed: '{}' has been terminated".format(src_name))
+            self.log(logging.ERROR, "Receive failed: '{}' has been terminated".format(self.name))
             received = None
             self.disconnect(src_name)
             self.log(logging.INFO, "Removed invalid source [{}]".format(src_name))

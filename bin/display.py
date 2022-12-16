@@ -53,7 +53,6 @@ class GLDisplay(app.Canvas, AbstractMinionMixin):
         self._processHandler = handler
         self._setTime = 0
         self._tic = 0
-        self._rmtShutdown = False
         if controllerProcName:
             self.controllerProcName = controllerProcName
 
@@ -92,19 +91,15 @@ class GLDisplay(app.Canvas, AbstractMinionMixin):
         if self.timer.elapsed - self._setTime > .01:  # Limit the call frequency to 1 second
 
             # Check if any remote calls have been set first before further processing
-            if self._processHandler.status == -1:
-                self._rmtShutdown = True
+            if self._processHandler.status <= 0:
                 self.on_close()
-            elif self._processHandler.status == 0:
-                self.on_close()
+                return None
 
             self._setTime = np.floor(self.timer.elapsed)
             self.get(self.controllerProcName)
         self.update()
 
     def on_close(self):
-        if not self._rmtShutdown:
-            self._processHandler.set_state_to(self._processHandler.name, 'status', 0)
         self.close()
 
     def importModuleFromPath(self):

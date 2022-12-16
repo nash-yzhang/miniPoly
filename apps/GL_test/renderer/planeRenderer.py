@@ -112,6 +112,7 @@ class Renderer(GLRenderer):
         self.program['u_resolution'] = (self.canvas.size[0],self.canvas.size[1])
 
     def on_draw(self,event):
+        print('1122sssss')
         gloo.clear('white')
         u_time = self.canvas.timer.elapsed
         self.program['u_time'] = u_time

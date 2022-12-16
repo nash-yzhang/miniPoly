@@ -66,29 +66,17 @@ class CanvasModule(BaseMinion):
     def __init__(self, *args, **kwargs):
         super(CanvasModule, self).__init__(*args, **kwargs)
         self._win = None
-        self.controller_proc = None
 
     def main(self):
         try:
-            vispy.use('glfw')
+            APP = app.Application(backend_name='pyqt5')
+            APP.create()
             self._win = GLDisplay(self)
-            if self.controller_proc is not None:
-                self._win.controllerProcName = self.controller_proc
-                self._win.show()
-                self.info('Starting display window')
-                app.run()
-                self._win.on_close()
-            else:
-                self.error("[{}] Cannot initialize: Undefined controller process name".format(self.name))
+            self._win.controllerProcName = 'GUI'
+            self._win.show()
+            self.info('Starting display window')
+            APP.run()
+            self._win.on_close()
+            APP.quit()
         except Exception as e:
             self.error(e)
-
-    @property
-    def controller_proc(self):
-        return self._controllerProcName
-
-    @controller_proc.setter
-    def controller_proc(self, value):
-        self._controllerProcName = value
-
-
