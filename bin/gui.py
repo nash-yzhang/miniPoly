@@ -1,7 +1,11 @@
+import os
+
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 import traceback, sys
 from importlib import util, reload
+
+import pandas as pd
 
 from bin.minion import BaseMinion, AbstractMinionMixin
 
@@ -19,7 +23,6 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
         self._displayProcName = ''
         self.rendererName = ''
         self._renderer_path = ''
-        # self._vcanvas = None
 
         self._init_main_win()
         self._init_menu()
@@ -167,3 +170,55 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
     def shutdown(self):
         while self._processHandler.get_state_from(self._displayProcName, "status") != -1:
             self._processHandler.set_state_to(self._displayProcName, "status", -11)
+
+class DataframeTable(qw.QTableView):
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls:
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls:
+            event.accept()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls:
+            url = event.mimeData().urls()[0].path()[1:]
+            if os.path.isfile(url):
+                self.loadfile(url)
+        else:
+            event.ignore()
+
+    def loadfile(self, fdir):
+        if os.path.splitext(fdir)[1] in ['.xls', '.xlsx', '.h5']:
+            self.setModel(DataframeModel(data=pd.read_excel(fdir)))
+
+class DataframeModel(qc.QAbstractTableModel):
+    def __init__(self, data, parent=None):
+        qc.QAbstractTableModel.__init__(self, parent)
+        self._data = data
+
+    def rowCount(self, parent=None):
+        return len(self._data.values)
+
+    def columnCount(self, parent=None):
+        return self._data.columns.size
+
+    def data(self, index, role=qc.Qt.DisplayRole):
+        if index.isValid():
+            if role == qc.Qt.DisplayRole:
+                return str(self._data.iloc[index.row()][index.column()])
+        return None
+
+    def headerData(self, col, orientation, role):
+        if orientation == qc.Qt.Horizontal and role == qc.Qt.DisplayRole:
+            return self._data.columns[col]
+        return None
