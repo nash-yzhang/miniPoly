@@ -1,31 +1,25 @@
-from bin.app import AbstractGUIModule
+from bin.app import AbstractAPP
 from bin.minion import BaseMinion, LoggerMinion
 from apps.protocol_compiler.protocol_compiler import ProtocolCommander, GraphicProtocolCompiler, ServoDriver
-from vispy import gloo, app
 from multiprocessing import Lock
 
-class TestGUI(AbstractGUIModule):
+class TestGUI(AbstractAPP):
 
-    def gui_init(self):
+    def initialize(self):
+        super().initialize()
         self._win = ProtocolCommander(self)
+        self.info("Starting GUI")
+        self._win.show()
 
 
+class CanvasModule(AbstractAPP):
 
-class CanvasModule(BaseMinion):
-    def __init__(self, *args, **kwargs):
-        super(CanvasModule, self).__init__(*args, **kwargs)
-        self._win = None
-
-    def main(self):
-        try:
-            self._win = GraphicProtocolCompiler(self)
-            self._win.initialize()
-            self._win.show()
-            self.info('Starting display window')
-            app.run()
-            self._win.on_close()
-        except Exception as e:
-            self.error(e)
+    def initialize(self):
+        super().initialize()
+        self._win = GraphicProtocolCompiler(self)
+        self.info('Starting display window')
+        self._win.initialize()
+        self._win.show()
 
 
 

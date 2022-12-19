@@ -30,7 +30,7 @@ class ProtocolCommander(qw.QMainWindow, AbstractMinionMixin):
         self._refreshInterval = refresh_interval
         self._timer.setInterval(refresh_interval)
         self._timer_started = False
-        self._processHandler.create_state('is_running',False)
+        self.create_state('is_running',False)
 
         self.timer_switcher = qw.QPushButton('Start')
         self.timer_switcher.clicked.connect(self.switch_timer)
@@ -68,7 +68,7 @@ class ProtocolCommander(qw.QMainWindow, AbstractMinionMixin):
         self._init_menu()
 
     def write_servo_pin(self,val):
-        self._processHandler.set_state_to('servo', 'd:8:s', (val/180))
+        self.set_state_to('servo', 'd:8:s', (val/180))
 
     def addTableBox(self, name):
         frame = qw.QGroupBox(self)
@@ -99,9 +99,9 @@ class ProtocolCommander(qw.QMainWindow, AbstractMinionMixin):
         self.timer_switcher.setText('Stop')
 
     def startTimer(self):
-        self._processHandler.set_state_to(self._processHandler.name,'is_running',True)
-        self._processHandler.set_state_to('OPENGL','u_offset_angle',0)
-        self._processHandler.set_state_to('OPENGL','u_rot_speed',0)
+        self.set_state('is_running',True)
+        self.set_state_to('OPENGL','u_offset_angle',0)
+        self.set_state_to('OPENGL','u_rot_speed',0)
         data = self.tables['Audio'].model()._data
         self.sinewave = SineWave(pitch=data['p_freq'][0],
                                  pitch_per_second=2000,
@@ -116,10 +116,10 @@ class ProtocolCommander(qw.QMainWindow, AbstractMinionMixin):
         self.timer_switcher.setText('Start')
 
     def stopTimer(self):
-        self._processHandler.set_state_to(self._processHandler.name,'is_running',False)
+        self.set_state('is_running',False)
         self.sinewave.stop()
-        self._processHandler.set_state_to('OPENGL','u_offset_angle',0)
-        self._processHandler.set_state_to('OPENGL','u_rot_speed',0)
+        self.set_state_to('OPENGL','u_offset_angle',0)
+        self.set_state_to('OPENGL','u_rot_speed',0)
         sleep(.1)
         # pass
 
@@ -143,8 +143,8 @@ class ProtocolCommander(qw.QMainWindow, AbstractMinionMixin):
                         u_rot_speed = data['u_rot_speed'][row_idx].astype(float)
                         while True:
                             try:
-                                self._processHandler.set_state_to('OPENGL','p_time',p_time)
-                                self._processHandler.set_state_to('OPENGL','u_rot_speed',u_rot_speed)
+                                self.set_state_to('OPENGL','p_time',p_time)
+                                self.set_state_to('OPENGL','u_rot_speed',u_rot_speed)
                                 break
                             except:
                                 pass
@@ -194,7 +194,7 @@ class ProtocolCommander(qw.QMainWindow, AbstractMinionMixin):
                     self._stopTimer()
                 else:
                     if self.watch_state('servo_row',row_idx):
-                        self._processHandler.set_state_to('servo','d:8:s',float(data['d:8:s'][row_idx])/90)
+                        self.set_state_to('servo','d:8:s',float(data['d:8:s'][row_idx])/90)
                         self.tables['Servo'].selectRow(row_idx)
                         self.row_idx = row_idx
             else:
@@ -225,6 +225,9 @@ class ProtocolCommander(qw.QMainWindow, AbstractMinionMixin):
         Exit.triggered.connect(self.close)
         # self._menu_file.addAction(loadfile)
         self._menu_file.addAction(Exit)
+
+    def close(self) -> None:
+        pass
 
     # def loadfile(self):
     #     datafile = qw.QFileDialog.getOpenFileName(self, 'Open File', 'D:\\Yue Zhang\\OneDrive\\Bonhoeffer Lab\\PycharmProjects\\miniPoly\\apps\\protocol_compiler',
@@ -320,18 +323,18 @@ class GraphicProtocolCompiler(app.Canvas, AbstractMinionMixin):
         gloo.set_state("translucent")
         self.program['u_resolution'] = (self.size[0], self.size[1])
 
-        self._processHandler.create_state('u_rot_speed',0)
-        self._processHandler.create_state('u_offset_angle',0)
-        self._processHandler.create_state('p_time',0)
-        self.program['u_rot_speed'] = self._processHandler.get_state_from(self._processHandler.name,'u_rot_speed')
-        self.program['u_offset_angle'] = self._processHandler.get_state_from(self._processHandler.name,'u_offset_angle')
+        self.create_state('u_rot_speed',0)
+        self.create_state('u_offset_angle',0)
+        self.create_state('p_time',0)
+        self.program['u_rot_speed'] = self.get_state('u_rot_speed')
+        self.program['u_offset_angle'] = self.get_state('u_offset_angle')
         self._last_cmd_time = None
 
     def on_timer(self, event):
 
         # if self.timer.elapsed - self._setTime > .01:  # Limit the call frequency to 1 second
         #
-        #     # self._processHandler.set_state_to(self._processHandler.name, 'u_radius', np.sin(self.timer.elapsed))
+        #     # self.set_state('u_radius', np.sin(self.timer.elapsed))
         #     # Check if any remote calls have been set first before further processing
         #     if self._processHandler.status == -1:
         #         self._rmtShutdown = True
@@ -347,11 +350,11 @@ class GraphicProtocolCompiler(app.Canvas, AbstractMinionMixin):
         try:
             gloo.clear([0,0,0,0])
 
-            # self.program['u_radius'] = self._processHandler.get_state_from(self._processHandler.name,'u_radius')
-            is_running = self._processHandler.get_state_from('testgui','is_running')
+            # self.program['u_radius'] = self.get_state_from(self._processHandler.name,'u_radius')
+            is_running = self.get_state_from('testgui','is_running')
             if is_running:
-                self._last_cmd_time = self._processHandler.get_state_from(self._processHandler.name, 'p_time')
-                self.program['u_rot_speed'] = self._processHandler.get_state_from(self._processHandler.name,'u_rot_speed')
+                self._last_cmd_time = self.get_state('p_time')
+                self.program['u_rot_speed'] = self.get_state('u_rot_speed')
                 self.program['u_offset_angle'] = 0
                 self.program['u_time'] = self.timer.elapsed - self._last_cmd_time
                 self.program.draw('triangle_strip')
@@ -367,12 +370,13 @@ class GraphicProtocolCompiler(app.Canvas, AbstractMinionMixin):
 
     def on_close(self):
         if not self._rmtShutdown:
-            self._processHandler.set_state_to(self._processHandler.name, 'status', -1)
+            self.set_state('status', -1)
         self.close()
 
 class ServoDriver(TimerMinion):
 
     def initialize(self):
+        super().initialize()
         self._port_name = 'COM6'
         self.servos = {'d:8:s':1}
 
@@ -532,10 +536,10 @@ class ServoDriver(TimerMinion):
         cmd = chr(0x24)
         self.sendCmd(cmd)
 
-    def on_time(self):
+    def on_time(self,t):
         try:
             for n,v in self.servos.items():
-                state = self.get_state_from(self.name,n)
+                state = self.get_state(n)
                 if self.watch_state(n,state) and state is not None:
                     self.setTarget(v,int(state*4000+4000))
                     # v.write(state*180)

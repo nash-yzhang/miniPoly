@@ -56,15 +56,21 @@ class BaseMinion:
         if hook._log_config is not None:
             logging.config.dictConfig(hook._log_config)
             hook.logger = logging.getLogger(hook.name)
+        hook.init_process()
+        hook._has_init = False
         while STATE >= 0:
             if STATE == 1:
                 if hook._is_suspended:
                     hook._is_suspended = False
+                if not hook._has_init:
+                    hook.initialize()
+                    hook._has_init = True
                 hook.main()
             elif STATE == 0:
                 if not hook._is_suspended:
                     hook.info(hook.name + " is suspended\n")
                     hook._is_suspended = True
+                    hook._has_init = False
                 sleep(.1)
             try:
                 STATE = hook.status
@@ -87,6 +93,7 @@ class BaseMinion:
         self.name = name
         self.lock = lock
         self._queue = {}  # a dictionary of in/output channels storing rpc function name-value pair (marshalled) E.g.: {'receiver_minion_1':('terminate',True)}
+        self._watching_state = {}
         self._elapsed = time()
 
         # The _shared_buffer is a dictionary that contains the shared buffer which will be dynamically created and
@@ -192,7 +199,7 @@ class BaseMinion:
             shared_buffer_reference_name = f"b*{shared_buffer_name}"
             if shared_buffer_reference_name not in self._shared_dict.keys():
                 try:
-                    with SharedDict(shared_buffer_name,lock=self.lock) as tmp_dict:
+                    with SharedDict(shared_buffer_name, lock=self.lock) as tmp_dict:
                         # Just to test if the SharedDict exist and the name is correct
                         dict_name = tmp_dict.get('name')
                         if dict_name is None:
@@ -290,6 +297,9 @@ class BaseMinion:
 
         return state_val
 
+    def get_state(self, state_name: str):
+        return self.get_state_from(self.name, state_name)
+
     def set_state_to(self, minion_name: str, state_name: str, val):
         """
         Set the value stored in the shared dictionary of self or foreign minions by dict key
@@ -318,6 +328,9 @@ class BaseMinion:
                 self.log(logging.ERROR, f"Unknown minion: '{minion_name}'")
         else:
             self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+
+    def set_state(self, state_name: str, state_val):
+        self.set_state_to(self.name, state_name, state_val)
 
     def get_foreign_buffer(self, minion_name, buffer_name):
         """
@@ -516,6 +529,12 @@ class BaseMinion:
         self.Process = mp.Process(target=BaseMinion.innerLoop, args=(self,))
         self.Process.start()
 
+    def initialize(self):
+        pass
+
+    def init_process(self):
+        pass
+
     def main(self):
         pass
 
@@ -541,6 +560,15 @@ class BaseMinion:
 
         if self.Process.is_alive():
             self.Process.close()
+
+    def watch_state(self, name, val):
+        if name not in self._watching_state.keys():
+            self._watching_state[name] = val
+            return True
+        else:
+            changed = val != self._watching_state[name]
+            self._watching_state[name] = val
+            return changed
 
 
 class MinionLogHandler:
@@ -696,30 +724,119 @@ class TimerMinion(BaseMinion):
 
     def __init__(self, *args, interval=10, **kwargs):
         super(TimerMinion, self).__init__(*args, **kwargs)
-        self._time = None
-        self._init_time = None
+        self.timer = {'default': [None, None, None]}  # 1. interval, 2. elapsed time, 3. init_time
+        self.timer_cb_func = {'default': self.on_time}
         self._isrunning = False
         self._interval = interval / 1000
 
-    def main(self):
-        if not self._isrunning:
-            self.initialize()
-            self._init_time = perf_counter()
-            self._isrunning = True
-            self._time = perf_counter()
+    def add_timer(self, name, cb_func=None):
+        '''
+        allows to add custom timer
+        :param name: timer's name
+        :return:
+        '''
+        self.timer[name] = [None, None, None]
+        self.timer_cb_func[name] = cb_func
+
+    def start_timing(self, timer_name='default'):
         cur_time = perf_counter()
-        if cur_time - self._time > self._interval:
-            self._time = cur_time
-            self.on_time()
+        if type(timer_name) is str:
+            if timer_name == 'all':
+                for k in self.timer.keys():
+                    self.timer[k] = [0, cur_time]
+            else:
+                if timer_name in self.timer.keys():
+                    self.timer[timer_name] = [0, cur_time]
+                else:
+                    self.error(f'NameError: Unknown timer name: {timer_name}')
+        elif type(timer_name) is list:
+            for n in timer_name:
+                if n in self.timer.keys():
+                    self.timer[n] = [0, cur_time]
+                else:
+                    self.error(f'NameError: Unknown timer name: {n}')
+        else:
+            self.error(f'TypeError: Invalid timer name: {timer_name}')
+
+    def stop_timing(self, timer_name='default'):
+        cur_time = perf_counter()
+        if type(timer_name) is str:
+            if timer_name == 'all':
+                for k in self.timer.keys():
+                    interval, elapsed, init_time = self.timer[k]
+                    self.timer[k] = [elapsed - init_time, -1]
+            else:
+                if timer_name in self.timer.keys():
+                    interval, elapsed, init_time = self.timer[timer_name]
+                    self.timer[timer_name] = [elapsed - init_time, -1]
+                else:
+                    self.error(f'NameError: Unknown timer name: {timer_name}')
+        elif type(timer_name) is list:
+            for n in timer_name:
+                if n in self.timer.keys():
+                    interval, elapsed, init_time = self.timer[n]
+                    self.timer[n] = [elapsed - init_time, -1]
+                else:
+                    self.error(f'NameError: Unknown timer name: {n}')
+        else:
+            self.error(f'TypeError: Invalid timer name: {timer_name}')
+
+    def get_time(self, timer_name='default'):
+        cur_time = perf_counter()
+        if type(timer_name) is str:
+            if timer_name == 'all':
+                tmp_times = []
+                for k,v in self.timer.items():
+                    elapsed = cur_time - v[1]
+                    if elapsed-v[0] > self._interval:
+                        v[0] = elapsed
+                        cb_func = self.timer_cb_func.get(k)
+                        if cb_func is not None:
+                            k(v[0])
+                    tmp_times.append(v)
+                return tmp_times
+            else:
+                if timer_name in self.timer.keys():
+                    elapsed = cur_time - self.timer[timer_name][1]
+                    if elapsed - self.timer[timer_name][0] > self._interval:
+                        self.timer[timer_name][0] = elapsed
+                        cb_func = self.timer_cb_func.get(timer_name)
+                        if cb_func is not None:
+                            cb_func(self.timer[timer_name][0])
+                    return self.timer[timer_name]
+                else:
+                    self.error(f'NameError: Unknown timer name: {timer_name}')
+                    return None
+        elif type(timer_name) is list:
+            tmp_times = []
+            for n in timer_name:
+                if n in self.timer.keys():
+                    elapsed = cur_time - self.timer[timer_name][1]
+                    if elapsed - self.timer[n][0] > self._interval:
+                        self.timer[n][0] = elapsed
+                        cb_func = self.timer_cb_func.get(n)
+                        if cb_func is not None:
+                            cb_func(self.timer[n][0])
+                    tmp_times.append(self.timer[n])
+                else:
+                    self.error(f'NameError: Unknown timer name: {n}')
+                    tmp_times.append(None)
+            return tmp_times
+        else:
+            self.error(f'TypeError: Invalid timer name: {timer_name}')
+            return None
+
+    def initialize(self):
+        self.start_timing('default')
+
+    def main(self):
+        self.get_time('default')
 
     @property
     def elapsed(self):
-        return perf_counter() - self._init_time
+        return self.get_time('default')[1]
 
-    def initialize(self):
-        pass
-
-    def on_time(self):
+    def on_time(self,t):
         pass
 
 
@@ -760,6 +877,21 @@ class AbstractMinionMixin:
             self.parse_msg(msg_type, msg)
         else:
             self.log("DEBUG", f"EMPTY MESSAGE from [{source}]")
+
+    def create_state(self, state_name, state_val):
+        self._processHandler.create_state(state_name, state_val)
+
+    def set_state(self, state_name, state_val):
+        self._processHandler.set_state(state_name, state_val)
+
+    def set_state_to(self, minion_name, state_name, state_val):
+        self._processHandler.set_state_to(minion_name, state_name, state_val)
+
+    def get_state(self, state_name):
+        return self._processHandler.get_state(state_name)
+
+    def get_state_from(self, minion_name, state_name):
+        return self._processHandler.get_state_from(minion_name, state_name)
 
     def parse_msg(self, msg_type, msg):
         pass

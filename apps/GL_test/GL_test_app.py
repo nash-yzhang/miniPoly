@@ -1,4 +1,4 @@
-from bin.app import GUIModule, CanvasModule
+from bin.app import APP, CanvasModule
 from bin.minion import LoggerMinion
 from multiprocessing import Lock
 class GLapp:
@@ -9,7 +9,7 @@ class GLapp:
         self._shared_memory = {}
         self._shared_memory_param = {}
 
-        self._GUI = GUIModule('GUI',lock=self._lock)
+        self._GUI = APP('GUI', lock=self._lock)
         self._GL_canvas = CanvasModule('OPENGL',lock=self._lock)
         self._GL_canvas.connect(self._GUI)
 
