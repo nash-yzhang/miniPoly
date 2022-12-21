@@ -11,6 +11,7 @@ import traceback
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 from PyQt5.Qt import Qt as qt
+from PyQt5.QtGui import QIcon, QPixmap
 from vispy import app, gloo
 
 class AbstractCompiler(TimerMinionMixin):
@@ -29,7 +30,27 @@ class AbstractCompiler(TimerMinionMixin):
     def on_protocol(self,t):
         pass
 
-class ProtocolCommander(AbstractCompiler):
+class QtCompiler(AbstractCompiler,qw.QMainWindow):
+
+    def __init__(self, processHandler, refresh_interval=10, **kwargs):
+        AbstractCompiler.__init__(self, processHandler, refresh_interval)
+        qw.QMainWindow.__init__(self, **kwargs)
+        self.setWindowTitle(self._name)
+        self.setWindowIcon(QIcon('../minipoly.ico'))
+        self.renderSplashScreen()
+
+    def renderSplashScreen(self):
+        splash_pix = QPixmap('../minipoly.ico')
+        splash = qw.QSplashScreen(splash_pix, qc.Qt.WindowStaysOnTopHint)
+        # add fade to splashscreen
+        splash.show()
+        for i in range(20):
+            splash.setWindowOpacity(1.5-abs(1.5-(i/10)))
+            sleep(0.05)
+        splash.close()  # close the splash screen
+
+
+class ProtocolCommander(QtCompiler):
     def __init__(self, processHandler: BaseMinion = None, windowSize=(1200, 400), refresh_interval=10):
         super().__init__(processHandler)
         # self._processHandler = processHandler

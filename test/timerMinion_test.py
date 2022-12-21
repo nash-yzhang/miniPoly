@@ -1,8 +1,8 @@
 import traceback
 
 from bin.gui import DataframeTable
-from bin.minion import TimerMinion,LoggerMinion
-from bin.compiler import AbstractCompiler
+from bin.minion import LoggerMinion
+from bin.compiler import QtCompiler
 from bin.app import AbstractGUIAPP
 import PyQt5.QtWidgets as qw
 from time import sleep
@@ -16,17 +16,9 @@ class TestApp(AbstractGUIAPP):
         self._compiler = ProtocolCommander(self)
         self._compiler.show()
 
-class ProtocolCommander(AbstractCompiler,qw.QMainWindow):
-    def __init__(self, *args, windowSize=(1200, 400), **kwargs):
-        AbstractCompiler.__init__(self,*args,**kwargs)
-        qw.QMainWindow.__init__(self,parent=None)
-        # super().__init__(*args,**kwargs)
-
-
-        self._windowSize = windowSize
-        self.setWindowTitle(self._name)
-        self.resize(*self._windowSize)
-
+class ProtocolCommander(QtCompiler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         # self._timer = qc.QTimer()
         # self._timer.timeout.connect(self.on_time)
         # self._init_time = -1
@@ -56,9 +48,6 @@ class ProtocolCommander(AbstractCompiler,qw.QMainWindow):
         self.setCentralWidget(self.main_widget)
 
         self._init_menu()
-
-    def write_servo_pin(self,val):
-        self.set_state_to('servo', 'd:8:s', (val/180))
 
     def addTableBox(self, name):
         frame = qw.QGroupBox(self)
