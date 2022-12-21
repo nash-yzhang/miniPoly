@@ -11,4 +11,3 @@ def measure_clock():
     return (t0, t1, t1-t0)
 
 a = reduce(lambda a,b:a+b, [measure_clock()[2] for i in range(1000000)] )/1000000.0
-#%%

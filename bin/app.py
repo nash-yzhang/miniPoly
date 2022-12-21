@@ -7,15 +7,15 @@ import PyQt5.QtWidgets as qw
 from bin.gui import BaseGUI
 from bin.display import GLDisplay
 
-class AbstractAPP(TimerMinion):
-    def __init__(self, *args, **kwargs):
-        super(AbstractAPP, self).__init__(*args, **kwargs)
-        self._win = None
 
+class AbstractGUIAPP(TimerMinion):
+    def __init__(self, *args, **kwargs):
+        super(AbstractGUIAPP, self).__init__(*args, **kwargs)
     def initialize(self):
         self._app = qw.QApplication(sys.argv)
+        super().initialize()
 
-    def main(self):
+    def on_time(self,t):
         self._app.processEvents()
         self.poll_windows()
 
@@ -25,7 +25,6 @@ class AbstractAPP(TimerMinion):
             win_status.append(win.isVisible())
         if not any(win_status):
             self.shutdown()
-
 
 # class APP(AbstractAPP):
 #     def __init__(self, *args, **kwargs):

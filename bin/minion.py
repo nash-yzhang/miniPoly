@@ -1,6 +1,4 @@
 import os
-import sys
-import traceback
 from time import sleep, time, perf_counter
 
 import multiprocessing as mp
@@ -10,8 +8,6 @@ import logging
 import logging.config
 from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
 from logging.handlers import QueueListener
-from PyQt5.QtCore import QTimer
-from PyQt5.QtWidgets import QApplication, QLabel
 
 from typing import Callable
 
@@ -41,6 +37,7 @@ LOG_LVL_LOOKUP_TABLE = {
 
 COMM_WAITING_TIME = 1e-3
 
+SHAREDLOCK = Lock()
 
 class BaseMinion:
     @staticmethod
@@ -81,7 +78,7 @@ class BaseMinion:
 
     _INDEX_SHARED_BUFFER_SIZE = 2 ** 16  # The size allocated for storing small shared values/array, each write takes <2 ms
 
-    def __init__(self, name, lock: Lock):
+    def __init__(self, name):
 
         self.logger = None
         self._log_config = None
@@ -91,7 +88,7 @@ class BaseMinion:
         self._pid = None
 
         self.name = name
-        self.lock = lock
+        self.lock = SHAREDLOCK
         self._queue = {}  # a dictionary of in/output channels storing rpc function name-value pair (marshalled) E.g.: {'receiver_minion_1':('terminate',True)}
         self._watching_state = {}
         self._elapsed = time()
@@ -644,9 +641,9 @@ class LoggerMinion(BaseMinion, QueueListener):
         }
     }
 
-    def __init__(self, name, lock, logger_config=None, listener_config=None):
+    def __init__(self, name, logger_config=None, listener_config=None):
         # self.name = name
-        super(LoggerMinion, self).__init__(name=name, lock=lock)
+        super(LoggerMinion, self).__init__(name=name)
 
         if logger_config is None:
             logger_config = self.DEFAULT_LOGGER_CONFIG
@@ -724,10 +721,18 @@ class TimerMinion(BaseMinion):
 
     def __init__(self, *args, interval=10, **kwargs):
         super(TimerMinion, self).__init__(*args, **kwargs)
-        self.timer = {'default': [None, None, None]}  # 1. interval, 2. elapsed time, 3. init_time
+        self.timer = {'default': [-1,-1]}  # 1. interval, 2. elapsed time, 3. init_time
         self.timer_cb_func = {'default': self.on_time}
         self._isrunning = False
         self._interval = interval / 1000
+
+    @property
+    def interval(self):
+        return self._interval*1000
+
+    @interval.setter
+    def interval(self,val):
+        self._interval = val/1000
 
     def add_timer(self, name, cb_func=None):
         '''
@@ -735,8 +740,16 @@ class TimerMinion(BaseMinion):
         :param name: timer's name
         :return:
         '''
-        self.timer[name] = [None, None, None]
+        self.timer[name] = [-1,-1]
         self.timer_cb_func[name] = cb_func
+
+    def add_callback(self, timer_name, cb_func):
+        if timer_name in self.timer_cb_func.keys():
+            if self.timer_cb_func.get(timer_name) is not None:
+                self.warning(f'Reset the callback function of the ["{timer_name}"] timer')
+            self.timer_cb_func[timer_name] = cb_func
+        else:
+            self.error(f'NameError: Unknown timer name: {timer_name}')
 
     def start_timing(self, timer_name='default'):
         cur_time = perf_counter()
@@ -763,23 +776,34 @@ class TimerMinion(BaseMinion):
         if type(timer_name) is str:
             if timer_name == 'all':
                 for k in self.timer.keys():
-                    interval, elapsed, init_time = self.timer[k]
+                    elapsed, init_time = self.timer[k]
                     self.timer[k] = [elapsed - init_time, -1]
             else:
                 if timer_name in self.timer.keys():
-                    interval, elapsed, init_time = self.timer[timer_name]
+                    elapsed, init_time = self.timer[timer_name]
                     self.timer[timer_name] = [elapsed - init_time, -1]
                 else:
                     self.error(f'NameError: Unknown timer name: {timer_name}')
         elif type(timer_name) is list:
             for n in timer_name:
                 if n in self.timer.keys():
-                    interval, elapsed, init_time = self.timer[n]
+                    elapsed, init_time = self.timer[n]
                     self.timer[n] = [elapsed - init_time, -1]
                 else:
                     self.error(f'NameError: Unknown timer name: {n}')
         else:
             self.error(f'TypeError: Invalid timer name: {timer_name}')
+
+    def exec(self):
+        cur_time = perf_counter()
+        for k,v in self.timer.items():
+            if v[1] >= 0:
+                elapsed = cur_time - v[1]
+                if elapsed-v[0] > self._interval:
+                    v[0] = elapsed
+                    cb_func = self.timer_cb_func.get(k)
+                    if cb_func is not None:
+                        cb_func(v[0])
 
     def get_time(self, timer_name='default'):
         cur_time = perf_counter()
@@ -792,7 +816,7 @@ class TimerMinion(BaseMinion):
                         v[0] = elapsed
                         cb_func = self.timer_cb_func.get(k)
                         if cb_func is not None:
-                            k(v[0])
+                            cb_func(v[0])
                     tmp_times.append(v)
                 return tmp_times
             else:
@@ -830,7 +854,7 @@ class TimerMinion(BaseMinion):
         self.start_timing('default')
 
     def main(self):
-        self.get_time('default')
+        self.exec()
 
     @property
     def elapsed(self):
@@ -895,3 +919,34 @@ class AbstractMinionMixin:
 
     def parse_msg(self, msg_type, msg):
         pass
+
+    def watch_state(self,name,val):
+        return self._processHandler.watch_state('C_'+name,val)  # 'C_' for compiler states
+
+    def shutdown(self):
+        self._processHandler.shutdown()
+
+class TimerMinionMixin(AbstractMinionMixin):
+
+    def add_timer(self,name,cb_func=None):
+        self._processHandler.add_timer(name,cb_func)
+
+    def start_timing(self,timer_name='default'):
+        self._processHandler.start_timing(timer_name)
+
+    def stop_timing(self,timer_name='default'):
+        self._processHandler.stop_timing(timer_name)
+
+    def get_time(self,timer_name='default'):
+        return self._processHandler.get_time(timer_name)
+
+    def elapsed(self):
+        return self._processHandler.elapsed
+
+    def timerInterval(self):
+        self._processHandler:TimerMinion
+        return self._processHandler.interval
+
+    def setTimerInterval(self,val):
+        self._processHandler.interval = val
+

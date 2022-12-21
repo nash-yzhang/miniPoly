@@ -4,7 +4,7 @@ import numpy as np
 import serial
 from pysinewave import SineWave
 
-from bin.minion import BaseMinion, AbstractMinionMixin, TimerMinion
+from bin.minion import BaseMinion, AbstractMinionMixin, TimerMinionMixin, TimerMinion
 from bin.gui import DataframeTable
 import traceback
 
@@ -13,12 +13,26 @@ import PyQt5.QtCore as qc
 from PyQt5.Qt import Qt as qt
 from vispy import app, gloo
 
-
-class ProtocolCommander(qw.QMainWindow, AbstractMinionMixin):
-    def __init__(self, processHandler: BaseMinion = None, windowSize=(1200, 400), refresh_interval=10):
+class AbstractCompiler(TimerMinionMixin):
+    def __init__(self, processHandler, refresh_interval=10):
         super().__init__()
         self._processHandler = processHandler
+        self._processHandler.add_callback('default',self.on_time)
+        self._processHandler.interval = refresh_interval
         self._name = self._processHandler.name
+
+        self.create_state('is_running',False)
+
+    def on_time(self,t):
+        self._processHandler.on_time(t)
+
+    def on_protocol(self,t):
+        pass
+
+class ProtocolCommander(AbstractCompiler):
+    def __init__(self, processHandler: BaseMinion = None, windowSize=(1200, 400), refresh_interval=10):
+        super().__init__(processHandler)
+        # self._processHandler = processHandler
         self._windowSize = windowSize
         self.setWindowTitle(self._name)
         self.resize(*self._windowSize)

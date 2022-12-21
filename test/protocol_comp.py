@@ -1,6 +1,6 @@
 from bin.app import AbstractAPP
-from bin.minion import BaseMinion, LoggerMinion
-from apps.protocol_compiler.protocol_compiler import ProtocolCommander, GraphicProtocolCompiler, ServoDriver
+from bin.minion import LoggerMinion
+from bin.compiler import ProtocolCommander, GraphicProtocolCompiler, ServoDriver
 from multiprocessing import Lock
 
 class TestGUI(AbstractAPP):
@@ -24,13 +24,12 @@ class CanvasModule(AbstractAPP):
 
 
 if __name__ == '__main__':
-    lock = Lock()
-    GUI = TestGUI('testgui',lock=lock)
-    GL_canvas = CanvasModule('OPENGL',lock=lock)
-    servo = ServoDriver('servo',lock=lock)
+    GUI = TestGUI('testgui')
+    GL_canvas = CanvasModule('OPENGL')
+    servo = ServoDriver('servo')
     GL_canvas.connect(GUI)
     GUI.connect(servo)
-    logger = LoggerMinion('TestGUI logger',lock=lock)
+    logger = LoggerMinion('TestGUI logger')
     GUI.attach_logger(logger)
     GL_canvas.attach_logger(logger)
     servo.attach_logger(logger)
