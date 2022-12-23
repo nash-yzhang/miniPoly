@@ -1,4 +1,4 @@
-from time import perf_counter,sleep
+from time import perf_counter, sleep
 
 import numpy as np
 import serial
@@ -14,23 +14,23 @@ from PyQt5.Qt import Qt as qt
 from PyQt5.QtGui import QIcon, QPixmap
 from vispy import app, gloo
 
+
 class AbstractCompiler(TimerMinionMixin):
     def __init__(self, processHandler, refresh_interval=10):
         super().__init__()
         self._processHandler = processHandler
-        self._processHandler.add_callback('default',self.on_time)
+        self._processHandler.add_callback('default', self.on_time)
         self._processHandler.interval = refresh_interval
         self._name = self._processHandler.name
 
-        self.create_state('is_running',False)
-
-    def on_time(self,t):
+    def on_time(self, t):
         self._processHandler.on_time(t)
 
-    def on_protocol(self,t):
+    def on_protocol(self, t):
         pass
 
-class QtCompiler(AbstractCompiler,qw.QMainWindow):
+
+class QtCompiler(AbstractCompiler, qw.QMainWindow):
 
     def __init__(self, processHandler, refresh_interval=10, **kwargs):
         AbstractCompiler.__init__(self, processHandler, refresh_interval)
@@ -45,387 +45,192 @@ class QtCompiler(AbstractCompiler,qw.QMainWindow):
         # add fade to splashscreen
         splash.show()
         for i in range(20):
-            splash.setWindowOpacity(1.5-abs(1.5-(i/10)))
+            splash.setWindowOpacity(1.5 - abs(1.5 - (i / 10)))
             sleep(0.05)
         splash.close()  # close the splash screen
 
 
-class ProtocolCommander(QtCompiler):
-    def __init__(self, processHandler: BaseMinion = None, windowSize=(1200, 400), refresh_interval=10):
-        super().__init__(processHandler)
-        # self._processHandler = processHandler
-        self._windowSize = windowSize
-        self.setWindowTitle(self._name)
-        self.resize(*self._windowSize)
+class GLCompiler(app.Canvas, AbstractMinionMixin):
 
-        self._timer = qc.QTimer()
-        self._timer.timeout.connect(self.on_time)
-        self._init_time = -1
-        self._elapsed = 0
-        self._refreshInterval = refresh_interval
-        self._timer.setInterval(refresh_interval)
-        self._timer_started = False
-        self.create_state('is_running',False)
-
-        self.timer_switcher = qw.QPushButton('Start')
-        self.timer_switcher.clicked.connect(self.switch_timer)
-
-        self.frames = {}
-        self.tables = {}
-        self.addTableBox('Audio')
-        self.addTableBox('Visual')
-        self.addTableBox('Servo')
-        self.groupbox_layout = qw.QHBoxLayout()
-        for val in self.frames.values():
-            self.groupbox_layout.addWidget(val)
-
-        self.servo_slider = qw.QSlider(qt.Horizontal)
-        self.servo_slider.setMinimum(0)
-        self.servo_slider.setMaximum(180)
-        self.servo_slider.valueChanged.connect(self.write_servo_pin)
-
-        self.layout = qw.QVBoxLayout()
-        self.layout.addLayout(self.groupbox_layout)
-        self.layout.addWidget(self.timer_switcher)
-        self.layout.addWidget(self.servo_slider)
-
-        self.main_widget = qw.QWidget()
-        self.main_widget.setLayout(self.layout)
-        self.setCentralWidget(self.main_widget)
-
-        self.sinewave = None
-
-        self.protocol_params = {}
-        self.protocols = {}
-
-        self._watching_state = {}
-
-        self._init_menu()
-
-    def write_servo_pin(self,val):
-        self.set_state_to('servo', 'd:8:s', (val/180))
-
-    def addTableBox(self, name):
-        frame = qw.QGroupBox(self)
-        frame.setTitle(name)
-        table = DataframeTable(self.centralWidget())
-        frame_layout = qw.QVBoxLayout()
-        frame_layout.addWidget(table)
-        frame.setLayout(frame_layout)
-        self.frames[name] = frame
-        self.tables[name] = table
-
-    @property
-    def elapsed(self):
-        self._elapsed = perf_counter()-self._init_time
-        return self._elapsed
-
-    def switch_timer(self):
-        if self._timer_started:
-            self._stopTimer()
-        else:
-            self._startTimer()
-
-    def _startTimer(self):
-        self.startTimer()
-        self._timer_started = True
-        self._init_time = perf_counter()
-        self._timer.start()
-        self.timer_switcher.setText('Stop')
-
-    def startTimer(self):
-        self.set_state('is_running',True)
-        self.set_state_to('OPENGL','u_offset_angle',0)
-        self.set_state_to('OPENGL','u_rot_speed',0)
-        data = self.tables['Audio'].model()._data
-        self.sinewave = SineWave(pitch=data['p_freq'][0],
-                                 pitch_per_second=2000,
-                                 decibels_per_second=2000)
-        self.sinewave.play()
-        # pass
-
-    def _stopTimer(self):
-        self.stopTimer()
-        self._timer.stop()
-        self._timer_started = False  # self._time = self._time.elapsed()
-        self.timer_switcher.setText('Start')
-
-    def stopTimer(self):
-        self.set_state('is_running',False)
-        self.sinewave.stop()
-        self.set_state_to('OPENGL','u_offset_angle',0)
-        self.set_state_to('OPENGL','u_rot_speed',0)
-        sleep(.1)
-        # pass
-
-    def on_time(self):
-        cur_time = self.elapsed
-        try:
-            data = self.tables['Visual'].model()._data
-            time_col = data['time']
-            if cur_time <= (time_col.max() + self._refreshInterval):
-                row_idx = None
-                for i,v in enumerate(time_col):
-                    if v >= cur_time:
-                        row_idx = i-1
-                        break
-                if row_idx is None:
-                    self._stopTimer()
-                else:
-                    if self.watch_state('visual_row',row_idx):
-                        self.tables['Visual'].selectRow(row_idx)
-                        p_time = data['time'][row_idx].astype(float)
-                        u_rot_speed = data['u_rot_speed'][row_idx].astype(float)
-                        while True:
-                            try:
-                                self.set_state_to('OPENGL','p_time',p_time)
-                                self.set_state_to('OPENGL','u_rot_speed',u_rot_speed)
-                                break
-                            except:
-                                pass
-
-        except:
-            print(traceback.format_exc())
-            for i in self.tables:
-                i.clearSelection()
-
-        try:
-            data = self.tables['Audio'].model()._data
-            time_col = data['time']
-            if cur_time <= (time_col.max() + self._refreshInterval):
-                row_idx = None
-                for i,v in enumerate(time_col):
-                    if v >= cur_time:
-                        row_idx = i-1
-                        break
-                if row_idx is None:
-                    self._stopTimer()
-                else:
-                    if self.watch_state('audio_row',row_idx):
-                        pitch = data['p_freq'][row_idx]
-                        self.sinewave.set_pitch(pitch)
-                        if pitch == 0:
-                            self.sinewave.set_volume(-1000)
-                        else:
-                            self.sinewave.set_volume(0)
-                        self.tables['Audio'].selectRow(row_idx)
-                        self.row_idx = row_idx
-            else:
-                self._stopTimer()
-        except:
-            print(traceback.format_exc())
-            self.tables['Audio'].clearSelection()
-
-        try:
-            data = self.tables['Servo'].model()._data
-            time_col = data['time']
-            if cur_time <= (time_col.max() + self._refreshInterval):
-                row_idx = None
-                for i,v in enumerate(time_col):
-                    if v >= cur_time:
-                        row_idx = i-1
-                        break
-                if row_idx is None:
-                    self._stopTimer()
-                else:
-                    if self.watch_state('servo_row',row_idx):
-                        self.set_state_to('servo','d:8:s',float(data['d:8:s'][row_idx])/90)
-                        self.tables['Servo'].selectRow(row_idx)
-                        self.row_idx = row_idx
-            else:
-                self._stopTimer()
-        except:
-            print(traceback.format_exc())
-            self.tables['Audio'].clearSelection()
-
-    def watch_state(self,name,val):
-        if name not in self._watching_state.keys():
-            self._watching_state[name] = val
-            return True
-        else:
-            changed = val != self._watching_state[name]
-            self._watching_state[name] = val
-            return changed
-
-    def _init_menu(self):
-        self._menubar = self.menuBar()
-        self._menu_file = self._menubar.addMenu('File')
-        # loadfile = qw.QAction("Load", self)
-        # loadfile.setShortcut("Ctrl+O")
-        # loadfile.setStatusTip("Load data from Excel/h5 file")
-        # loadfile.triggered.connect(self.loadfile)
-        Exit = qw.QAction("Quit", self)
-        Exit.setShortcut("Ctrl+Q")
-        Exit.setStatusTip("Exit program")
-        Exit.triggered.connect(self.close)
-        # self._menu_file.addAction(loadfile)
-        self._menu_file.addAction(Exit)
-
-    def close(self) -> None:
-        pass
-
-    # def loadfile(self):
-    #     datafile = qw.QFileDialog.getOpenFileName(self, 'Open File', 'D:\\Yue Zhang\\OneDrive\\Bonhoeffer Lab\\PycharmProjects\\miniPoly\\apps\\protocol_compiler',
-    #                                               "Data file (*.xls *.xlsx *.h5)", "",
-    #                                               qw.QFileDialog.DontUseNativeDialog)
-    #     if datafile[0]:
-    #         self.model = DataframeModel(data=pd.read_excel(datafile[0]))
-    #         self.table.setModel(self.model)
-    #         self.main_widget.update()
-
-
-class GraphicProtocolCompiler(app.Canvas, AbstractMinionMixin):
-
-    def __init__(self, processHandler: BaseMinion = None, *args, **kwargs):
+    def __init__(self, processHandler, *args, protocol_commander: BaseMinion = None,
+                 VS=None, FS=None, refresh_interval=10, **kwargs):
         super().__init__(*args, **kwargs)
         app.Canvas.__init__(self, *args, **kwargs)
-        self.timer = app.Timer(.01, self.on_timer, start=True)
-
         self._processHandler = processHandler
-        self._setTime = 0
-        self._tic = 0
-        self._rmtShutdown = False
-        self._shared_uniforms = None
-        self.VS = """
-            #version 130
-            attribute vec2 a_pos;
-            varying vec2 v_pos;
-            void main () {
-                v_pos = a_pos;
-                gl_Position = vec4(a_pos, 0.0, 1.0);
-            }
-            """
-
-        # Define Fragment shader
-        self.FS = """
-            varying vec2 v_pos; 
-            uniform vec2 u_resolution; 
-            uniform float u_radius; 
-            uniform float u_time;
-            uniform float u_rot_speed;
-            uniform float u_offset_angle;
-            
-            vec2 rotate(vec2 st, float angle) {
-                 mat2 rotationMatrix = mat2(cos(angle), -sin(angle), sin(angle), cos(angle)); // identity matrix
-                 return rotationMatrix * st;
-            }
-
-            vec2 rotate_around(vec2 st, vec2 cen, float angle) {
-                return rotate(st-cen,angle);
-            }
-
-            float rectangle(vec2 st, vec2 cen, float width, float height) {
-                st -= cen;
-                float edgeWidth = 0.04;
-                return (smoothstep(0.,edgeWidth,st.x) - smoothstep(width,width+edgeWidth,st.x)) * (smoothstep(0.,edgeWidth, st.y) - smoothstep(height,height+edgeWidth,st.y));
-            }
-
-            float rot_rectangle(vec2 st, vec2 rec_cen, float width, float height, float rot_ang, vec2 rot_cen) {
-                vec2 new_st = rotate_around(st,rot_cen,rot_ang)-rec_cen;
-                return rectangle(new_st, rec_cen, width, height);
-            }
-            
-            # define PI 3.141592653 
-            void main() {
-                vec2 st = v_pos/2+.5;
-                st.x *= u_resolution.x/u_resolution.y;
-                
-                float width = .05;
-                float height = .4;
-                vec2 rec_cen = vec2(-width/4.,.1);
-                
-                float red_rot_ang = -(u_time*u_rot_speed/8.+1.+u_offset_angle/180)*PI/6.;
-                vec2 red_rot_cen = vec2(0.100,0.30);
-                float red_saber = rot_rectangle(st, rec_cen, width, height,red_rot_ang,red_rot_cen);
-                
-                float blue_rot_ang = (u_time*u_rot_speed/8.+1.+u_offset_angle/180)*PI/6.;
-                vec2 blue_rot_cen = vec2(0.850,0.30);
-                float blue_saber = rot_rectangle(st, rec_cen, width, height,blue_rot_ang,blue_rot_cen);
-                float grating = sin(20.*PI*st.x+40.*PI*st.y-u_time*50.)/2.; 
-                vec3 color = vec3(red_saber,0.,blue_saber)+vec3((red_saber+blue_saber)*(grating/1.5));
-                gl_FragColor = vec4(color,1.0);                
-            }
-        """
+        self.timers = {'default': app.Timer(refresh_interval / 1000, self._on_timer, start=True),
+                       'protocol': app.Timer(refresh_interval / 1000, self._on_protocol, start=False)}
+        self._protocol_time_name = 'p_time'
+        self.protocol_time_offset = None
+        self.VS = None
+        self.FS = None
         self.program = None
 
-    def initialize(self):
+        self.protocol_commander = protocol_commander
+
+        if VS:
+            self.load_VS(VS)
+        if FS:
+            self.load_FS(FS)
+
+        if self.VS is not None and self.FS is not None:
+            self.program = gloo.Program(self.VS, self.FS)
+
+    def register_protocol_commander(self, protocol_commander: BaseMinion):
+        self._processHandler.connect(protocol_commander)
+        self.protocol_commander = protocol_commander.name
+
+    def load_shader_file(self, fn):
+        with open(fn, 'r') as shaderfile:
+            return (shaderfile.read())
+
+    def load_VS(self, fn):
+        self.VS = self.load_shader_file(fn)
+
+    def load_FS(self, fn):
+        self.FS = self.load_shader_file(fn)
+
+    def load_shaders(self, vsfn, fsfn):
+        self.load_VS(vsfn)
+        self.load_FS(fsfn)
         self.program = gloo.Program(self.VS, self.FS)
-        self.program['a_pos'] = np.array([[-1., -1.], [-1., 1.], [1., -1.], [1., 1.]], np.float32)  # /2.
-        self.program['u_time'] = 0
-        self.program['u_offset_angle'] = 0.
 
-        self.program['u_alpha'] = np.float32(1)
-        gloo.set_state("translucent")
-        self.program['u_resolution'] = (self.size[0], self.size[1])
+    def create_shared_uniform_state(self, type='uniform'):
+        for i in self.program.variables:
+            if type is not 'all':
+                if i[0] == type:
+                    try:
+                        self.create_state(i[2], list(self.program[i[2]].astype(float)))
+                    except KeyError:
+                        self.warning(f'Uniform {i[2]} has not been set: {i[2]}\n{traceback.format_exc()}')
+                        if i[1] == 'vec2':
+                            self.create_state(i[2], [0, 0])
+                        elif i[1] == 'vec3':
+                            self.create_state(i[2], [0, 0, 0])
+                        elif i[1] == 'vec4':
+                            self.create_state(i[2], [0, 0, 0, 0])
+                        else:
+                            self.create_state(i[2], 0)
+                    except:
+                        self.error(f'Error in creating shared state for uniform: {i[2]}\n{traceback.format_exc()}')
+            else:
+                if i[0] not in ['varying', 'constant']:
+                    self.create_state(i[2], self.program[i[2]])
 
-        self.create_state('u_rot_speed',0)
-        self.create_state('u_offset_angle',0)
-        self.create_state('p_time',0)
-        self.program['u_rot_speed'] = self.get_state('u_rot_speed')
-        self.program['u_offset_angle'] = self.get_state('u_offset_angle')
-        self._last_cmd_time = None
+    def check_variables(self):
+        redundant_variables = list(self.program._pending_variables.keys())
+        unsettled_variables = []
+        for i in self.program.variables:
+            if i[0] not in ['varying', 'constant']:
+                if i[2] not in self.program._user_variables.keys():
+                    unsettled_variables.append(i[2])
+        return redundant_variables, unsettled_variables
+
+    def initialize(self):
+        self.create_state(self._protocol_time_name, 0)
+        self.on_init()
+        if self.program is not None:
+            rv, uv = self.check_variables()
+            if uv:
+                self.error(f'Found {len(rv)} unsettled variables: {uv}')
+            if rv:
+                self.warning(f'Found {len(rv)} pending variables: {rv}')
+            self.create_shared_uniform_state(type='uniform')
+        else:
+            self.error(f'Rendering program has not been built!')
+            self.close()
+
+    def _on_timer(self, event):
+        if self.status() <= 0:
+            self.on_close()
+        self.on_timer(event)
 
     def on_timer(self, event):
+        pass
 
-        # if self.timer.elapsed - self._setTime > .01:  # Limit the call frequency to 1 second
-        #
-        #     # self.set_state('u_radius', np.sin(self.timer.elapsed))
-        #     # Check if any remote calls have been set first before further processing
-        #     if self._processHandler.status == -1:
-        #         self._rmtShutdown = True
-        #         self.on_close()
-        #     elif self._processHandler.status == 0:
-        #         self.on_close()
+    def _on_protocol(self, event):
+        self.protocol_time_offset = self.get_state(self._protocol_time_name)
+        self.on_protocol(event, self.protocol_time_offset)
 
-        self._setTime = np.floor(self.timer.elapsed)
-        self.update()
+    def on_protocol(self, event, offset):
+        pass
+
+    def on_init(self):
+        pass
+
+    def is_protocol_running(self):
+        return self.timers['protocol'].running
+
+    def run_protocol(self):
+        return self.start_timing('protocol')
+
+    def start_timing(self, timer_name='default'):
+        if type(timer_name) is str:
+            if timer_name == 'all':
+                for k in self.timers.keys():
+                    self.timers[k].start()
+            else:
+                if timer_name in self.timers.keys():
+                    self.timers[timer_name].start()
+                else:
+                    self.error(f'NameError: Unknown timer name: {timer_name}')
+        elif type(timer_name) is list:
+            for n in timer_name:
+                if n in self.timers.keys():
+                    self.timers[n].start()
+                else:
+                    self.error(f'NameError: Unknown timer name: {n}')
+        else:
+            self.error(f'TypeError: Invalid timer name: {timer_name}')
+
+    def stop_timing(self, timer_name='default'):
+        if type(timer_name) is str:
+            if timer_name == 'all':
+                for k in self.timers.keys():
+                    self.timers[k].stop()
+            else:
+                if timer_name in self.timers.keys():
+                    self.timers[timer_name].stop()
+                else:
+                    self.error(f'NameError: Unknown timer name: {timer_name}')
+        elif type(timer_name) is list:
+            for n in timer_name:
+                if n in self.timers.keys():
+                    self.timers[n].stop()
+                else:
+                    self.error(f'NameError: Unknown timer name: {n}')
+        else:
+            self.error(f'TypeError: Invalid timer name: {timer_name}')
 
     def on_draw(self, event):
-        # Define the update rule
-        try:
-            gloo.clear([0,0,0,0])
-
-            # self.program['u_radius'] = self.get_state_from(self._processHandler.name,'u_radius')
-            is_running = self.get_state_from('testgui','is_running')
-            if is_running:
-                self._last_cmd_time = self.get_state('p_time')
-                self.program['u_rot_speed'] = self.get_state('u_rot_speed')
-                self.program['u_offset_angle'] = 0
-                self.program['u_time'] = self.timer.elapsed - self._last_cmd_time
-                self.program.draw('triangle_strip')
-            else:
-                self._last_cmd_time = None
-        except:
-            print(traceback.format_exc())
+        pass
 
     def on_resize(self, event):
         # Define how should be rendered image should be resized by changing window size
         gloo.set_viewport(0, 0, *self.physical_size)
-        self.program['u_resolution'] = (self.size[0],self.size[1])
+        self.program['u_resolution'] = (self.size[0], self.size[1])
 
     def on_close(self):
-        if not self._rmtShutdown:
-            self.set_state('status', -1)
+        self.set_state('status', -1)
         self.close()
+
 
 class ServoDriver(TimerMinion):
 
     def initialize(self):
         super().initialize()
         self._port_name = 'COM6'
-        self.servos = {'d:8:s':1}
+        self.servos = {'d:8:s': 1}
 
         try:
             self.init_polulo()
             self._watching_state = {}
-            for n,v in self.servos.items():
+            for n, v in self.servos.items():
                 try:
                     self.create_state(n, self.getPosition(v))
                 except:
                     print(traceback.format_exc())
         except:
             print(traceback.format_exc())
-
 
     ###### The following are copied from https://github.com/FRC4564/Maestro/blob/master/maestro.py with MIT license
     def init_polulo(self):
@@ -571,12 +376,12 @@ class ServoDriver(TimerMinion):
         cmd = chr(0x24)
         self.sendCmd(cmd)
 
-    def on_time(self,t):
+    def on_time(self, t):
         try:
-            for n,v in self.servos.items():
+            for n, v in self.servos.items():
                 state = self.get_state(n)
-                if self.watch_state(n,state) and state is not None:
-                    self.setTarget(v,int(state*4000+4000))
+                if self.watch_state(n, state) and state is not None:
+                    self.setTarget(v, int(state * 4000 + 4000))
                     # v.write(state*180)
         except:
             print(traceback.format_exc())
@@ -584,8 +389,7 @@ class ServoDriver(TimerMinion):
     def shutdown(self):
         self._port.close()
 
-
-    def watch_state(self,name,val):
+    def watch_state(self, name, val):
         if name not in self._watching_state.keys():
             self._watching_state[name] = val
             return True

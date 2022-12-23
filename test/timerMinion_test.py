@@ -19,12 +19,6 @@ class TestApp(AbstractGUIAPP):
 class ProtocolCommander(QtCompiler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # self._timer = qc.QTimer()
-        # self._timer.timeout.connect(self.on_time)
-        # self._init_time = -1
-        # self._elapsed = 0
-        # self._refreshInterval = refresh_interval
-        # self._timer.setInterval(refresh_interval)
         self.add_timer('protocol_timer',self.on_protocol)
         self.create_state('is_running',False)
 

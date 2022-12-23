@@ -7,6 +7,16 @@ import PyQt5.QtWidgets as qw
 from bin.gui import BaseGUI
 from bin.display import GLDisplay
 
+class AbstractGLAPP(TimerMinion):
+    def __init__(self, *args, **kwargs):
+        super(AbstractGLAPP, self).__init__(*args, **kwargs)
+    def initialize(self):
+        self._app = vispy.app.application.Application(backend_name='PyQt5')
+        super().initialize()
+
+    def on_time(self,t):
+        self._app.process_events()
+
 
 class AbstractGUIAPP(TimerMinion):
     def __init__(self, *args, **kwargs):

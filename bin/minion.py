@@ -290,7 +290,7 @@ class BaseMinion:
             else:
                 self.log(logging.DEBUG, f"Unknown minion: '{minion_name}'")
         else:
-            self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+            self.log(logging.DEBUG, f'Access denied because of the invalid PID ({self._pid}->{pid})')
 
         return state_val
 
@@ -814,9 +814,9 @@ class TimerMinion(BaseMinion):
                     elapsed = cur_time - v[1]
                     if elapsed-v[0] > self._interval:
                         v[0] = elapsed
-                        cb_func = self.timer_cb_func.get(k)
-                        if cb_func is not None:
-                            cb_func(v[0])
+                        # cb_func = self.timer_cb_func.get(k)
+                        # if cb_func is not None:
+                        #     cb_func(v[0])
                     tmp_times.append(v)
                 return tmp_times
             else:
@@ -824,9 +824,9 @@ class TimerMinion(BaseMinion):
                     elapsed = cur_time - self.timer[timer_name][1]
                     if elapsed - self.timer[timer_name][0] > self._interval:
                         self.timer[timer_name][0] = elapsed
-                        cb_func = self.timer_cb_func.get(timer_name)
-                        if cb_func is not None:
-                            cb_func(self.timer[timer_name][0])
+                        # cb_func = self.timer_cb_func.get(timer_name)
+                        # if cb_func is not None:
+                        #     cb_func(elapsed)
                     return self.timer[timer_name]
                 else:
                     self.error(f'NameError: Unknown timer name: {timer_name}')
@@ -838,9 +838,9 @@ class TimerMinion(BaseMinion):
                     elapsed = cur_time - self.timer[timer_name][1]
                     if elapsed - self.timer[n][0] > self._interval:
                         self.timer[n][0] = elapsed
-                        cb_func = self.timer_cb_func.get(n)
-                        if cb_func is not None:
-                            cb_func(self.timer[n][0])
+                        # cb_func = self.timer_cb_func.get(n)
+                        # if cb_func is not None:
+                        #     cb_func(self.timer[n][0])
                     tmp_times.append(self.timer[n])
                 else:
                     self.error(f'NameError: Unknown timer name: {n}')
@@ -869,6 +869,7 @@ class AbstractMinionMixin:
     This class should serve as an interface between Qt window and minion process handler,
     All interaction rules between the two components should be defined here
     '''
+    _processHandler: BaseMinion
 
     def log(self, level, msg):
         '''
@@ -881,6 +882,18 @@ class AbstractMinionMixin:
             self._processHandler.log(LOG_LVL_LOOKUP_TABLE[level], msg)
         else:
             self._processHandler.debug(f"Logging failed, unknown logging level: {level}")
+
+    def debug(self,msg):
+        self._processHandler.debug(msg)
+
+    def info(self,msg):
+        self._processHandler.info(msg)
+
+    def warning(self, msg):
+        self._processHandler.warning(msg)
+
+    def error(self, msg):
+        self._processHandler.error(msg)
 
     def send(self, target: str, msg_type: str, msg_val):
         """
@@ -926,7 +939,14 @@ class AbstractMinionMixin:
     def shutdown(self):
         self._processHandler.shutdown()
 
+    def status(self):
+        return self._processHandler.status
+
 class TimerMinionMixin(AbstractMinionMixin):
+
+    def has_timer(self,name):
+        self._processHandler: TimerMinion
+        return name in self._processHandler.timer.keys()
 
     def add_timer(self,name,cb_func=None):
         self._processHandler.add_timer(name,cb_func)
