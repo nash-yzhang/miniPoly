@@ -1,11 +1,10 @@
 from time import perf_counter, sleep
 
-import numpy as np
-import serial
-from pysinewave import SineWave
 
 from bin.minion import BaseMinion, AbstractMinionMixin, TimerMinionMixin, TimerMinion
-from bin.gui import DataframeTable
+from definition import ROOT_DIR
+
+import serial
 import traceback
 
 import PyQt5.QtWidgets as qw
@@ -36,11 +35,11 @@ class QtCompiler(AbstractCompiler, qw.QMainWindow):
         AbstractCompiler.__init__(self, processHandler, refresh_interval)
         qw.QMainWindow.__init__(self, **kwargs)
         self.setWindowTitle(self._name)
-        self.setWindowIcon(QIcon('../minipoly.ico'))
+        self.setWindowIcon(QIcon(ROOT_DIR+'/bin/minipoly.ico'))
         self.renderSplashScreen()
 
     def renderSplashScreen(self):
-        splash_pix = QPixmap('../minipoly.ico')
+        splash_pix = QPixmap(ROOT_DIR+'/bin/minipoly.ico')
         splash = qw.QSplashScreen(splash_pix, qc.Qt.WindowStaysOnTopHint)
         # add fade to splashscreen
         splash.show()
@@ -64,6 +63,7 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
         self.VS = None
         self.FS = None
         self.program = None
+        self._shared_uniform_states = []
 
         self.protocol_commander = protocol_commander
 
@@ -96,25 +96,28 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
 
     def create_shared_uniform_state(self, type='uniform'):
         for i in self.program.variables:
-            if type is not 'all':
-                if i[0] == type:
-                    try:
-                        self.create_state(i[2], list(self.program[i[2]].astype(float)))
-                    except KeyError:
-                        self.warning(f'Uniform {i[2]} has not been set: {i[2]}\n{traceback.format_exc()}')
-                        if i[1] == 'vec2':
-                            self.create_state(i[2], [0, 0])
-                        elif i[1] == 'vec3':
-                            self.create_state(i[2], [0, 0, 0])
-                        elif i[1] == 'vec4':
-                            self.create_state(i[2], [0, 0, 0, 0])
-                        else:
-                            self.create_state(i[2], 0)
-                    except:
-                        self.error(f'Error in creating shared state for uniform: {i[2]}\n{traceback.format_exc()}')
-            else:
-                if i[0] not in ['varying', 'constant']:
-                    self.create_state(i[2], self.program[i[2]])
+            if i[2] not in ['u_resolution','u_time']:
+                if type is not 'all':
+                    if i[0] == type:
+                        try:
+                            self.create_state(i[2], list(self.program[i[2]].astype(float)))
+                        except KeyError:
+                            self.warning(f'Uniform {i[2]} has not been set: {i[2]}\n{traceback.format_exc()}')
+                            if i[1] == 'vec2':
+                                self.create_state(i[2], [0, 0])
+                            elif i[1] == 'vec3':
+                                self.create_state(i[2], [0, 0, 0])
+                            elif i[1] == 'vec4':
+                                self.create_state(i[2], [0, 0, 0, 0])
+                            else:
+                                self.create_state(i[2], 0)
+                        except:
+                            self.error(f'Error in creating shared state for uniform: {i[2]}\n{traceback.format_exc()}')
+                        self._shared_uniform_states.append(i[2])
+                else:
+                    if i[0] not in ['varying', 'constant']:
+                        self.create_state(i[2], self.program[i[2]])
+                        self._shared_uniform_states.append(i[2])
 
     def check_variables(self):
         redundant_variables = list(self.program._pending_variables.keys())
@@ -161,7 +164,12 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
         return self.timers['protocol'].running
 
     def run_protocol(self):
-        return self.start_timing('protocol')
+        self.start_timing('protocol')
+
+    def stop_protocol(self):
+        self.stop_timing('protocol')
+        gloo.clear('black')
+        self.update()
 
     def start_timing(self, timer_name='default'):
         if type(timer_name) is str:

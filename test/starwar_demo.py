@@ -125,6 +125,7 @@ class ProtocolCommander(QtCompiler):
                             except:
                                 pass
 
+
         except:
             print(traceback.format_exc())
             for i in self.tables:
@@ -201,6 +202,8 @@ class GraphicProtocolCompiler(GLCompiler):
 
         gloo.set_state("translucent")
         self.program['u_resolution'] = (self.size[0], self.size[1])
+        self.create_state('num_cmd_compiled',0)
+        self.create_state('num_cmd_sent',0)
 
     def on_timer(self, event):
         if not self.is_protocol_running():

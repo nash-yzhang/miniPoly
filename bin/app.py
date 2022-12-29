@@ -21,20 +21,33 @@ class AbstractGLAPP(TimerMinion):
 class AbstractGUIAPP(TimerMinion):
     def __init__(self, *args, **kwargs):
         super(AbstractGUIAPP, self).__init__(*args, **kwargs)
+
     def initialize(self):
         self._app = qw.QApplication(sys.argv)
         super().initialize()
 
     def on_time(self,t):
         self._app.processEvents()
-        self.poll_windows()
+        self.poll_GUI_windows()
 
-    def poll_windows(self):
+    def poll_GUI_windows(self):
         win_status = []
         for win in self._app.allWindows():
             win_status.append(win.isVisible())
         if not any(win_status):
             self.shutdown()
+
+    def shutdown(self):
+        def kill_minion(minion_name):
+            self.set_state_to(minion_name, 'status', -1)
+
+        safe_to_shutdown = False
+        while not safe_to_shutdown:
+            minion_status = self.poll_minion(kill_minion)
+            if not any(minion_status):
+                safe_to_shutdown = True
+
+        self.status = -1
 
 # class APP(AbstractAPP):
 #     def __init__(self, *args, **kwargs):

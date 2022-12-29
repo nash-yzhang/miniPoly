@@ -261,6 +261,36 @@ class BaseMinion:
         else:
             self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
 
+    def remove_state(self,state_name: str):
+        pid, pid_checked = self.pid_check()
+        if pid_checked:
+            if state_name in self._shared_dict.keys():
+                del self._shared_dict[state_name]
+                self.log(logging.INFO, f"Shared state: '{state_name}' DELETED")
+            else:
+                self.log(logging.ERROR, f"State '{state_name}' cannot be deleted because it does not exist")
+
+        else:
+            self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+
+    def get_shared_state_names(self,minion_name:str):
+        pid, pid_checked = self.pid_check()
+        if pid_checked:
+            if minion_name == self.name:
+                    return list(self._shared_dict.keys())
+
+            elif minion_name in self._linked_minion.keys():
+                if self.is_minion_alive(minion_name):
+                    with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
+                        return list(tmp_dict.keys())
+                else:
+                    self.log(logging.DEBUG, f"Dead minion '{minion_name}' or errors in connecting to its shared buffer")
+            else:
+                self.log(logging.DEBUG, f"Unknown minion: '{minion_name}'")
+        else:
+            self.log(logging.DEBUG, f'Access denied because of the invalid PID ({self._pid}->{pid})')
+
+
     def get_state_from(self, minion_name: str, state_name: str):
         """
         Get the value stored in the shared dictionary of self or foreign minions by dict key
@@ -517,7 +547,7 @@ class BaseMinion:
                     func(i_name)
                 except:
                     self.error('Error when executing custom function during polling')
-            minion_status[i] = self.get_state_from(i_name, 'status')
+                minion_status[i] = self.is_minion_alive(i_name)
         return minion_status
 
     ############# Housekeeping module #############
@@ -915,8 +945,14 @@ class AbstractMinionMixin:
         else:
             self.log("DEBUG", f"EMPTY MESSAGE from [{source}]")
 
+    def get_shared_state_names(self,minion_name):
+        return self._processHandler.get_shared_state_names(minion_name)
+
     def create_state(self, state_name, state_val):
         self._processHandler.create_state(state_name, state_val)
+
+    def remove_state(self, state_name):
+        self._processHandler.remove_state(state_name)
 
     def set_state(self, state_name, state_val):
         self._processHandler.set_state(state_name, state_val)

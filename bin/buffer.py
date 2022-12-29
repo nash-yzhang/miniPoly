@@ -314,8 +314,6 @@ class SharedDict(dict):
         if self._BUFFER_PREFIX in key.lower():
             raise Exception(f'The item [{key}] cannot be modified/deleted as it is linked with a buffer.')
         super().__delitem__(key)
-        if self._picklified:
-            self.depiklify()
         self._linked_SharedBuffer.write(dict(self))
 
     # def __del__(self):
