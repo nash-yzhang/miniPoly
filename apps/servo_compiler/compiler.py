@@ -1,11 +1,10 @@
 import numpy as np
 from bin.gui import DataframeTable
-from bin.compiler import QtCompiler, GLCompiler
+from bin.compiler import QtCompiler
 import PyQt5.QtWidgets as qw
-from vispy import gloo
 
 
-class GLProtocolCommander(QtCompiler):
+class ServoProtocolCommander(QtCompiler):
     def __init__(self, *args, windowSize=(900, 300), **kwargs):
         super().__init__(*args, **kwargs)
         self.add_timer('protocol_timer', self.on_protocol)
@@ -84,74 +83,18 @@ class GLProtocolCommander(QtCompiler):
                     if self.watch_state('visual_row', row_idx):
                         self.tables['Protocol'].selectRow(row_idx)
                         for k in data.keys():
-                            if k in self.get_shared_state_names('OPENGL'):
-                                self.set_state_to('OPENGL',k,float(data[k][row_idx]))
+                            if ":" in k:
+                                m,s = k.split(':')
+                                if m in self.get_linked_minion_names():
+                                    if s in self.get_shared_state_names(m):
+                                        self.set_state_to(m,s,float(data[k][row_idx]))
 
 
     def _init_menu(self):
         self._menubar = self.menuBar()
         self._menu_file = self._menubar.addMenu('File')
-        Load = qw.QAction("Load shader", self)
-        Load.setShortcut("Ctrl+O")
-        Load.setStatusTip("Load fragment shader")
-        Load.triggered.connect(self.load_shader)
-        self._menu_file.addAction(Load)
         Exit = qw.QAction("Quit", self)
         Exit.setShortcut("Ctrl+Q")
         Exit.setStatusTip("Exit program")
         Exit.triggered.connect(self.close)
         self._menu_file.addAction(Exit)
-
-    def load_shader(self):
-        rendererScriptName = qw.QFileDialog.getOpenFileName(self, 'Open File', './renderer',
-                                                            "GLSL shader (*.FS *.glsl)", "",
-                                                            qw.QFileDialog.DontUseNativeDialog)
-        self.send('OPENGL', 'load_shader', rendererScriptName[0])
-
-
-
-class GLProtocolCompiler(GLCompiler):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def on_init(self):
-        gloo.set_state("translucent")
-        self.program['a_pos'] = np.array([[-1., -1.], [-1., 1.], [1., -1.], [1., 1.]], np.float32)  # /2.
-        self.program['u_time'] = 0
-        self.program['u_resolution'] = (self.size[0], self.size[1])
-
-    def parse_msg(self, msg_type, msg):
-        if msg_type == 'load_shader':
-            for i in self._shared_uniform_states:
-                self.remove_state(i)
-            self._shared_uniform_states = []
-            self.info(f"Loading fragment shader from:{msg}")
-            self.load_FS(msg)
-            self.program = gloo.Program(self.VS, self.FS)
-            self.initialize()
-
-    def on_timer(self, event):
-        self.get('GUI')
-        is_running = self.get_state_from('GUI', 'is_running')
-        if not self.is_protocol_running():
-            if is_running:
-                self.run_protocol()
-        else:
-            if not is_running:
-                self.stop_protocol()
-
-    def on_protocol(self, event, offset):
-        self.program['u_time'] = event.elapsed
-        self.update_shared_uniform()
-        self.update()
-
-    def update_shared_uniform(self):
-        for i in self._shared_uniform_states:
-            self.program[i] = self.get_state(i)
-
-    def on_draw(self, event):
-        # Define the update rule
-        gloo.clear('black')
-        if self.is_protocol_running():
-            self.program.draw('triangle_strip')

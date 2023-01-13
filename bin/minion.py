@@ -945,8 +945,11 @@ class AbstractMinionMixin:
         else:
             self.log("DEBUG", f"EMPTY MESSAGE from [{source}]")
 
+    def get_linked_minion_names(self):
+        return list(self._processHandler._linked_minion.keys())
+
     def get_shared_state_names(self,minion_name):
-        return self._processHandler.get_shared_state_names(minion_name)
+        return list(self._processHandler.get_shared_state_names(minion_name))
 
     def create_state(self, state_name, state_val):
         self._processHandler.create_state(state_name, state_val)

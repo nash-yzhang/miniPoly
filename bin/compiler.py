@@ -1,6 +1,5 @@
 from time import perf_counter, sleep
 
-
 from bin.minion import BaseMinion, AbstractMinionMixin, TimerMinionMixin, TimerMinion
 from definition import ROOT_DIR
 
@@ -13,6 +12,7 @@ from PyQt5.Qt import Qt as qt
 from PyQt5.QtGui import QIcon, QPixmap
 from vispy import app, gloo
 
+import pyfirmata as fmt
 
 class AbstractCompiler(TimerMinionMixin):
     def __init__(self, processHandler, refresh_interval=10):
@@ -35,11 +35,11 @@ class QtCompiler(AbstractCompiler, qw.QMainWindow):
         AbstractCompiler.__init__(self, processHandler, refresh_interval)
         qw.QMainWindow.__init__(self, **kwargs)
         self.setWindowTitle(self._name)
-        self.setWindowIcon(QIcon(ROOT_DIR+'/bin/minipoly.ico'))
+        self.setWindowIcon(QIcon(ROOT_DIR + '/bin/minipoly.ico'))
         self.renderSplashScreen()
 
     def renderSplashScreen(self):
-        splash_pix = QPixmap(ROOT_DIR+'/bin/minipoly.ico')
+        splash_pix = QPixmap(ROOT_DIR + '/bin/minipoly.ico')
         splash = qw.QSplashScreen(splash_pix, qc.Qt.WindowStaysOnTopHint)
         # add fade to splashscreen
         splash.show()
@@ -96,7 +96,7 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
 
     def create_shared_uniform_state(self, type='uniform'):
         for i in self.program.variables:
-            if i[2] not in ['u_resolution','u_time']:
+            if i[2] not in ['u_resolution', 'u_time']:
                 if type is not 'all':
                     if i[0] == type:
                         try:
@@ -222,17 +222,20 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
         self.close()
 
 
-class ServoDriver(TimerMinion):
+class PololuServoDriver(TimerMinion):
+
+    def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
+        super(PololuServoDriver, self).__init__(*args, **kwargs)
+        self._port_name = port_name
+        self.servo_dict = servo_dict
 
     def initialize(self):
         super().initialize()
-        self._port_name = 'COM6'
-        self.servos = {'d:8:s': 1}
 
         try:
             self.init_polulo()
             self._watching_state = {}
-            for n, v in self.servos.items():
+            for n, v in self.servo_dict.items():
                 try:
                     self.create_state(n, self.getPosition(v))
                 except:
@@ -386,11 +389,56 @@ class ServoDriver(TimerMinion):
 
     def on_time(self, t):
         try:
-            for n, v in self.servos.items():
+            for n, v in self.servo_dict.items():
                 state = self.get_state(n)
                 if self.watch_state(n, state) and state is not None:
                     self.setTarget(v, int(state * 4000 + 4000))
                     # v.write(state*180)
+        except:
+            print(traceback.format_exc())
+
+    def shutdown(self):
+        self._port.close()
+
+    def watch_state(self, name, val):
+        if name not in self._watching_state.keys():
+            self._watching_state[name] = val
+            return True
+        else:
+            changed = val != self._watching_state[name]
+            self._watching_state[name] = val
+            return changed
+
+class ArduinoDriver(TimerMinion):
+
+    def __init__(self, *args, port_name='COM7', pin_address={}, **kwargs):
+        super(ArduinoDriver, self).__init__(*args, **kwargs)
+        self._port_name = port_name
+        self.pin_address = pin_address
+        self._port = None
+        self.pin_dict = {}
+
+    def initialize(self):
+        super().initialize()
+
+        try:
+            self._port = fmt.Arduino(self._port_name)
+            self._watching_state = {}
+            for n, v in self.pin_address.items():
+                try:
+                    self.pin_dict[n] = self._port.get_pin(v)
+                    self.create_state(n, self.pin_dict[n].read())
+                except:
+                    print(traceback.format_exc())
+        except:
+            print(traceback.format_exc())
+
+    def on_time(self, t):
+        try:
+            for n, v in self.pin_dict.items():
+                state = self.get_state(n)
+                if self.watch_state(n, state) and state is not None:
+                    v.write(state)
         except:
             print(traceback.format_exc())
 
