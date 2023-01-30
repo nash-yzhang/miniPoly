@@ -54,7 +54,7 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
     def __init__(self, processHandler, *args, protocol_commander: BaseMinion = None,
                  VS=None, FS=None, refresh_interval=10, **kwargs):
         super().__init__(*args, **kwargs)
-        app.Canvas.__init__(self, *args, **kwargs)
+        # app.Canvas.__init__(self, *args, **kwargs)
         self._processHandler = processHandler
         self.timers = {'default': app.Timer(refresh_interval / 1000, self._on_timer, start=True),
                        'protocol': app.Timer(refresh_interval / 1000, self._on_protocol, start=False)}
@@ -130,6 +130,8 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
 
     def initialize(self):
         self.create_state(self._protocol_time_name, 0)
+        self.create_state('fullScreen', False)
+        self.fullscreen = self.get_state('fullScreen')
         self.on_init()
         if self.program is not None:
             rv, uv = self.check_variables()
@@ -146,6 +148,7 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
         if self.status() <= 0:
             self.on_close()
         self.on_timer(event)
+        self.fullscreen = self.get_state('fullScreen')
 
     def on_timer(self, event):
         pass

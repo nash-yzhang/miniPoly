@@ -1,5 +1,6 @@
 from bin.app import AbstractGUIAPP, AbstractGLAPP
-from compiler import GLProtocolCommander,GLProtocolCompiler
+from compiler import GLProtocolCommander, GLProtocolCompiler
+
 
 class ShaderCompilerGUI(AbstractGUIAPP):
 
@@ -9,12 +10,21 @@ class ShaderCompilerGUI(AbstractGUIAPP):
         self.info("Starting GUI")
         self._win.show()
 
+
 class ShaderCompilerCanvas(AbstractGLAPP):
-    def initialize(self):
+
+    def __init__(self, *args, VS='./_shader/default.VS',
+                   FS='./_shader/default.FS', **kwargs):
+        interval = kwargs.pop('interval', 1)
+        super().__init__(*args, interval=interval)
+        self._VS = VS
+        self._FS = FS
+        self._GLWinKwargs = kwargs
+        self._win = None
+
+    def initialize(self,):
         super().initialize()
-        self._win = GLProtocolCompiler(self, app=self._app, refresh_interval=1,
-                                       VS='./_shader/default.VS',
-                                       FS='./_shader/default.FS')
+        self._win = GLProtocolCompiler(self, app=self._app, VS=self._VS, FS=self._FS, **self._GLWinKwargs)
         self.info('Starting OPENGL window')
         self._win.initialize()
         self._win.show()

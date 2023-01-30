@@ -15,6 +15,7 @@ class GLProtocolCommander(QtCompiler):
         self.timer_switcher = qw.QPushButton('Start')
         self.timer_switcher.clicked.connect(self.switch_timer)
         self.resize(*windowSize)
+        self._is_fullscreen = False
 
         self.frames = {}
         self.tables = {}
@@ -101,6 +102,20 @@ class GLProtocolCommander(QtCompiler):
         Exit.setStatusTip("Exit program")
         Exit.triggered.connect(self.close)
         self._menu_file.addAction(Exit)
+        self._menu_canvas = self._menubar.addMenu('Canvas')
+        fullScreen = qw.QAction("Toggle fullScreen", self)
+        fullScreen.setShortcut("Ctrl+Alt+F")
+        fullScreen.setStatusTip("Toggle GLCanvas fullScreen")
+        fullScreen.triggered.connect(self.toggle_fullScreen)
+        self._menu_canvas.addAction(fullScreen)
+
+    def toggle_fullScreen(self):
+        if self._is_fullscreen:
+            self.set_state_to('OPENGL', 'fullScreen', False)
+            self._is_fullscreen = False
+        else:
+            self.set_state_to('OPENGL', 'fullScreen', True)
+            self._is_fullscreen = True
 
     def load_shader(self):
         rendererScriptName = qw.QFileDialog.getOpenFileName(self, 'Open File', './renderer',
