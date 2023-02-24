@@ -1,5 +1,6 @@
-from app import ShaderCompilerGUI, ShaderCompilerCanvas
+from bin.compiler import PololuServoDriver, ArduinoDriver, SerialCommander
 from bin.minion import LoggerMinion
+from app import ServoCompilerGUI
 
 if __name__ == '__main__':
     GUI = ShaderCompilerGUI('GUI',refresh_interval=1)

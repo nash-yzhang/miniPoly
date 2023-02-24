@@ -749,19 +749,19 @@ class LoggerMinion(BaseMinion, QueueListener):
 
 class TimerMinion(BaseMinion):
 
-    def __init__(self, *args, interval=10, **kwargs):
+    def __init__(self, *args, refresh_interval=10, **kwargs):
         super(TimerMinion, self).__init__(*args, **kwargs)
         self.timer = {'default': [-1,-1]}  # 1. interval, 2. elapsed time, 3. init_time
         self.timer_cb_func = {'default': self.on_time}
         self._isrunning = False
-        self._interval = interval / 1000
+        self._interval = refresh_interval / 1000
 
     @property
-    def interval(self):
+    def refresh_interval(self):
         return self._interval*1000
 
-    @interval.setter
-    def interval(self,val):
+    @refresh_interval.setter
+    def refresh_interval(self, val):
         self._interval = val/1000
 
     def add_timer(self, name, cb_func=None):
@@ -1004,7 +1004,7 @@ class TimerMinionMixin(AbstractMinionMixin):
 
     def timerInterval(self):
         self._processHandler:TimerMinion
-        return self._processHandler.interval
+        return self._processHandler.refresh_interval
 
     def setTimerInterval(self,val):
         self._processHandler.interval = val

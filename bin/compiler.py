@@ -1,5 +1,7 @@
 from time import perf_counter, sleep
 
+import numpy as np
+
 from bin.minion import BaseMinion, AbstractMinionMixin, TimerMinionMixin, TimerMinion
 from definition import ROOT_DIR
 
@@ -13,6 +15,9 @@ from PyQt5.QtGui import QIcon, QPixmap
 from vispy import app, gloo
 
 import pyfirmata as fmt
+
+import ctypes
+from src.tisgrabber import tisgrabber as tis
 
 class AbstractCompiler(TimerMinionMixin):
     def __init__(self, processHandler, refresh_interval=10):
@@ -97,7 +102,7 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
     def create_shared_uniform_state(self, type='uniform'):
         for i in self.program.variables:
             if i[2] not in ['u_resolution', 'u_time']:
-                if type is not 'all':
+                if type != 'all':
                     if i[0] == type:
                         try:
                             self.create_state(i[2], list(self.program[i[2]].astype(float)))
@@ -243,6 +248,28 @@ class PololuServoDriver(TimerMinion):
         except:
             print(traceback.format_exc())
 
+    def on_time(self, t):
+        try:
+            for n, v in self.servo_dict.items():
+                state = self.get_state(n)
+                if self.watch_state(n, state) and state is not None:
+                    self.setTarget(v, int(state * 4000 + 4000))
+                    # v.write(state*180)
+        except:
+            print(traceback.format_exc())
+
+    def shutdown(self):
+        self._port.close()
+
+    def watch_state(self, name, val):
+        if name not in self._watching_state.keys():
+            self._watching_state[name] = val
+            return True
+        else:
+            changed = val != self._watching_state[name]
+            self._watching_state[name] = val
+            return changed
+
     ###### The following are copied from https://github.com/FRC4564/Maestro/blob/master/maestro.py with MIT license
     def init_polulo(self):
         self._port = serial.Serial(self._port_name)
@@ -387,13 +414,30 @@ class PololuServoDriver(TimerMinion):
         cmd = chr(0x24)
         self.sendCmd(cmd)
 
+    #############################################################################################
+
+class SerialCommander(TimerMinion):
+
+    def __init__(self, *args, port_name='COM7', baud=9600, timeout=0.001, **kwargs):
+        super(SerialCommander, self).__init__(*args, **kwargs)
+        self._port_name = port_name
+        self._baud = baud
+        self._timeout = timeout
+        self._port = None
+
+    def initialize(self):
+        super().initialize()
+        self._port = serial.Serial(self._port_name, self._baud, timeout=self._timeout)
+        self.create_state('serial', 0)
+
     def on_time(self, t):
         try:
-            for n, v in self.servo_dict.items():
-                state = self.get_state(n)
-                if self.watch_state(n, state) and state is not None:
-                    self.setTarget(v, int(state * 4000 + 4000))
-                    # v.write(state*180)
+            state = self.get_state('serial')
+            if self.watch_state('serial', state) and state is not None:
+                if state == 0:
+                    self._port.write(b'2')
+                elif state == 1:
+                    self._port.write(b'1')
         except:
             print(traceback.format_exc())
 
@@ -453,3 +497,4 @@ class ArduinoDriver(TimerMinion):
             changed = val != self._watching_state[name]
             self._watching_state[name] = val
             return changed
+
