@@ -361,6 +361,8 @@ class BaseMinion:
     def set_state(self, state_name: str, state_val):
         self.set_state_to(self.name, state_name, state_val)
 
+    def has_foreign_buffer(self, minion_name, buffer_name):
+        return f"b*{minion_name}_{buffer_name}" in self._shared_dict.keys()
 
     def get_foreign_buffer(self, minion_name, buffer_name):
         """
@@ -977,6 +979,16 @@ class AbstractMinionMixin:
 
     def get_state_from(self, minion_name, state_name):
         return self._processHandler.get_state_from(minion_name, state_name)
+
+    def get_buffer_from(self,minion_name,buffer_name, timeout=0):
+        t = 0
+        while t <= timeout:
+            if self._processHandler.has_foreign_buffer(minion_name,buffer_name):
+                break
+            else:
+                self._processHandler.link_foreign_buffer(minion_name,buffer_name)
+                t += 1
+        return self._processHandler.get_foreign_buffer(minion_name,buffer_name)
 
     def parse_msg(self, msg_type, msg):
         pass
