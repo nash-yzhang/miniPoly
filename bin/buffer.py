@@ -3,6 +3,8 @@ import traceback
 import warnings
 from multiprocessing import shared_memory, Lock
 
+import numpy as np
+
 
 class SharedBuffer:
     '''
@@ -151,6 +153,7 @@ class SharedBuffer:
         # if lock_gained:
         self._lock.acquire()
         offset += self._READ_OFFSET
+
         _decoded_bytes = bytes(self._shared_memory.buf[offset:(offset + length)])
         if mode == 'obj':
             _decoded_bytes = _decoded_bytes.decode('utf-8').split('\x00')[0]
@@ -253,7 +256,10 @@ class SharedBuffer:
         #     raise TimeoutError(f'[{self._CLASS_NAME} - {self._name}]: Cannot get the write lock')
 
     def close(self):
-        self._shared_memory.close()
+        try:
+            self._shared_memory.close()
+        except:
+            pass
 
     def terminate(self):
         try:
@@ -276,6 +282,104 @@ class SharedBuffer:
         except FileNotFoundError:
             return False
 
+class SharedNdarray:
+
+    _CLASS_NAME = 'SharedNdarray'
+    _MAX_BUFFER_SIZE = 2 ** 32  # Maximum shared memory: 4 GB
+    _READ_OFFSET = 128  # The first 128 bytes represents the valid size of the shared buffer
+    def __init__(self, name, lock: Lock, data=None):
+
+        self._name = name
+        self._lock = lock
+
+        if not self.is_alive():
+            if data is None:
+                raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Shared ndarray cannot be created: Data cannot be None')
+            self._shape = data.shape
+            self._size = data.nbytes + self._READ_OFFSET
+            try:
+                self._shared_memory = shared_memory.SharedMemory(create=True, name=self._name, size=self._size)
+                header = json.dumps(f'{self._CLASS_NAME}~{self._shape}~{self._size}').encode('utf-8')
+                place_holder = ' ' * (self._READ_OFFSET - len(header))
+                self._shared_memory.buf[:self._READ_OFFSET] = header+place_holder.encode('utf-8')
+                self.write(data)
+            except Exception:
+                self.close()
+                raise Exception(f'[{self._CLASS_NAME} - {self._name}] Error in writing data: {traceback.format_exc()}')
+        else:
+            self._shared_memory = shared_memory.SharedMemory(name=self._name)
+            try:
+                identity_string = self._read_buffer_header().split('~')
+                if identity_string[0] != self._CLASS_NAME:
+                    raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
+                else:
+                    self._size = int(identity_string[2])
+                    self._shape = tuple([int(x) for x in identity_string[1][1:-1].split(',')])
+            except Exception:
+                print(traceback.format_exc())
+                self.close()
+                raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
+
+            if data is not None:
+                try:
+                    self.write(data)
+                except Exception:
+                    self.close()
+                    raise Exception(f'[{self._CLASS_NAME} - {self._name}] Error in writing data: {traceback.format_exc()}')
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def size(self):
+        return self._size
+
+    def read(self):
+        self._lock.acquire()
+        data = np.frombuffer(self._shared_memory.buf, dtype=np.uint8,\
+                             count=self._size-self._READ_OFFSET, offset=self._READ_OFFSET)+0 # Copy the data
+        data = data.reshape(self._shape)
+        self._lock.release()
+        return data
+
+    def write(self, data):
+        self._lock.acquire()
+        self._shared_memory.buf[self._READ_OFFSET:self._size] = data.tobytes()
+        self._lock.release()
+
+    def _read_buffer_header(self):
+        self._lock.acquire()
+        _decoded_header = bytes(self._shared_memory.buf[:self._READ_OFFSET]).decode('utf-8').split('\x00')[0]
+        self._lock.release()
+        return json.loads(_decoded_header)
+
+    def close(self):
+        self._shared_memory.close()
+
+    def terminate(self):
+        # self._shared_memory.close()
+        self._shared_memory.unlink()
+        if self.is_alive():
+            warnings.warn(f"An unknown error occurred that caused the SharedBuffer {self.name} cannot be destroyed.")
+
+    def is_alive(self):
+        try:
+            tmp_buffer = shared_memory.SharedMemory(name=self._name, create=False)
+            tmp_buffer.close()
+            return True
+        except FileNotFoundError:
+            return False
 
 class SharedDict(dict):
     _BUFFER_PREFIX = 'b*'

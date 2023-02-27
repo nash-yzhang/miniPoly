@@ -178,11 +178,13 @@ class BaseMinion:
             shared_buffer_reference_name = f"b*{shared_buffer_name}"
             if shared_buffer_reference_name not in self._shared_dict.keys():
                 try:
-                    self._shared_buffer[shared_buffer_name] = SharedBuffer(shared_buffer_name, data, size,
-                                                                           create=True)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
+                    # self._shared_buffer[shared_buffer_name] = SharedBuffer(shared_buffer_name, self.lock, data, size,
+                    #                                                        create=True)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
+                    self._shared_buffer[shared_buffer_name] = SharedNdarray(shared_buffer_name, self.lock, data)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
                 except Exception:
                     self.log(logging.ERROR,
                              f"Error in creating buffer '{shared_buffer_name}'.\n{traceback.format_exc()}")
+                    print(f"Error in creating buffer '{shared_buffer_name}'.\n{traceback.format_exc()}")
                 self._shared_dict[shared_buffer_reference_name] = shared_buffer_name
             else:
                 self.log(logging.ERROR, f"SharedBuffer '{shared_buffer_name}' already exist")
@@ -359,6 +361,7 @@ class BaseMinion:
     def set_state(self, state_name: str, state_val):
         self.set_state_to(self.name, state_name, state_val)
 
+
     def get_foreign_buffer(self, minion_name, buffer_name):
         """
         Get value stored in the foreign shared buffer
@@ -379,8 +382,12 @@ class BaseMinion:
                 shared_buffer_name = self._shared_dict[shared_buffer_reference_name]
                 tmp_buffer: SharedBuffer
                 if self.is_buffer_alive(minion_name, buffer_name):
-                    with SharedDict(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
+                    # with SharedBuffer(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
+                    with SharedNdarray(shared_buffer_name, lock=self.lock) as tmp_buffer:
                         buffer_val = tmp_buffer.read()
+                elif minion_name == self.name:
+                    tmp_buffer = SharedNdarray(shared_buffer_name, lock=self.lock)
+                    buffer_val = tmp_buffer.read()
                 else:
                     self.log(logging.ERROR, f"Invalid buffer '{minion_name}_{buffer_name}' or errors in connections")
             else:
@@ -404,7 +411,8 @@ class BaseMinion:
             if shared_buffer_reference_name in self._shared_dict.keys():
                 shared_buffer_name = self._shared_dict[shared_buffer_reference_name]
                 tmp_buffer: SharedBuffer
-                with SharedDict(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
+                # with SharedBuffer(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
+                with SharedNdarray(shared_buffer_name, lock=self.lock) as tmp_buffer:
                     try:
                         buffer_val = tmp_buffer.write(val)
                     except:
@@ -519,8 +527,9 @@ class BaseMinion:
         """
         if minion_name in self._linked_minion.keys():
             try:
-                with SharedDict(f"{minion_name}_{buffer_name}", lock=self.lock, create=False) as tmp_dict:
-                    return tmp_dict.is_alive
+                with SharedNdarray(f"{minion_name}_{buffer_name}", lock=self.lock) as tmp_dict:
+                    ISALIVE = tmp_dict.is_alive()
+                return ISALIVE
             except FileNotFoundError:
                 self.log(logging.INFO, f"Linked shared buffer '{minion_name}_{buffer_name}' is closed.")
                 self._shared_dict.pop(f"b*{minion_name}_{buffer_name}")
@@ -1008,4 +1017,3 @@ class TimerMinionMixin(AbstractMinionMixin):
 
     def setTimerInterval(self,val):
         self._processHandler.interval = val
-
