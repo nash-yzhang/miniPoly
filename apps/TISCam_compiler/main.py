@@ -1,14 +1,13 @@
-from bin.compiler import PololuServoDriver, ArduinoDriver, SerialCommander
+from apps.TISCam_compiler.app import TISCamera, CameraInterface
 from bin.minion import LoggerMinion
-from app import ServoCompilerGUI
 
 if __name__ == '__main__':
-    GUI = ShaderCompilerGUI('GUI',refresh_interval=1)
-    GL_canvas = ShaderCompilerCanvas('OPENGL',refresh_interval=1)
-    GL_canvas.connect(GUI)
-    logger = LoggerMinion('TestGUI logger')
+    Cam = TISCamera('Tiscam_1', refresh_interval=1)
+    GUI = CameraInterface('GUI', refresh_interval=1)
+    logger = LoggerMinion('TestCam logger')
+    Cam.connect(GUI)
+    Cam.attach_logger(logger)
     GUI.attach_logger(logger)
-    GL_canvas.attach_logger(logger)
     logger.run()
-    GL_canvas.run()
+    Cam.run()
     GUI.run()

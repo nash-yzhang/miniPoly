@@ -1,202 +1,225 @@
-import numpy as np
-from bin.gui import DataframeTable
-from bin.compiler import QtCompiler
 import PyQt5.QtWidgets as qw
+import PyQt5.QtGui as qg
+import PyQt5.QtCore as qc
 
-import ctypes
+from bin.compiler import QtCompiler
 from src.tisgrabber import tisgrabber as tis
 
+class CameraGUI(QtCompiler):
 
-class TISCamCommander(QtCompiler):
-    def __init__(self, *args, windowSize=(900, 300), **kwargs):
-        super().__init__(*args, **kwargs)
-        self.add_timer('protocol_timer', self.on_protocol)
-        self.create_state('is_running', False)
+    def __init__(self, *args, **kwargs):
+        super(CameraGUI, self).__init__(*args, **kwargs)
+        self._camera_minions = [i for i in self.get_linked_minion_names() if 'tiscam' in i.lower()]
+        self._connected_camera_minions = {}
+        self._camera_param = {}
+        self._videoStreams = {}
 
-        self._timer_started = False
-        self.timer_switcher = qw.QPushButton('Start')
-        self.timer_switcher.clicked.connect(self.switch_timer)
-        self.resize(*windowSize)
+        self.layout_Main = qw.QHBoxLayout()
+        self._tiscamHandle = tis.TIS_CAM()
 
-        self.layout = qw.QVBoxLayout()
-        self.layout.addLayout(self.groupbox_layout)
-        self.layout.addWidget(self.timer_switcher)
-
-        self.main_widget = qw.QWidget()
-        self.main_widget.setLayout(self.layout)
-        self.setCentralWidget(self.main_widget)
-
+        self._deviceList = self._tiscamHandle.GetDevices()
         self._init_menu()
 
-    def addTableBox(self, name):
-        frame = qw.QGroupBox(self)
-        frame.setTitle(name)
-        table = DataframeTable(self.centralWidget())
-        frame_layout = qw.QVBoxLayout()
-        frame_layout.addWidget(table)
-        frame.setLayout(frame_layout)
-        self.frames[name] = frame
-        self.tables[name] = table
+        self.main_widget = qw.QWidget()
+        self.main_widget.setLayout(self.layout_Main)
+        self.setCentralWidget(self.main_widget)
 
-    def switch_timer(self):
-        if self._timer_started:
-            self._stopTimer()
-        else:
-            self._startTimer()
-
-    def _startTimer(self):
-        self.startTimer()
-        self.start_timing('protocol_timer')
-        self._timer_started = True
-        self.timer_switcher.setText('Stop')
-
-    def startTimer(self):
-        self.set_state('is_running', True)
-
-    def _stopTimer(self):
-        self.stopTimer()
-        self.stop_timing('protocol_timer')
-        self._timer_started = False  # self._time = self._time.elapsed()
-        self.timer_switcher.setText('Start')
-
-    def stopTimer(self):
-        self.set_state('is_running', False)
-
-    def on_protocol(self, t):
-        cur_time = t
-        if self.tables['Protocol'].model():
-            data = self.tables['Protocol'].model()._data
-            time_col = data['time']
-            if cur_time <= (time_col.max() + self.timerInterval()):
-                row_idx = None
-                for i, v in enumerate(time_col):
-                    if v >= cur_time:
-                        row_idx = i - 1
-                        break
-                if row_idx is None:
-                    self._stopTimer()
-                else:
-                    if self.watch_state('visual_row', row_idx):
-                        self.tables['Protocol'].selectRow(row_idx)
-                        for k in data.keys():
-                            if ":" in k:
-                                m,s = k.split(':')
-                                if m in self.get_linked_minion_names():
-                                    if s in self.get_shared_state_names(m):
-                                        self.set_state_to(m,s,float(data[k][row_idx]))
+    def on_time(self, t):
+        for camName, mi in self._connected_camera_minions.items():
+            frame = self.get_buffer_from(mi, 'frame')
+            if frame is not None:
+                self._videoStreams[camName][1].setPixmap(qg.QPixmap.fromImage(qg.QImage(frame, frame.shape[1], frame.shape[0], frame.strides[0],
+                                                             qg.QImage.Format_RGB888)))
+        self._processHandler.on_time(t)
 
 
     def _init_menu(self):
         self._menubar = self.menuBar()
         self._menu_file = self._menubar.addMenu('File')
+
+        AddCamera = qw.QAction("Add Camera", self)
+        AddCamera.setShortcut("Ctrl+O")
+        AddCamera.setStatusTip("Add IC Camera")
+        AddCamera.triggered.connect(self.add_camera)
+
+        Disconnect = qw.QAction("Disconnect Camera", self)
+        Disconnect.setShortcut("Ctrl+Shift+O")
+        Disconnect.setStatusTip("Remove IC Camera")
+        Disconnect.triggered.connect(self.remove_camera)
+
         Exit = qw.QAction("Quit", self)
         Exit.setShortcut("Ctrl+Q")
         Exit.setStatusTip("Exit program")
         Exit.triggered.connect(self.close)
+
+        self._menu_file.addAction(AddCamera)
+        self._menu_file.addAction(Disconnect)
         self._menu_file.addAction(Exit)
 
-class TISCamera(TimerMinion):
-    TIS_DLL_DIR = "../src/tisgrabber/tisgrabber_x64.dll"
-    TIS_Width = ctypes.c_long()
-    TIS_Height = ctypes.c_long()
-    TIS_BitsPerPixel = ctypes.c_int()
-    TIS_colorformat = ctypes.c_int()
 
-    def __init__(self, *args, camera_name=None, video_format=None, frame_rate=None, **kwargs):
-        super(TISCamera, self).__init__(*args, **kwargs)
-        if frame_rate is not None:
-            self.refresh_interval = int(1/frame_rate)
-        else:
-            self.frame_rate = 1/self.refresh_interval
-        self.name = None
-        self.ic = None
-        self._camera_name = camera_name
-        self._video_format = video_format
-        self._params = {"frame_rate": self.frame_rate, 'video_format': self._video_format, 'Gain': 0, 'Exposure': self.refresh_interval, 'Trigger': 0},
-        for k, v in self._params.items():
-            self.create_state(k, v)
+    def add_camera(self):
 
-    def initialize(self):
-        self._init_tisgrabber()
-        if self._camera_name is None:
-            self.hGrabber = self.ic.IC_ShowDeviceSelectionDialog(None)
-            self.name = self.ic.IC_GetDeviceName(self.hGrabber)
+        self.camConfigWindow = qw.QWidget()
+        self.camConfigWindow.setWindowTitle('Add Camera')
+        layout_configMain = qw.QVBoxLayout()
+
+        layout_devSelection = qw.QHBoxLayout()
+        self.camconfig_camera_list = qw.QComboBox()
+        self.camconfig_camera_list.addItems([i.decode('utf-8') for i in self._deviceList])
+        self.camconfig_camera_list.activated.connect(self.getVideoFormat)
+        self.camconfig_camera_list.currentIndexChanged.connect(self.getVideoFormat)
+        layout_devSelection.addWidget(qw.QLabel('Select device:'))
+        layout_devSelection.addWidget(self.camconfig_camera_list)
+
+        layout_videoFormat = qw.QHBoxLayout()
+        self.camconfig_videoFormat_list = qw.QComboBox()
+        layout_videoFormat.addWidget(qw.QLabel('Select video format:'))
+        layout_videoFormat.addWidget(self.camconfig_videoFormat_list)
+
+        layout_confirm = qw.QHBoxLayout()
+        self.camconfig_confirm = qw.QPushButton('Add')
+        self.camconfig_confirm.clicked.connect(self.connect_camera)
+        self.camconfig_cancel = qw.QPushButton('Cancel')
+        self.camconfig_cancel.clicked.connect(self.camConfigWindow.close)
+        layout_confirm.addWidget(self.camconfig_confirm)
+        layout_confirm.addWidget(self.camconfig_cancel)
+
+        layout_configMain.addLayout(layout_devSelection)
+        layout_configMain.addLayout(layout_videoFormat)
+        layout_configMain.addLayout(layout_confirm)
+
+        self.camConfigWindow.setLayout(layout_configMain)
+        self.camConfigWindow.show()
+
+    def remove_camera(self):
+
+        self.disconnectWindow = qw.QWidget()
+        self.disconnectWindow.setWindowTitle('Choose camera to disconnect')
+        layout_configMain = qw.QVBoxLayout()
+
+        layout_devSelection = qw.QHBoxLayout()
+        self.camdisconn_camera_list = qw.QComboBox()
+        self.camdisconn_camera_list.addItems([i.decode('utf-8') for i in self._deviceList])
+        layout_devSelection.addWidget(qw.QLabel('Select device to remove:'))
+        layout_devSelection.addWidget(self.camdisconn_camera_list)
+
+        layout_confirm = qw.QHBoxLayout()
+        self.camdisconn_confirm = qw.QPushButton('Disconnect')
+        self.camdisconn_confirm.clicked.connect(self.disconnect_camera)
+        self.camdisconn_cancel = qw.QPushButton('Cancel')
+        self.camdisconn_cancel.clicked.connect(self.disconnectWindow.close)
+        layout_confirm.addWidget(self.camdisconn_confirm)
+        layout_confirm.addWidget(self.camdisconn_cancel)
+
+        layout_configMain.addLayout(layout_devSelection)
+        layout_configMain.addLayout(layout_confirm)
+
+        self.disconnectWindow.setLayout(layout_configMain)
+        self.disconnectWindow.show()
+    def getVideoFormat(self):
+        self._tiscamHandle.open(self.camconfig_camera_list.currentText())
+        video_formats = [i.decode('utf-8') for i in self._tiscamHandle.GetVideoFormats()]
+        self.camconfig_videoFormat_list.clear()
+        self.camconfig_videoFormat_list.addItems(video_formats)
+
+    def connect_camera(self):
+
+        cameraName = self.camconfig_camera_list.currentText()
+
+        self._camera_param[cameraName] = {
+            'VideoFormat': self.camconfig_videoFormat_list.currentText(),
+            'ExposureTime': None,
+            'Gain': None,
+            'Trigger':0,
+        }
+
+        if cameraName in self._connected_camera_minions.keys():
+            self.error('Camera already connected')
         else:
-            self.hGrabber = self.ic.IC_CreateGrabber()
-            if not self.ic.IC_IsDevValid(self.hGrabber):
-                all_device_name = [self.ic.IC_GetDeviceName(i) for i in range(self.ic.IC_GetDeviceCount())]
-                raise FileNotFoundError(f"Device {self._camera_name} not found, the available devices are {all_device_name}.")
+            free_minion = [i for i in self._camera_minions if i not in self._connected_camera_minions.values()]
+            if not free_minion:
+                self.error('No more camera minion available')
             else:
-                self.name = self.ic.IC_GetDeviceName(self.hGrabber)
-        if self._video_format is not None:
-            try:
-                self.ic.IC_SetVideoFormat(self.hGrabber, tis.T(self._video_format))
-            except Exception:
-                print(f"Video format {self._video_format} not found, using default format.")
-        self.ic.IC_SetFrameRate(self.hGrabber, ctypes.c_float(self.frame_rate))
+                mi = free_minion[0]
+                self.set_state_to(mi, 'CameraName', cameraName)
+                for k, v in self._camera_param[cameraName].items():
+                    if v is not None:
+                        self.set_state_to(mi, k, v)
+                self._connected_camera_minions[cameraName] = mi
 
-    def _init_tisgrabber(self):
-        self.ic = ctypes.cdll.LoadLibrary(self.TIS_DLL_DIR)
-        tis.declareFunctions(self.ic)
-        self.ic.IC_InitLibrary(0)
-        return self.ic
+            self.setupCameraFrameGUI(cameraName)
+        self.camConfigWindow.close()
 
-    def _snapImage(self):
-        snapped = self.ic.IC_SnapImage(self.hGrabber,2000)
-        if snapped == tis.IC_SUCCESS:
-            self._buf_img = self._getImage()
+    def disconnect_camera(self):
 
-    def _getImage(self):
+        cameraName = self.camconfig_camera_list.currentText()
 
-        # Query the values of image description
-        self.ic.IC_GetImageDescription(self.hGrabber, self.TIS_Width, self.TIS_Height,
-                                       self.TIS_BitsPerPixel, self.TIS_colorformat)
+        self.set_state_to(self._connected_camera_minions[cameraName], 'CameraName', None)
+        self.layout_Main.removeWidget(self._videoStreams[cameraName][0])
+        self._videoStreams.pop(cameraName)
+        self._connected_camera_minions.pop(cameraName)
+        self._camera_param.pop(cameraName)
+        self.disconnectWindow.close()
 
-        # Calculate the buffer size
-        bpp = int(self.TIS_BitsPerPixel.value / 8.0)
-        buffer_size = self.TIS_Width.value * self.TIS_Height.value * self.TIS_BitsPerPixel.value
+    def setupCameraFrameGUI(self, cameraName):
+        self._videoStreams[cameraName] = [qw.QWidget(),
+                                          qw.QLabel(cameraName)]
+                                          # qw.QLabel('Gain: '),
+                                          # qw.QSlider(qc.Qt.Horizontal),
+                                          # qw.QLineEdit(),
+                                          # qw.QLabel('Exposure time: '),
+                                          # qw.QSlider(qc.Qt.Horizontal),
+                                          # qw.QLineEdit()]
+        cameraWidget = self._videoStreams[cameraName][0]
+        layout = qw.QVBoxLayout()
+        self._videoStreams[cameraName][1].setPixmap(qg.QPixmap())
 
-        # Get the image data
-        imagePtr = self.ic.IC_GetImagePtr(self.hGrabber)
+        # layout_Gain = qw.QHBoxLayout()
+        # Gain_label = self._videoStreams[cameraName][1]
+        # Gain_slider = self._videoStreams[cameraName][2]
+        # Gain_text = self._videoStreams[cameraName][3]
+        # Gain_text.setFixedWidth(30)
+        # Gain_slider.setMinimum(1)
+        # Gain_slider.setMaximum(60)
+        # Gain_slider.setValue(30)
+        # Gain_slider.setFixedWidth(100)
+        # Gain_slider.valueChanged.connect(lambda: self.setGain(cameraName))
+        #
+        # layout_Gain.addWidget(Gain_label)
+        # layout_Gain.addWidget(Gain_text)
+        # layout_Gain.addWidget(Gain_slider)
+        #
+        #
+        # layout_ft = qw.QHBoxLayout()
+        # ft_label = self._videoStreams[cameraName][4]
+        # ft_slider = self._videoStreams[cameraName][5]
+        # ft_text = self._videoStreams[cameraName][6]
+        # ft_text.setFixedWidth(30)
+        # ft_slider.setMinimum(1)
+        # ft_slider.setMaximum(250)
+        # ft_slider.setValue(30)
+        # ft_slider.setFixedWidth(100)
+        # ft_slider.valueChanged.connect(lambda: self.setExposureTime(cameraName))
+        #
+        # layout_ft.addWidget(ft_label)
+        # layout_ft.addWidget(ft_text)
+        # layout_ft.addWidget(ft_slider)
 
-        imagedata = ctypes.cast(imagePtr,
-                                ctypes.POINTER(ctypes.c_ubyte *
-                                               buffer_size))
+        layout.addWidget(qw.QLabel(cameraName))
+        layout.addWidget(self._videoStreams[cameraName][1])
+        cameraWidget.setLayout(layout)
+        # layout.addLayout(layout_Gain)
+        # layout.addLayout(layout_ft)
+        self.layout_Main.addWidget(cameraWidget)
 
-        # Create the numpy array
-        image = np.ndarray(buffer=imagedata.contents,
-                           dtype=np.uint8,
-                           shape=(self.TIS_Height.value,
-                                  self.TIS_Width.value,
-                                  bpp))
-        return image
+    def setGain(self, cameraName):
+        gain = self._videoStreams[cameraName][2].value()
+        self._videoStreams[cameraName][3].setText(str(gain))
+        minion_name = self._connected_camera_minions[cameraName]
+        self.set_state_to(minion_name, 'Gain', gain)
 
-
-    def on_time(self, t):
-        try:
-            for n, v in self.servo_dict.items():
-                state = self.get_state(n)
-                # if self.watch_state(n, state) and state is not None:
-                #     if n == 'Trigger':
-                #         if state == 1:
-                #             self._snapImage()
-                #             self.ic.IC_Trigger(self.hGrabber)
-                # v.write(state*180)
-        except:
-            print(traceback.format_exc())
-
-    def shutdown(self):
-        self._port.close()
-
-    def watch_state(self, name, val):
-        if name not in self._watching_state.keys():
-            self._watching_state[name] = val
-            return True
-        else:
-            changed = val != self._watching_state[name]
-            self._watching_state[name] = val
-            return changed
-
-    def __del__(self):
-        self.ic.IC_StopLive(self.hGrabber)
-        self.ic.IC_ReleaseGrabber(self.hGrabber)
+    def setExposureTime(self, cameraName):
+        exposureTime = self._videoStreams[cameraName][5].value()
+        self._videoStreams[cameraName][6].setText(str(exposureTime))
+        minion_name = self._connected_camera_minions[cameraName]
+        self.set_state_to(minion_name, 'ExposureTime', exposureTime)

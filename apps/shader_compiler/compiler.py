@@ -100,7 +100,7 @@ class GLProtocolCommander(QtCompiler):
         Exit = qw.QAction("Quit", self)
         Exit.setShortcut("Ctrl+Q")
         Exit.setStatusTip("Exit program")
-        Exit.triggered.connect(self.close)
+        Exit.triggered.connect(self.on_close)
         self._menu_file.addAction(Exit)
         self._menu_canvas = self._menubar.addMenu('Canvas')
         fullScreen = qw.QAction("Toggle fullScreen", self)
@@ -108,6 +108,9 @@ class GLProtocolCommander(QtCompiler):
         fullScreen.setStatusTip("Toggle GLCanvas fullScreen")
         fullScreen.triggered.connect(self.toggle_fullScreen)
         self._menu_canvas.addAction(fullScreen)
+
+    def on_close(self):
+        self.close()
 
     def toggle_fullScreen(self):
         if self._is_fullscreen:

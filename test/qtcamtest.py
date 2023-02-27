@@ -34,29 +34,44 @@ class TISCamera(TimerMinion):
         super().initialize()
         for k, v in self._params.items():
             self.create_state(k, v)
-        print('Connecting camera...')
+        self.info("Initializing camera...")
         while self._params['CameraName'] is None:
             self._params['CameraName'] = self.get_state('CameraName')
         self.camera = tis.TIS_CAM()
         self.camera.DevName = self._params['CameraName']
-        self.camera.open(self.camera.DevName)
+        self._init_camera()
+        self.info(f"Camera {self.name} initialized.")
+
+    def _init_camera(self):
+        if self.camera.IsDevValid():
+            self.camera.StopLive()
         self._camera_name = self.camera.DevName.replace(' ', '_')
-        empty_buffer = np.zeros((self.camera.get_video_format_height(), self.camera.get_video_format_width(), 3),
-                                dtype=np.uint8)
-        self.create_shared_buffer("frame", empty_buffer, empty_buffer.nbytes)
+        self.camera.open(self.camera.DevName)
         self.camera.SetContinuousMode(0)
         self.camera.StartLive(0)
-        print(f"Camera {self.name} initialized.")
+        self.camera.SnapImage()
+        if self.has_foreign_buffer(self.name, 'frame'):
+            self.set_foreign_buffer(self.name, 'frame', self.camera.GetImage())
+        else:
+            frame = self.camera.GetImage()
+            self.create_shared_buffer("frame", frame, frame.nbytes)
 
     def on_time(self, t):
         try:
-            self.camera.SnapImage()
-            self.set_foreign_buffer(self.name, 'frame', self.camera.GetImage())
+            if self.status <= 0:
+                self.on_close()
+            if self.watch_state('CameraName', self.get_state('CameraName')):
+                self._init_camera()
+            else:
+                self.camera.SnapImage()
+                self.set_foreign_buffer(self.name, 'frame', self.camera.GetImage())
         except:
-            print(traceback.format_exc())
+            self.error(traceback.format_exc())
 
-    def shutdown(self):
-        self.camera.release()
+    def on_close(self):
+        if self.camera.IsDevValid():
+            self.camera.StopLive()
+        self.set_state('status', -1)
 
     def watch_state(self, name, val):
         if name not in self._watching_state.keys():
@@ -93,13 +108,13 @@ class CameraGUI(QtCompiler):
 
         # Create camera selection dropdown list
         self.camera_list = qw.QComboBox()
-        self._deviceList = self._tiscamHandle.GetDevices()
+        self._deviceList = [i.decode('utf-8') for i in self._tiscamHandle.GetDevices()]
         self.camera_list.addItems(['N/A'])
-        self.camera_list.addItems([i.decode('utf-8') for i in self._deviceList])
+        self.camera_list.addItems(self._deviceList)
 
         # Create connect button, connected to the current selected camera in the list
         self.button_connect = qw.QPushButton('Add')
-        self.button_connect.clicked.connect(self.connect_camera)
+        self.button_connect.clicked.connect(self.add_camera)
 
         self.layout_camera_selection.addWidget(self.camera_list)
         self.layout_camera_selection.addWidget(self.button_connect)
@@ -121,14 +136,24 @@ class CameraGUI(QtCompiler):
                                                              qg.QImage.Format_RGB888))
                 self.frameCanvas.setPixmap(self._frame)
         self._processHandler.on_time(t)
-    def connect_camera(self):
+    def add_camera(self):
         for mi in self._camera_minions:
-            camera_name = self.get_state_from(mi, 'CameraName')
-            if camera_name is None:
+            cam_minion_name = self.get_state_from(mi, 'CameraName')
+            camera_name = self.camera_list.currentText()
+            if cam_minion_name is None and camera_name in self._deviceList:
                 self.set_state_to(mi, 'CameraName', self.camera_list.currentText())
                 self._connected_camera_minions[self.camera_list.currentText()] = mi
                 break
 
+
+    def _init_menu(self):
+        self._menubar = self.menuBar()
+        self._menu_file = self._menubar.addMenu('File')
+        Exit = qw.QAction("Quit", self)
+        Exit.setShortcut("Ctrl+Q")
+        Exit.setStatusTip("Exit program")
+        Exit.triggered.connect(self.close)
+        self._menu_file.addAction(Exit)
 
 
 

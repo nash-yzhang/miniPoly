@@ -364,6 +364,9 @@ class BaseMinion:
     def has_foreign_buffer(self, minion_name, buffer_name):
         return f"b*{minion_name}_{buffer_name}" in self._shared_dict.keys()
 
+    def has_buffer(self, buffer_name):
+        return f"{self.name}_{buffer_name}" in self._shared_buffer.keys()
+
     def get_foreign_buffer(self, minion_name, buffer_name):
         """
         Get value stored in the foreign shared buffer
@@ -423,6 +426,17 @@ class BaseMinion:
                 self.log(logging.ERROR, f"Unknown buffer: '{shared_buffer_reference_name}'")
         else:
             self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+
+    def get_buffer(self, buffer_name: str):
+        buffer_name = f"{self.name}_{buffer_name}"
+        if buffer_name in self._shared_buffer.keys():
+            return self._shared_buffer[buffer_name].read()
+
+    def set_buffer(self, buffer_name: str, val):
+        buffer_name = f"{self.name}_{buffer_name}"
+        if buffer_name in self._shared_buffer.keys():
+            self._shared_buffer[buffer_name].write(val)
+
 
     ############# Connection module #############
 
@@ -589,7 +603,7 @@ class BaseMinion:
             self.disconnect(i)
 
         bv: SharedBuffer
-        for bk, bv in self._shared_buffer:
+        for bk, bv in self._shared_buffer.items():
             bv.terminate()
         self._shared_dict.terminate()
 
