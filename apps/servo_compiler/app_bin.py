@@ -1,7 +1,8 @@
-import numpy as np
+import PyQt5.QtWidgets as qw
+
 from bin.gui import DataframeTable
 from bin.compiler import QtCompiler
-import PyQt5.QtWidgets as qw
+from bin.app import AbstractGUIAPP, AbstractGLAPP
 
 
 class ServoProtocolCommander(QtCompiler):
@@ -98,3 +99,11 @@ class ServoProtocolCommander(QtCompiler):
         Exit.setStatusTip("Exit program")
         Exit.triggered.connect(self.close)
         self._menu_file.addAction(Exit)
+
+class ServoCompilerGUI(AbstractGUIAPP):
+
+    def initialize(self):
+        super().initialize()
+        self._win = ServoProtocolCommander(self)
+        self.info("Starting GUI")
+        self._win.show()

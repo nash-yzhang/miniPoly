@@ -1,3 +1,4 @@
+from bin.app import AbstractGUIAPP
 import time
 import traceback
 
@@ -34,7 +35,7 @@ class CameraGUI(QtCompiler):
                 frame = self.get_buffer_from(mi, self._camera_param[camName]['buffer_name'])
                 if frame is not None:
                     self._videoStreams[camName][1].setPixmap(qg.QPixmap.fromImage(qg.QImage(frame, frame.shape[1], frame.shape[0], frame.strides[0],
-                                                                 qg.QImage.Format_RGB888)))
+                                                                                            qg.QImage.Format_RGB888)))
             except:
                 self.debug('Error when trying to get frame from camera minion.')
                 self.debug(traceback.format_exc())
@@ -197,12 +198,12 @@ class CameraGUI(QtCompiler):
         self._videoStreams[cameraName] = [qw.QWidget(),
                                           qw.QLabel(cameraName),
                                           qw.QPushButton('Refresh')]
-                                          # qw.QLabel('Gain: '),
-                                          # qw.QSlider(qc.Qt.Horizontal),
-                                          # qw.QLineEdit(),
-                                          # qw.QLabel('Exposure time: '),
-                                          # qw.QSlider(qc.Qt.Horizontal),
-                                          # qw.QLineEdit()]
+        # qw.QLabel('Gain: '),
+        # qw.QSlider(qc.Qt.Horizontal),
+        # qw.QLineEdit(),
+        # qw.QLabel('Exposure time: '),
+        # qw.QSlider(qc.Qt.Horizontal),
+        # qw.QLineEdit()]
         cameraWidget = self._videoStreams[cameraName][0]
         camNameLabel = self._videoStreams[cameraName][1]
         refresh_btn  = self._videoStreams[cameraName][2]
@@ -225,3 +226,14 @@ class CameraGUI(QtCompiler):
         self._videoStreams[cameraName][6].setText(str(exposureTime))
         minion_name = self._connected_camera_minions[cameraName]
         self.set_state_to(minion_name, 'ExposureTime', exposureTime)
+
+class CameraInterface(AbstractGUIAPP):
+    def __init__(self, *args, **kwargs):
+        super(CameraInterface, self).__init__(*args, **kwargs)
+
+    def initialize(self):
+        super().initialize()
+        self._win = CameraGUI(self)
+        self.info("Camera Interface initialized.")
+        self._win.show()
+
