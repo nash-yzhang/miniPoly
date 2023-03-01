@@ -1,3 +1,4 @@
+import os
 from time import perf_counter, sleep
 
 import numpy as np
@@ -10,7 +11,6 @@ import traceback
 
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
-from PyQt5.Qt import Qt as qt
 from PyQt5.QtGui import QIcon, QPixmap
 from vispy import app, gloo
 
@@ -18,6 +18,8 @@ import pyfirmata as fmt
 
 import ctypes
 from src.tisgrabber import tisgrabber as tis
+
+import csv
 
 class AbstractCompiler(TimerMinionMixin):
     def __init__(self, processHandler, refresh_interval=10):
@@ -505,6 +507,9 @@ class TISCameraDriver(TimerMinion):
     TIS_BitsPerPixel = ctypes.c_int()
     TIS_colorformat = ctypes.c_int()
 
+    BINFile_Postfix = "IC_IMG"
+    AUXile_Postfix = "IC_AUX"
+
     def __init__(self, *args, camera_name=None, video_format=None, frame_rate=None, **kwargs):
         super(TISCameraDriver, self).__init__(*args, **kwargs)
         if frame_rate is not None:
@@ -516,8 +521,14 @@ class TISCameraDriver(TimerMinion):
         self._buffer_name = None
         self._buf_img = None
         self._params = {"CameraName":None, 'VideoFormat': None,
-                        'ExposureTime': self.refresh_interval, 'FPS':0, 'Gain': 0,
-                        'Trigger': 0, 'FrameCount':0, 'FrameTime':0}
+                        'StreamToDisk': False, 'SaveDir':None, 'SaveName':None, 'InitTime':None,
+                        'FrameCount':0, 'FrameTime':0}
+        self.streaming = False
+        self._BIN_FileHandle = None
+        self._AUX_FileHandle = None
+        self._AUX_writer = None
+        self._stream_init_time = None
+        self._n_frame_streamed = None
 
     def initialize(self):
         super().initialize()
@@ -533,7 +544,6 @@ class TISCameraDriver(TimerMinion):
         while self._params['VideoFormat'] is None:
             self._params['VideoFormat'] = self.get_state('VideoFormat')
         self.info(f"Camera {self._params['CameraName']} found")
-        print(self._params['VideoFormat'])
         self.camera = tis.TIS_CAM()
         self.camera.DevName = self._params['CameraName']
         if self.camera.IsDevValid():
@@ -582,17 +592,66 @@ class TISCameraDriver(TimerMinion):
                 if self.watch_state('VideoFormat', self._params['VideoFormat']):
                     self.update_video_format()
                 if self.camera.IsDevValid():
-                    self.camera.SnapImage()
-                    self.set_buffer(self._buffer_name, self.camera.GetImage())
+                    self.process_frame()
         except:
             self.error("An error occurred while updating the camera")
             self.error(traceback.format_exc())
+
+    def process_frame(self):
+        if_streaming = self.get_state('StreamToDisk')
+        if self.watch_state('StreamToDisk', if_streaming):  # Triggered at the onset and the end of streaming
+            if if_streaming:
+                save_dir = self.get_state('SaveDir')
+                file_name = self.get_state('SaveName')
+                init_time = self.get_state('InitTime')
+                if save_dir is None or file_name is None or init_time is None:
+                    self.error("Please set the save directory, file name and initial time before streaming.")
+                else:
+                    if os.path.isdir(save_dir):
+                        BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.bin"
+                        BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
+                        AUX_Fn = f"{self._camera_name}_{file_name}_{self.AUXile_Postfix}.csv"
+                        AUX_Fulldir = os.path.join(save_dir, AUX_Fn)
+                        if os.path.isfile(BIN_Fulldir) or os.path.isfile(AUX_Fulldir):
+                            self.error(f"File {BIN_Fn} or {AUX_Fn} already exists in the folder {save_dir}. Please change "
+                                       f"the save_name.")
+                        else:
+                            self._BIN_FileHandle = open(BIN_Fulldir, 'wb')
+                            self._AUX_FileHandle = open(AUX_Fulldir, 'w')
+                            self._AUX_writer = csv.writer(self._AUX_FileHandle)
+                            self._stream_init_time = init_time
+                            self._n_frame_streamed = 0
+                            self.streaming = True
+            else:  # close all files before streaming stops
+                if self._BIN_FileHandle is not None:
+                    self._BIN_FileHandle.close()
+                if self._AUX_FileHandle is not None:
+                    self._AUX_FileHandle.close()
+                self._AUX_writer = None
+                self._stream_init_time = None
+                self._n_frame_streamed = None
+                self.streaming = False
+
+        self.camera.SnapImage()
+        if self.streaming:
+            frame_time = perf_counter()-self._stream_init_time
+            n_frame = self._n_frame_streamed
+            self._AUX_writer.writerow([n_frame, frame_time])
+
+        frame = self.camera.GetImage()
+        self.set_buffer(self._buffer_name, frame)
+        if self.streaming:
+            # self._BIN_FileHandle.write(bytearray(frame))
+            buffer_name = f"{self.name}_{self._buffer_name}"
+            self._BIN_FileHandle.write(bytearray(frame.astype(np.uint16)))
+            self._n_frame_streamed += 1
+            self.set_state('FrameCount', self._n_frame_streamed)
+
 
     def disconnect_camera(self):
         self.camera.StopLive()
         self.camera = tis.TIS_CAM()
         self._params = {"CameraName": None, 'VideoFormat': None,
-                        'ExposureTime': self.refresh_interval, 'FPS': 0, 'Gain': 0,
                         'Trigger': 0, 'FrameCount': 0, 'FrameTime': 0}
 
     def on_close(self):
