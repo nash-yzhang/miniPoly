@@ -24,6 +24,7 @@ class TISCamera(TimerMinion):
             self.frame_rate = 1000 / self.refresh_interval
         self.ic = None
         self._camera_name = camera_name
+        self._buffer_name = None
         self._buf_img = None
         self._params = {"CameraName":None, 'VideoFormat': None,
                         'ExposureTime': self.refresh_interval, 'FPS':0, 'Gain': 0,
@@ -43,50 +44,39 @@ class TISCamera(TimerMinion):
         while self._params['VideoFormat'] is None:
             self._params['VideoFormat'] = self.get_state('VideoFormat')
         self.info(f"Camera {self._params['CameraName']} found")
+        print(self._params['VideoFormat'])
         self.camera = tis.TIS_CAM()
         self.camera.DevName = self._params['CameraName']
         if self.camera.IsDevValid():
             self.camera.StopLive()
         self._camera_name = self.camera.DevName.replace(' ', '_')
         self.camera.open(self.camera.DevName)
-        self.camera.SetVideoFormat(self._params['VideoFormat'])
+        self.update_video_format()
         self.camera.SetContinuousMode(0)
+        self.camera.StartLive(0)
+        self.info(f"Camera {self._params['CameraName']} initialized")
+
+    def update_video_format(self):
+        video_format = self._params['VideoFormat']
+        if self.camera.IsDevValid():
+            self.camera.StopLive()
+        self.camera.SetVideoFormat(self._params['VideoFormat'])
+        buffer_name = f"frame_{self._params['VideoFormat']}".replace(' ', '_')
         self.camera.StartLive(0)
         self.camera.SnapImage()
         frame = self.camera.GetImage()
-        if self.has_buffer('frame'):
-            if frame.shape == self.get_buffer('frame').shape:
-                self.set_buffer('frame', frame)
-            else:
-                self._shared_buffer[f"{self.name}_frame"].close()
-                time.sleep(0.1)
-                self.create_shared_buffer("frame", frame, frame.nbytes)
-                self.set_buffer('frame', self.camera.GetImage())
+        if self.has_buffer(buffer_name):
+            self.set_buffer(buffer_name, frame)
         else:
-            self.create_shared_buffer("frame", frame, frame.nbytes)
-        self.info(f"Camera {self._params['CameraName']} initialized")
+            self.create_shared_buffer(buffer_name, frame, frame.nbytes)
+        self._buffer_name = buffer_name
+        self.camera.StopLive()
 
     def on_time(self, t):
         try:
             if self.status <= 0:
                 self.on_close()
 
-            try:
-                self.set_state('Gain', self.camera.GetPropertyValue('Gain', 'Value'))
-            except:
-                self.debug(traceback.format_exc())
-
-            # cur_ft = [0]
-            # err = self.camera.GetPropertyAbsoluteValue('Exposure', 'Value', cur_ft)
-            # if err == 1:
-            #     self.set_state('ExposureTime', cur_ft[0])
-            #
-            # if self.watch_state('Gain', self.get_state('Gain')):
-            #     self.camera.SetPropertyValue('Gain', 'Value', self.get_state('Gain')+0)
-            #
-            # if self.watch_state('ExposureTime', self.get_state('ExposureTime')):
-            #     self.camera.SetPropertyAbsoluteValue('Exposure', 'Value', self.get_state('ExposureTime')/1000)
-            #
             cameraName = self.get_state('CameraName')
             if self.watch_state('CameraName', cameraName):
                 if cameraName is not None:
@@ -94,14 +84,19 @@ class TISCamera(TimerMinion):
                 else:
                     try:
                         self.disconnect_camera()
+                        self.info("Camera disconnected")
                     except:
                         self.error("An error occurred while disconnecting the camera")
                         self.error(traceback.format_exc())
             else:
+                self._params['VideoFormat'] = self.get_state('VideoFormat')
+                if self.watch_state('VideoFormat', self._params['VideoFormat']):
+                    self.update_video_format()
                 if self.camera.IsDevValid():
                     self.camera.SnapImage()
-                    self.set_buffer('frame', self.camera.GetImage())
+                    self.set_buffer(self._buffer_name, self.camera.GetImage())
         except:
+            self.error("An error occurred while updating the camera")
             self.error(traceback.format_exc())
 
     def disconnect_camera(self):

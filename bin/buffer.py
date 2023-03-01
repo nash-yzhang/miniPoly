@@ -5,21 +5,15 @@ from multiprocessing import shared_memory, Lock
 
 import numpy as np
 
-
 class SharedBuffer:
-    '''
-    Wrapper for multiprocessing.shared_memory
-    '''
     _CLASS_NAME = 'SharedBuffer'
-    _MAX_BUFFER_SIZE = 2 ** 32  # Maximum shared memory: 4 GB
-    _READ_OFFSET = 30  # The first 30 bytes represents the valid size of the shared buffer
+    _MAX_BUFFER_SIZE = 2 ** 24  # Maximum shared memory: 16 MB
+    _READ_OFFSET = len(_CLASS_NAME) + 1  # The first 30 bytes represents the valid size of the shared buffer
 
-    def __init__(self, name, lock: Lock, data=None, size=None, create=True, force_write=False):
+    def __init__(self, name, lock, data=None, size=None, create=True):
         self._size = None
         self._name = name
         self._lock = lock
-        self._valid_size = 0  # The actual size with data loaded
-        # self._lock = 0  # Non-negative integer
 
         byte_data = None
 
@@ -30,59 +24,43 @@ class SharedBuffer:
                 else:
                     byte_data = json.dumps(data).encode('utf-8')
                     nbytes_data = len(byte_data)
-                    self._size = min(nbytes_data * 2, self._MAX_BUFFER_SIZE)
+                    size = min(nbytes_data * 2 + self._READ_OFFSET, self._MAX_BUFFER_SIZE)
             else:
-                if size > self._MAX_BUFFER_SIZE:
-                    raise ValueError(
-                        f'[{self._CLASS_NAME} - {self._name}] Input size ({size // (2 ** 30)}GB) is larger than '
-                        f'the maximum size (4GB) supported.')
-                if data is None:
-                    self._size = size
-                else:
+                if data is not None:
                     byte_data = json.dumps(data).encode('utf-8')
                     nbytes_data = len(byte_data)
                     if size < nbytes_data:
                         raise ValueError(
                             f'[{self._CLASS_NAME} - {self._name}] Input memory size ({size}) is smaller than the '
                             f'actual data size ({nbytes_data}).')
-                    else:
-                        self._size = size
 
-            self._size += self._READ_OFFSET
-            self._shared_memory = shared_memory.SharedMemory(create=True, name=self._name, size=self._size)
-            try:
-                if byte_data is not None:
-                    self.valid_size = nbytes_data
-                    self.write(data)
-                else:
-                    self.valid_size = 0
-            except Exception:
-                print(traceback.format_exc())
-                self.close()
-                raise Exception(f'[{self._CLASS_NAME} - {self._name}] Unknown error in writing data')
+            self._size = size + 0
+            size += self._READ_OFFSET
+
+            if size > self._MAX_BUFFER_SIZE:
+                raise ValueError(
+                    f'[{self._CLASS_NAME} - {self._name}] Input size ({size // (2 ** 20)}MB) is larger than '
+                    f'the maximum size (16 MB) supported.')
+            else:
+                self._shared_memory = shared_memory.SharedMemory(create=True, name=self._name, size=size)
+                self._write_header()
+
+            if data is not None:
+                self.write(data)
+
         else:
             self._shared_memory = shared_memory.SharedMemory(name=self._name)
-            self._size = self._shared_memory.size
+            self._size = self._shared_memory.size - self._READ_OFFSET
             try:
-                identity_string = self._read(-self._READ_OFFSET, self._READ_OFFSET).split('~')
-                if identity_string[0] != self._CLASS_NAME:
+                identity_string = self._read_header()
+                if identity_string != self._CLASS_NAME:
                     raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
-                else:
-                    self._valid_size = int(identity_string[-1])
             except Exception:
                 print(traceback.format_exc())
                 self.close()
                 raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
-
-            try:
-                if force_write and data is not None:
-                    self.write(data)
-                else:
-                    warnings.warn('No data has been written into the buffer according to the [force_write] option')
-            except Exception:
-                print(traceback.format_exc())
-                self.close()
-                raise Exception(f'[{self._CLASS_NAME} - {self._name}] Unknown error in writing data')
+            # if data:
+            #     self.write(data)
 
     def __enter__(self):
         return self
@@ -90,32 +68,20 @@ class SharedBuffer:
     def __exit__(self, *args):
         self.close()
 
-    def find(self, data, k=1, offset=0, length=None):
-        '''
-        :param data: picklable data that can be converted to bytes with json.dumps
-        :param k: return the first k occurrence of the data
-        :return:
-        list: a list of the occurrence positions
-        '''
-        iter = 0
-        byte_data = json.dumps(data).encode('utf-8')
-        if length is None:
-            length = self.valid_size - offset
-        bytes_to_search = self._read(offset=offset, length=length, mode='bytes')
-        offset_list = []
-        offset_loc = offset
+    def _write_header(self):
+        lock_acquired = self._lock.acquire(timeout=0.1)
+        if not lock_acquired:
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] TIMEOUT ERROR; Failed to interact with shared memory')
+        self._shared_memory.buf[:self._READ_OFFSET] = f'{self._CLASS_NAME}~'.encode('utf-8')
+        self._lock.release()
 
-        while iter < k:
-            loc = bytes_to_search.find(byte_data)
-            if loc > 0:
-                offset_list.append(loc + offset_loc)
-                offset_loc = loc + len(byte_data)
-                bytes_to_search = bytes_to_search[(offset_loc - offset):]
-                iter += 1
-            else:
-                break
-
-        return offset_list
+    def _read_header(self):
+        lock_acquired = self._lock.acquire(timeout=0.1)
+        if not lock_acquired:
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] TIMEOUT ERROR; Failed to interact with shared memory')
+        identity_string = bytes(self._shared_memory.buf[:self._READ_OFFSET]).decode('utf-8').split('~')[0]
+        self._lock.release()
+        return identity_string
 
     @property
     def name(self):
@@ -123,178 +89,60 @@ class SharedBuffer:
 
     @property
     def size(self):
-        return self._size - self._READ_OFFSET
+        return self._size
 
-    @property
-    def valid_size(self):
-        # identity_string = self._read(-self._READ_OFFSET, self._READ_OFFSET).split('~')
-        identity_string = bytes(self._shared_memory.buf[:self._READ_OFFSET]).decode('utf-8')
+    def write(self, data):
+        self.clear()
+        lock_acquired = self._lock.acquire(timeout=0.1)
+        if not lock_acquired:
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] TIMEOUT ERROR; Failed to write data from shared memory')
         try:
-            identity_string = json.loads(identity_string).split('~')
+            byte_data = json.dumps(data).encode('utf-8')
+            self._shared_memory.buf[self._READ_OFFSET:(self._READ_OFFSET + len(byte_data))] = byte_data
         except:
-            raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unknown error in reading header')
-        if identity_string[0] != self._CLASS_NAME:
-            raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
-        else:
-            self._valid_size = int(identity_string[-1])
-        return self._valid_size
-
-    @valid_size.setter
-    def valid_size(self, val):
-        self._lock.acquire()
-        self._valid_size = val
-        s_val = str(val)
-        place_holder = '~' * (self._READ_OFFSET - len(self._CLASS_NAME + s_val) - 2)
-        data = self._CLASS_NAME + place_holder + s_val
-        byte_data = json.dumps(data).encode('utf-8')
-        self._shared_memory.buf[:self._READ_OFFSET] = byte_data
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] Failed to write data to shared memory')
         self._lock.release()
-
-    @property
-    def free_space(self):
-        return self.size - self.valid_size
 
     def read(self):
-        return self._read(0, self.valid_size)
-
-    def _read(self, offset, length, mode='obj'):
-    # def _read(self, offset, length, mode='obj', sudo=False):
-        # if sudo:
-        #     lock_gained = True
-        # else:
-        #     lock_gained = self.request_lock()
-        # if lock_gained:
-        offset += self._READ_OFFSET
-        length += 0  # copy the data
-
-        self._lock.acquire()
-        _decoded_bytes = bytes(self._shared_memory.buf[offset:(offset + length)])
-        if mode == 'obj':
-            _decoded_bytes = _decoded_bytes.decode('utf-8').split('\x00')[0]
-            if _decoded_bytes:
+        data = None
+        lock_acquired = self._lock.acquire(timeout=0.1)
+        if not lock_acquired:
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] TIMEOUT ERROR; Failed to read data from shared memory')
+            return data
+        try:
+            byte_data = bytes(self._shared_memory.buf[self._READ_OFFSET:])
+            _decoded_data = byte_data.decode('utf-8').split('\x00')[0]
+            if _decoded_data:
                 try:
-                    decoded = json.loads(_decoded_bytes)
+                    data = json.loads(_decoded_data)
                 except:
-                    raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Cannot decode the data')
-                self._lock.release()
-                # if not sudo:
-                #     self._mem_release()
-                return decoded
-            else:
-                self._lock.release()
-                # if not sudo:
-                #     self._mem_release()
-                return _decoded_bytes
-        elif mode == 'bytes':
-            self._lock.release()
-            # if not sudo:
-            #     self._mem_release()
-            return _decoded_bytes
-        else:
-            self._lock.release()
-            # if not sudo:
-            #     self._mem_release()
-            raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Undefined reading mode {mode}')
-        # else:
-        #     raise TimeoutError(f'[{self._CLASS_NAME} - {self._name}]: Cannot get the read lock')
-
-    def read_bytes(self):
-        return self._read(0, self.valid_size, mode='bytes')
-
-    def write(self, data, mode='overwrite', offset=0):
-        '''
-        :param data: picklable data
-        :param mode: If 'overwrite' (default), the input offset will be ignored.
-                     All contents in the existing memory will be overwritten by the input data;
-                     If 'modify', the bytes in [offset:nbytes(data)] will be changed by data
-
-        :param offset: Only for mode == 'modify'. The start position in the buffer for the set operation
-        '''
-        byte_data = json.dumps(data).encode('utf-8')
-        if mode == 'overwrite':
-            self.clean()
-            self._set(byte_data, offset=0)
-        elif mode == 'modify':
-            self._set(byte_data, offset=offset)
-
-
-    def clean(self):
-        # self._set(b'\x00' * (self._size - offset), offset=offset)  # delete everything after offset
-        self._lock.acquire()
-        self._shared_memory.buf[:] = b'\x00' * self._size
+                    pass
+        except Exception:
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] Failed to read data from shared memory')
         self._lock.release()
-        self.valid_size = 0
+        return data
 
-    # def _mem_lock(self):
-    #     if self.valid_size > -1:
-    #         self._lock = self._valid_size * 1  # Make sure the value is copied
-    #         self.valid_size = -1
-    #
-    # def _mem_release(self):
-    #     self.valid_size = self._lock * 1  # Make sure the value is copied
-    #     self._lock = 0
-    #
-    # def request_lock(self, timeout: int = 10000):
-    #     itt = 0
-    #     while itt < timeout:
-    #         self._mem_lock()
-    #         itt += 1
-    #         if self._lock > -1:
-    #             break
-    #
-    #     return self._lock > -1
-
-    def _set(self, byte_data, offset):
-        self._lock.acquire()
-        if offset > max(self._valid_size - 1, 0):
-            self._lock.release()
-            # self._mem_release()
-            raise IndexError(
-                f'[{self._CLASS_NAME} - {self._name}] Offset ({offset}) out of range: ({self._valid_size - 1})')  # To make sure all binary contents are continuous and no gap (b'\x00') in between
-
-        if (offset + len(byte_data)) > self._size:
-            self._lock.release()
-            # self._mem_release()
-            raise ValueError(
-                f'[{self._CLASS_NAME} - {self._name}] Data byte end position out of range (Offset: {offset}, Length: {len(byte_data)}). \nCheck if the data size is smaller than the buffer size')
-        else:
-            length = len(byte_data)
-
-        offset += self._READ_OFFSET  # Protect the identity and size info block
-
-        self._shared_memory.buf[offset:(offset + length)] = byte_data
+    def clear(self):
+        lock_acquired = self._lock.acquire(timeout=0.1)
+        if not lock_acquired:
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] TIMEOUT ERROR; Failed to clear data from shared memory')
+        try:
+            self._shared_memory.buf[self._READ_OFFSET:] = b'\x00' * self._size
+        except:
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] Failed to clear data from shared memory')
         self._lock.release()
-        self.valid_size = offset + length
-
-        # if offset + length > self._lock:
-        #     self._lock = offset + length
-
-        # self._mem_release()
-        # else:
-        #     raise TimeoutError(f'[{self._CLASS_NAME} - {self._name}]: Cannot get the write lock')
 
     def close(self):
-        try:
-            self._shared_memory.close()
-        except:
-            pass
+        self._shared_memory.close()
 
     def terminate(self):
-        try:
-            self.clean()
-        except:
-            warnings.warn(traceback.format_exc())
-        self._shared_memory.close()
+        self.clear()
+        self.close()
         self._shared_memory.unlink()
-        if self.is_alive():
-            warnings.warn(f"An unknown error occurred that caused the SharedBuffer {self.name} cannot be destroyed.")
-
-    # def __del__(self):
-    #     self.terminate()
 
     def is_alive(self):
         try:
-            tmp_buffer = SharedBuffer(self.name, lock=self._lock,create=False)
+            tmp_buffer = shared_memory.SharedMemory(self._name)
             tmp_buffer.close()
             return True
         except FileNotFoundError:
@@ -305,12 +153,13 @@ class SharedNdarray:
     _CLASS_NAME = 'SharedNdarray'
     _MAX_BUFFER_SIZE = 2 ** 32  # Maximum shared memory: 4 GB
     _READ_OFFSET = 128  # The first 128 bytes represents the valid size of the shared buffer
-    def __init__(self, name, lock: Lock, data=None):
+    def __init__(self, name, lock: Lock, data=None, create=True):
 
         self._name = name
         self._lock = lock
+        self._shared_memory = None
 
-        if not self.is_alive():
+        if create:
             if data is None:
                 raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Shared ndarray cannot be created: Data cannot be None')
             self._shape = data.shape
@@ -322,7 +171,9 @@ class SharedNdarray:
                 self._shared_memory.buf[:self._READ_OFFSET] = header+place_holder.encode('utf-8')
                 self.write(data)
             except Exception:
-                self.close()
+                if self._shared_memory is not None:
+                    self._shared_memory.close()
+                    self._shared_memory.unlink()
                 raise Exception(f'[{self._CLASS_NAME} - {self._name}] Error in writing data: {traceback.format_exc()}')
         else:
             self._shared_memory = shared_memory.SharedMemory(name=self._name)
@@ -394,10 +245,14 @@ class SharedNdarray:
     def is_alive(self):
         try:
             tmp_buffer = shared_memory.SharedMemory(name=self._name, create=False)
-            tmp_buffer.close()
-            return True
+            is_alive = True
         except FileNotFoundError:
-            return False
+            is_alive = False
+        try:
+            tmp_buffer.close()
+        except:
+            pass
+        return is_alive
 
 class SharedDict(dict):
     _BUFFER_PREFIX = 'b*'
@@ -408,8 +263,9 @@ class SharedDict(dict):
                             "lock": lock,
                             "data": dict(self),
                             "create": create,
-                            "force_write": force_write,
+                            # "force_write": force_write,
                             "size": size}
+        # self._linked_SharedBuffer = SharedBuffer(**self._init_param)
         self._linked_SharedBuffer = SharedBuffer(**self._init_param)
         self.is_alive = True
 
@@ -450,10 +306,17 @@ class SharedDict(dict):
 
     def _refresh(self):
         self._clear()
-        try:
-            self._update(self._linked_SharedBuffer.read())
-        except:
-            print(traceback.format_exc())
+        data = None
+        timeout = 10
+        counter = 0
+        while data is None and counter < timeout:
+            data = self._linked_SharedBuffer.read()
+            counter += 1
+        if data is not None:
+            try:
+                self._update(data)
+            except:
+                print(traceback.format_exc())
 
     def _update(self, D, **kwargs):
         super().update(D, **kwargs)

@@ -76,7 +76,7 @@ class BaseMinion:
                 # print(f'{hook.name}: {traceback.format_exc()}')
         hook._shutdown()
 
-    _INDEX_SHARED_BUFFER_SIZE = 2 ** 16  # The size allocated for storing small shared values/array, each write takes <2 ms
+    _INDEX_SHARED_BUFFER_SIZE = 2 ** 13  # The size allocated for storing small shared values/array, each write takes <2 ms
 
     def __init__(self, name):
 
@@ -388,10 +388,10 @@ class BaseMinion:
                 tmp_buffer: SharedBuffer
                 if self.is_buffer_alive(minion_name, buffer_name):
                     # with SharedBuffer(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
-                    with SharedNdarray(shared_buffer_name, lock=self.lock) as tmp_buffer:
+                    with SharedNdarray(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
                         buffer_val = tmp_buffer.read()
                 elif minion_name == self.name:
-                    tmp_buffer = SharedNdarray(shared_buffer_name, lock=self.lock)
+                    tmp_buffer = SharedNdarray(shared_buffer_name, lock=self.lock, create=False)
                     buffer_val = tmp_buffer.read()
                 else:
                     self.log(logging.ERROR, f"Invalid buffer '{minion_name}_{buffer_name}' or errors in connections")
@@ -416,8 +416,8 @@ class BaseMinion:
             if shared_buffer_reference_name in self._shared_dict.keys():
                 shared_buffer_name = self._shared_dict[shared_buffer_reference_name]
                 tmp_buffer: SharedBuffer
-                # with SharedBuffer(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
-                with SharedNdarray(shared_buffer_name, lock=self.lock) as tmp_buffer:
+                # with SharedBuffer(shared_buffer_name, lock=sel, create=False) as tmp_buffer:
+                with SharedNdarray(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
                     try:
                         buffer_val = tmp_buffer.write(val)
                     except:
@@ -543,7 +543,7 @@ class BaseMinion:
         """
         if minion_name in self._linked_minion.keys():
             try:
-                with SharedNdarray(f"{minion_name}_{buffer_name}", lock=self.lock) as tmp_dict:
+                with SharedNdarray(f"{minion_name}_{buffer_name}", lock=self.lock, create=False) as tmp_dict:
                     ISALIVE = tmp_dict.is_alive()
                 return ISALIVE
             except FileNotFoundError:
