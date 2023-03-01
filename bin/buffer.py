@@ -52,6 +52,7 @@ class SharedBuffer:
             self._shared_memory = shared_memory.SharedMemory(create=True, name=self._name, size=self._size)
             try:
                 if byte_data is not None:
+                    self.valid_size = nbytes_data
                     self.write(data)
                 else:
                     self.valid_size = 0
@@ -126,16 +127,28 @@ class SharedBuffer:
 
     @property
     def valid_size(self):
+        # identity_string = self._read(-self._READ_OFFSET, self._READ_OFFSET).split('~')
+        identity_string = bytes(self._shared_memory.buf[:self._READ_OFFSET]).decode('utf-8')
+        try:
+            identity_string = json.loads(identity_string).split('~')
+        except:
+            raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unknown error in reading header')
+        if identity_string[0] != self._CLASS_NAME:
+            raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
+        else:
+            self._valid_size = int(identity_string[-1])
         return self._valid_size
 
     @valid_size.setter
     def valid_size(self, val):
+        self._lock.acquire()
         self._valid_size = val
         s_val = str(val)
         place_holder = '~' * (self._READ_OFFSET - len(self._CLASS_NAME + s_val) - 2)
         data = self._CLASS_NAME + place_holder + s_val
         byte_data = json.dumps(data).encode('utf-8')
         self._shared_memory.buf[:self._READ_OFFSET] = byte_data
+        self._lock.release()
 
     @property
     def free_space(self):
@@ -151,14 +164,18 @@ class SharedBuffer:
         # else:
         #     lock_gained = self.request_lock()
         # if lock_gained:
-        self._lock.acquire()
         offset += self._READ_OFFSET
+        length += 0  # copy the data
 
+        self._lock.acquire()
         _decoded_bytes = bytes(self._shared_memory.buf[offset:(offset + length)])
         if mode == 'obj':
             _decoded_bytes = _decoded_bytes.decode('utf-8').split('\x00')[0]
             if _decoded_bytes:
-                decoded = json.loads(_decoded_bytes)
+                try:
+                    decoded = json.loads(_decoded_bytes)
+                except:
+                    raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Cannot decode the data')
                 self._lock.release()
                 # if not sudo:
                 #     self._mem_release()
@@ -200,12 +217,13 @@ class SharedBuffer:
         elif mode == 'modify':
             self._set(byte_data, offset=offset)
 
-    def clean(self):
-        self._clean(0)
 
-    def _clean(self, offset):
-        self._set(b'\x00' * (self.valid_size - offset), offset=offset)  # delete everything after offset
-        self.valid_size = offset
+    def clean(self):
+        # self._set(b'\x00' * (self._size - offset), offset=offset)  # delete everything after offset
+        self._lock.acquire()
+        self._shared_memory.buf[:] = b'\x00' * self._size
+        self._lock.release()
+        self.valid_size = 0
 
     # def _mem_lock(self):
     #     if self.valid_size > -1:
@@ -245,8 +263,8 @@ class SharedBuffer:
         offset += self._READ_OFFSET  # Protect the identity and size info block
 
         self._shared_memory.buf[offset:(offset + length)] = byte_data
-        self.valid_size = offset + length
         self._lock.release()
+        self.valid_size = offset + length
 
         # if offset + length > self._lock:
         #     self._lock = offset + length
