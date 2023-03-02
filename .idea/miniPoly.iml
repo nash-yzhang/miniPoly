@@ -5,7 +5,7 @@
       <excludeFolder url="file://$MODULE_DIR$/../SphTool" />
     </content>
     <content url="file://$MODULE_DIR$" />
-    <orderEntry type="jdk" jdkName="Python 3.10 (miniPoly)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="minipoly" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="SphericThingy" />
   </component>
