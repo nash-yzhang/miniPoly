@@ -296,6 +296,8 @@ class CameraGUI(QtCompiler):
 
 class CameraStimGUI(QtCompiler):
 
+    _SERVO_MIN = 2400
+    _SERVO_MAX = 9000
     def __init__(self, *args, **kwargs):
         super(CameraStimGUI, self).__init__(*args, **kwargs)
         self._camera_minions = [i for i in self.get_linked_minion_names() if 'tiscam' in i.lower()]
@@ -651,7 +653,8 @@ class CameraStimGUI(QtCompiler):
                                 m,s = k.split(':')
                                 if m in self.get_linked_minion_names():
                                     if s in self.get_shared_state_names(m):
-                                        self.set_state_to(m,s,float(data[k][row_idx]))
+                                        state = float(data[k][row_idx]*(self._SERVO_MAX-self._SERVO_MIN)+self._SERVO_MIN)
+                                        self.set_state_to(m,s,state)
 
 class CameraInterface(AbstractGUIAPP):
     def __init__(self, *args, **kwargs):

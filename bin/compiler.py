@@ -11,6 +11,7 @@ import traceback
 
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
+from PyQt5.Qt import Qt as qt
 from PyQt5.QtGui import QIcon, QPixmap
 from vispy import app, gloo
 
@@ -241,6 +242,8 @@ class PololuServoDriver(TimerMinion):
 
         try:
             self.init_polulo()
+            for i in range(24):
+                self.setRange(i, 2500, 10000)
             self._watching_state = {}
             for n, v in self.servo_dict.items():
                 try:
@@ -255,8 +258,7 @@ class PololuServoDriver(TimerMinion):
             for n, v in self.servo_dict.items():
                 state = self.get_state(n)
                 if self.watch_state(n, state) and state is not None:
-                    self.setTarget(v, int(state * 4000 + 4000))
-                    # v.write(state*180)
+                    self.setTarget(v, int(state))
         except:
             print(traceback.format_exc())
 
