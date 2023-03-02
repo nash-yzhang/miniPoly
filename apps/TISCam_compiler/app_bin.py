@@ -11,7 +11,6 @@ import PyQt5.QtCore as qc
 from bin.compiler import QtCompiler
 from bin.gui import DataframeTable
 from src.tisgrabber import tisgrabber as tis
-from apps.servo_compiler.app_bin import ServoProtocolCommander
 
 
 class CameraGUI(QtCompiler):

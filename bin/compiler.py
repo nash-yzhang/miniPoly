@@ -1,6 +1,7 @@
 import os
 from time import perf_counter, sleep
 
+import cv2
 import numpy as np
 
 from bin.minion import BaseMinion, AbstractMinionMixin, TimerMinionMixin, TimerMinion
@@ -236,12 +237,14 @@ class PololuServoDriver(TimerMinion):
         super(PololuServoDriver, self).__init__(*args, **kwargs)
         self._port_name = port_name
         self.servo_dict = servo_dict
+        self._saving = False
+
 
     def initialize(self):
         super().initialize()
 
         try:
-            self.init_polulo()
+            self.init_pololu()
             for i in range(24):
                 self.setRange(i, 2500, 10000)
             self._watching_state = {}
@@ -250,6 +253,7 @@ class PololuServoDriver(TimerMinion):
                     self.create_state(n, self.getPosition(v))
                 except:
                     print(traceback.format_exc())
+            self.create_state('StreamToDisk', False)
         except:
             print(traceback.format_exc())
 
@@ -275,7 +279,7 @@ class PololuServoDriver(TimerMinion):
             return changed
 
     ###### The following are copied from https://github.com/FRC4564/Maestro/blob/master/maestro.py with MIT license
-    def init_polulo(self):
+    def init_pololu(self):
         self._port = serial.Serial(self._port_name)
         # Command lead-in and device number are sent for each Pololu serial command.
         self.PololuCmd = chr(0xaa) + chr(0x0c)
@@ -512,7 +516,7 @@ class TISCameraDriver(TimerMinion):
     BINFile_Postfix = "IC_IMG"
     AUXile_Postfix = "IC_AUX"
 
-    def __init__(self, *args, camera_name=None, video_format=None, frame_rate=None, **kwargs):
+    def __init__(self, *args, camera_name=None, video_format=None, frame_rate=None, save_option='binary', **kwargs):
         super(TISCameraDriver, self).__init__(*args, **kwargs)
         if frame_rate is not None:
             self.refresh_interval = int(1 / frame_rate)
@@ -522,6 +526,7 @@ class TISCameraDriver(TimerMinion):
         self._camera_name = camera_name
         self._buffer_name = None
         self._buf_img = None
+        self.frame_shape = None
         self._params = {"CameraName":None, 'VideoFormat': None,
                         'StreamToDisk': False, 'SaveDir':None, 'SaveName':None, 'InitTime':None,
                         'FrameCount':0, 'FrameTime':0}
@@ -531,6 +536,11 @@ class TISCameraDriver(TimerMinion):
         self._AUX_writer = None
         self._stream_init_time = None
         self._n_frame_streamed = None
+
+        if save_option in ['binary', 'movie']:
+            self.save_option = save_option
+        else:
+            raise ValueError("save_option must be either 'binary' or 'movie'")
 
     def initialize(self):
         super().initialize()
@@ -566,6 +576,7 @@ class TISCameraDriver(TimerMinion):
         self.camera.StartLive(0)
         self.camera.SnapImage()
         frame = self.camera.GetImage()
+        self.frame_shape = frame.shape
         if self.has_buffer(buffer_name):
             self.set_buffer(buffer_name, frame)
         else:
@@ -600,6 +611,31 @@ class TISCameraDriver(TimerMinion):
             self.error(traceback.format_exc())
 
     def process_frame(self):
+        self._streaming_setup()
+        self.camera.SnapImage()
+        frame_time = perf_counter()
+        frame = self.camera.GetImage()
+        self.set_buffer(self._buffer_name, frame)
+        self._data_streaming(frame_time,frame)
+
+    def _data_streaming(self, frame_time, frame):
+        if self.streaming:
+            frame_time = frame_time - self._stream_init_time
+            # Write to AUX file
+            n_frame = self._n_frame_streamed
+            self._AUX_writer.writerow([n_frame, frame_time])
+
+            if self.save_option == 'binary':
+                # Write to BIN file
+                self._BIN_FileHandle.write(bytearray(frame))
+            elif self.save_option == 'movie':
+                # Write to movie file
+                self._BIN_FileHandle.write(frame)
+
+            self._n_frame_streamed += 1
+            self.set_state('FrameCount', self._n_frame_streamed)
+
+    def _streaming_setup(self):
         if_streaming = self.get_state('StreamToDisk')
         if self.watch_state('StreamToDisk', if_streaming):  # Triggered at the onset and the end of streaming
             if if_streaming:
@@ -610,44 +646,41 @@ class TISCameraDriver(TimerMinion):
                     self.error("Please set the save directory, file name and initial time before streaming.")
                 else:
                     if os.path.isdir(save_dir):
-                        BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.bin"
-                        BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
+                        if self.save_option == 'binary':
+                            BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.bin"
+                            BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
+                        elif self.save_option == 'movie':
+                            BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.avi"
+                            BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
                         AUX_Fn = f"{self._camera_name}_{file_name}_{self.AUXile_Postfix}.csv"
                         AUX_Fulldir = os.path.join(save_dir, AUX_Fn)
                         if os.path.isfile(BIN_Fulldir) or os.path.isfile(AUX_Fulldir):
                             self.error(f"File {BIN_Fn} or {AUX_Fn} already exists in the folder {save_dir}. Please change "
                                        f"the save_name.")
                         else:
-                            self._BIN_FileHandle = open(BIN_Fulldir, 'wb')
-                            self._AUX_FileHandle = open(AUX_Fulldir, 'w')
+                            if self.save_option == 'binary':
+                                self._BIN_FileHandle = open(BIN_Fulldir, 'wb')
+                            elif self.save_option == 'movie':
+                                self._BIN_FileHandle = cv2.VideoWriter(BIN_Fulldir, cv2.VideoWriter_fourcc(*'MJPG'),
+                                                                       int(self.frame_rate), (self.frame_shape[1],self.frame_shape[0]))
+
+                            self._AUX_FileHandle = open(AUX_Fulldir, 'wb')
                             self._AUX_writer = csv.writer(self._AUX_FileHandle)
                             self._stream_init_time = init_time
                             self._n_frame_streamed = 0
                             self.streaming = True
             else:  # close all files before streaming stops
                 if self._BIN_FileHandle is not None:
-                    self._BIN_FileHandle.close()
+                    if self.save_option == 'binary':
+                        self._BIN_FileHandle.close()
+                    elif self.save_option == 'movie':
+                        self._BIN_FileHandle.release()
                 if self._AUX_FileHandle is not None:
                     self._AUX_FileHandle.close()
                 self._AUX_writer = None
                 self._stream_init_time = None
                 self._n_frame_streamed = None
                 self.streaming = False
-
-        self.camera.SnapImage()
-        if self.streaming:
-            frame_time = perf_counter()-self._stream_init_time
-            n_frame = self._n_frame_streamed
-            self._AUX_writer.writerow([n_frame, frame_time])
-
-        frame = self.camera.GetImage()
-        self.set_buffer(self._buffer_name, frame)
-        if self.streaming:
-            # self._BIN_FileHandle.write(bytearray(frame))
-            buffer_name = f"{self.name}_{self._buffer_name}"
-            self._BIN_FileHandle.write(bytearray(frame.astype(np.uint16)))
-            self._n_frame_streamed += 1
-            self.set_state('FrameCount', self._n_frame_streamed)
 
 
     def disconnect_camera(self):
@@ -659,6 +692,7 @@ class TISCameraDriver(TimerMinion):
     def on_close(self):
         if self.camera.IsDevValid():
             self.disconnect_camera()
+            self.camera = None
         self.set_state('status', -1)
 
     def watch_state(self, name, val):

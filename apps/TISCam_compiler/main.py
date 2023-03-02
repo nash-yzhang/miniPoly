@@ -5,7 +5,7 @@ from bin.minion import LoggerMinion
 from time import sleep
 
 if __name__ == '__main__':
-    Cam = TISCameraDriver('Tiscam_1', refresh_interval=10)
+    Cam = TISCameraDriver('Tiscam_1', save_option='movie', refresh_interval=10)
     GUI = CameraInterface('GUI', refresh_interval=5)
     pololu_servo = PololuServoDriver('Pololu', refresh_interval=1, port_name='COM6',
                                      servo_dict={'yaw': 3, 'radius': 5, 'flagging': 1, })
