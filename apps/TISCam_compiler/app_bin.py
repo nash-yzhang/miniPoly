@@ -312,6 +312,9 @@ class CameraStimGUI(QtCompiler):
 
         self._deviceList = self._tiscamHandle.GetDevices()
 
+        self._servo_minion = [i for i in self.get_linked_minion_names() if 'servo' in i.lower()]
+        self._serial_minion = [i for i in self.get_linked_minion_names() if 'serial' in i.lower()]
+
         self._init_main_window()
         self._init_menu()
 
@@ -381,6 +384,8 @@ class CameraStimGUI(QtCompiler):
             self._save_btn.setStyleSheet('background-color: yellow')
             self._save_init_time = time.perf_counter()
             self._save_filename = time.strftime('%Y%m%d_%H%M%S')
+            if self._root_folder is None:
+                self._root_folder = os.getcwd()
             self._save_dir = self._root_folder + '/' + self._save_filename
             os.mkdir(self._save_dir)
             self._filename_textbox.setText(self._save_filename)
@@ -389,6 +394,7 @@ class CameraStimGUI(QtCompiler):
             for k,v in self._videoStreams.items():
                 if v[-1].isChecked():
                     self._save_camera_list.append(k)
+
             for cam in self._save_camera_list:
                 mi_name = self._connected_camera_minions[cam]
                 self.set_state_to(mi_name, 'SaveDir', self._save_dir)
@@ -396,12 +402,20 @@ class CameraStimGUI(QtCompiler):
                 self.set_state_to(mi_name, 'InitTime', self._save_init_time)
                 self.set_state_to(mi_name, 'StreamToDisk', True)
 
+            for servoM in self._servo_minion:
+                self.set_state_to(servoM, 'SaveDir', self._save_dir)
+                self.set_state_to(servoM, 'SaveName', self._save_filename)
+                self.set_state_to(servoM, 'InitTime', self._save_init_time)
+                self.set_state_to(servoM, 'StreamToDisk', True)
+
         else:
             self._save_btn.setText('Start Recording')
             self._save_btn.setStyleSheet('background-color: white')
             for cam in self._save_camera_list:
                 mi_name = self._connected_camera_minions[cam]
                 self.set_state_to(mi_name, 'StreamToDisk', False)
+            for servoM in self._servo_minion:
+                self.set_state_to(servoM, 'StreamToDisk', False)
 
     def _init_menu(self):
         self._menubar = self.menuBar()
@@ -652,7 +666,10 @@ class CameraStimGUI(QtCompiler):
                                 m,s = k.split(':')
                                 if m in self.get_linked_minion_names():
                                     if s in self.get_shared_state_names(m):
-                                        state = float(data[k][row_idx]*(self._SERVO_MAX-self._SERVO_MIN)+self._SERVO_MIN)
+                                        if 'servo' in m.lower():
+                                            state = float(data[k][row_idx]*(self._SERVO_MAX-self._SERVO_MIN)+self._SERVO_MIN)
+                                        else:
+                                            state = float(data[k][row_idx])
                                         self.set_state_to(m,s,state)
 
 class CameraInterface(AbstractGUIAPP):

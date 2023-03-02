@@ -233,11 +233,17 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
 
 class PololuServoDriver(TimerMinion):
 
+    AUXile_Postfix = "Pololu_AUX"
+
     def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
         super(PololuServoDriver, self).__init__(*args, **kwargs)
         self._port_name = port_name
         self.servo_dict = servo_dict
-        self._saving = False
+
+        self.streaming = False
+        self._AUX_FileHandle = None
+        self._AUX_writer = None
+        self._stream_init_time = None
 
 
     def initialize(self):
@@ -254,17 +260,70 @@ class PololuServoDriver(TimerMinion):
                 except:
                     print(traceback.format_exc())
             self.create_state('StreamToDisk', False)
+            self.create_state('SaveDir', False)
+            self.create_state('SaveName', False)
+            self.create_state('InitTime', False)
         except:
             print(traceback.format_exc())
 
     def on_time(self, t):
         try:
+            self._streaming_setup()
             for n, v in self.servo_dict.items():
                 state = self.get_state(n)
                 if self.watch_state(n, state) and state is not None:
                     self.setTarget(v, int(state))
+                    # print(f"Set {n}-{v} to {state}")
+            self._data_streaming()
         except:
             print(traceback.format_exc())
+
+    def _streaming_setup(self):
+        if_streaming = self.get_state('StreamToDisk')
+        if self.watch_state('StreamToDisk', if_streaming):
+            if if_streaming:
+                self._start_streaming()
+            else:
+                self._stop_streaming()
+
+    def _start_streaming(self):
+        save_dir = self.get_state('SaveDir')
+        file_name = self.get_state('SaveName')
+        init_time = self.get_state('InitTime')
+        if save_dir is None or file_name is None or init_time is None:
+            self.error("Please set the save directory, file name and initial time before streaming.")
+        else:
+            if os.path.isdir(save_dir):
+                AUX_Fn = f"{self.name}_{file_name}_{self.AUXile_Postfix}.csv"
+                AUX_Fulldir = os.path.join(save_dir, AUX_Fn)
+                if os.path.isfile(AUX_Fulldir):
+                    self.error(f"File {AUX_Fn} already exists in the folder {save_dir}. Please change "
+                               f"the save_name.")
+                else:
+                    self._AUX_FileHandle = open(AUX_Fulldir, 'w')
+                    self._AUX_writer = csv.writer(self._AUX_FileHandle)
+                    col_name = ['Time']
+                    for n in self.servo_dict.keys():
+                        col_name.append(n)
+                    self._AUX_writer.writerow(col_name)
+                    self._stream_init_time = init_time
+                    self.streaming = True
+
+    def _stop_streaming(self):
+        if self._AUX_FileHandle is not None:
+            self._AUX_FileHandle.close()
+        self._AUX_writer = None
+        self._stream_init_time = None
+        self._n_frame_streamed = None
+        self.streaming = False
+
+    def _data_streaming(self):
+        if self.streaming:
+            # Write to AUX file
+            col_val = [perf_counter() - self._stream_init_time]
+            for n in self.servo_dict.keys():
+                col_val.append(self.get_state(n))
+            self._AUX_writer.writerow(col_val)
 
     def shutdown(self):
         self._port.close()
@@ -639,49 +698,55 @@ class TISCameraDriver(TimerMinion):
         if_streaming = self.get_state('StreamToDisk')
         if self.watch_state('StreamToDisk', if_streaming):  # Triggered at the onset and the end of streaming
             if if_streaming:
-                save_dir = self.get_state('SaveDir')
-                file_name = self.get_state('SaveName')
-                init_time = self.get_state('InitTime')
-                if save_dir is None or file_name is None or init_time is None:
-                    self.error("Please set the save directory, file name and initial time before streaming.")
-                else:
-                    if os.path.isdir(save_dir):
-                        if self.save_option == 'binary':
-                            BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.bin"
-                            BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
-                        elif self.save_option == 'movie':
-                            BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.avi"
-                            BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
-                        AUX_Fn = f"{self._camera_name}_{file_name}_{self.AUXile_Postfix}.csv"
-                        AUX_Fulldir = os.path.join(save_dir, AUX_Fn)
-                        if os.path.isfile(BIN_Fulldir) or os.path.isfile(AUX_Fulldir):
-                            self.error(f"File {BIN_Fn} or {AUX_Fn} already exists in the folder {save_dir}. Please change "
-                                       f"the save_name.")
-                        else:
-                            if self.save_option == 'binary':
-                                self._BIN_FileHandle = open(BIN_Fulldir, 'wb')
-                            elif self.save_option == 'movie':
-                                self._BIN_FileHandle = cv2.VideoWriter(BIN_Fulldir, cv2.VideoWriter_fourcc(*'MJPG'),
-                                                                       int(self.frame_rate), (self.frame_shape[1],self.frame_shape[0]))
-
-                            self._AUX_FileHandle = open(AUX_Fulldir, 'wb')
-                            self._AUX_writer = csv.writer(self._AUX_FileHandle)
-                            self._stream_init_time = init_time
-                            self._n_frame_streamed = 0
-                            self.streaming = True
+                self._start_streaming()
             else:  # close all files before streaming stops
-                if self._BIN_FileHandle is not None:
-                    if self.save_option == 'binary':
-                        self._BIN_FileHandle.close()
-                    elif self.save_option == 'movie':
-                        self._BIN_FileHandle.release()
-                if self._AUX_FileHandle is not None:
-                    self._AUX_FileHandle.close()
-                self._AUX_writer = None
-                self._stream_init_time = None
-                self._n_frame_streamed = None
-                self.streaming = False
+                self._stop_streaming()
 
+    def _start_streaming(self):
+        save_dir = self.get_state('SaveDir')
+        file_name = self.get_state('SaveName')
+        init_time = self.get_state('InitTime')
+        if save_dir is None or file_name is None or init_time is None:
+            self.error("Please set the save directory, file name and initial time before streaming.")
+        else:
+            if os.path.isdir(save_dir):
+                if self.save_option == 'binary':
+                    BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.bin"
+                    BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
+                elif self.save_option == 'movie':
+                    BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.avi"
+                    BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
+                AUX_Fn = f"{self._camera_name}_{file_name}_{self.AUXile_Postfix}.csv"
+                AUX_Fulldir = os.path.join(save_dir, AUX_Fn)
+                if os.path.isfile(BIN_Fulldir) or os.path.isfile(AUX_Fulldir):
+                    self.error(f"File {BIN_Fn} or {AUX_Fn} already exists in the folder {save_dir}. Please change "
+                               f"the save_name.")
+                else:
+                    if self.save_option == 'binary':
+                        self._BIN_FileHandle = open(BIN_Fulldir, 'wb')
+                    elif self.save_option == 'movie':
+                        self._BIN_FileHandle = cv2.VideoWriter(BIN_Fulldir, cv2.VideoWriter_fourcc(*'MJPG'),
+                                                               int(self.frame_rate),
+                                                               (self.frame_shape[1], self.frame_shape[0]))
+
+                    self._AUX_FileHandle = open(AUX_Fulldir, 'w')
+                    self._AUX_writer = csv.writer(self._AUX_FileHandle)
+                    self._stream_init_time = init_time
+                    self._n_frame_streamed = 0
+                    self.streaming = True
+
+    def _stop_streaming(self):
+        if self._BIN_FileHandle is not None:
+            if self.save_option == 'binary':
+                self._BIN_FileHandle.close()
+            elif self.save_option == 'movie':
+                self._BIN_FileHandle.release()
+        if self._AUX_FileHandle is not None:
+            self._AUX_FileHandle.close()
+        self._AUX_writer = None
+        self._stream_init_time = None
+        self._n_frame_streamed = None
+        self.streaming = False
 
     def disconnect_camera(self):
         self.camera.StopLive()
