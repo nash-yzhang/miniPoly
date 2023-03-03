@@ -7,6 +7,14 @@ import PyQt5.QtWidgets as qw
 from bin.gui import BaseGUI
 from bin.display import GLDisplay
 
+class AbstractAPP(TimerMinion):
+    # The same as TimerMinion, just for reference structural clarity
+    def __init__(self, *args, **kwargs):
+        super(AbstractAPP, self).__init__(*args, **kwargs)
+        self._param_to_compiler = {}
+        self._compiler = None
+
+
 class AbstractGLAPP(TimerMinion):
     def __init__(self, *args, **kwargs):
         super(AbstractGLAPP, self).__init__(*args, **kwargs)

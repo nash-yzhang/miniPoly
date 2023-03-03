@@ -1,12 +1,12 @@
-from bin.compiler import PololuServoDriver, ArduinoDriver, SerialCommander
+from bin.compiler import PololuServoCompiler, ArduinoCompiler, SerialCommandCompiler
 from bin.minion import LoggerMinion
 from apps.servo_compiler.app_bin import ServoCompilerGUI
 
 if __name__ == '__main__':
     GUI = ServoCompilerGUI('GUI', refresh_interval=1)
-    pololu_servo = PololuServoDriver('Pololu', refresh_interval=1, port_name='COM6',
-                                     servo_dict={'yaw': 3, 'radius': 5, 'flagging': 1, })
-    arduino_board = SerialCommander('Arduino', refresh_interval=1, port_name='COM7')
+    pololu_servo = PololuServoCompiler('Pololu', refresh_interval=1, port_name='COM6',
+                                       servo_dict={'yaw': 3, 'radius': 5, 'flagging': 1, })
+    arduino_board = SerialCommandCompiler('Arduino', refresh_interval=1, port_name='COM7')
     logger = LoggerMinion('Logger')
 
     arduino_board.connect(GUI)

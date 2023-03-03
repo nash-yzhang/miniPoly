@@ -164,7 +164,7 @@ class BaseMinion:
             else:
                 sleep(0.1)
 
-    def create_shared_buffer(self, name, data, size):
+    def create_shared_buffer(self, name, data):
         # The reference name of any shared buffer should have the structure 'b*{minion_name}_{buffer_name}' The
         # builtin state dictionary for all minions are the SharedDict whose name is 'b*{self.name}_shared_dict'
         # The names of all other buffers created later will be saved in the builtin SharedDict as a shared state as
@@ -659,6 +659,7 @@ class LoggerMinion(BaseMinion, QueueListener):
     DEFAULT_LISTENER_CONFIG = {
         'version': 1,
         'disable_existing_loggers': True,
+        'respect_handler_level': True,
         'formatters': {
             'detailed': {
                 'class': 'logging.Formatter',
@@ -697,7 +698,6 @@ class LoggerMinion(BaseMinion, QueueListener):
     }
 
     def __init__(self, name, logger_config=None, listener_config=None):
-        # self.name = name
         super(LoggerMinion, self).__init__(name=name)
 
         if logger_config is None:
@@ -715,11 +715,11 @@ class LoggerMinion(BaseMinion, QueueListener):
         self.hasConfig = False
         self.reporter = []
 
-    def set_level(self, logger_name, level):
+    def set_level(self, level):
         level = level.upper()
         if level in LOG_LVL_LOOKUP_TABLE.keys():
             logLevel = LOG_LVL_LOOKUP_TABLE[level]
-            logger = logging.getLogger(logger_name)
+            logger = logging.getLogger(self.name)
             logger.setLevel(logLevel)
             for handler in logger.handlers:
                 handler.setLevel(logLevel)
@@ -993,6 +993,23 @@ class AbstractMinionMixin:
 
     def get_state_from(self, minion_name, state_name):
         return self._processHandler.get_state_from(minion_name, state_name)
+
+    def create_shared_buffer(self, buffer_name, buffer_val):
+        self._processHandler.create_shared_buffer(buffer_name, buffer_val)
+
+    def has_foreign_buffer(self,minion_name,buffer_name):
+        return self._processHandler.has_foreign_buffer(minion_name,buffer_name)
+    def has_buffer(self,buffer_name):
+        return self._processHandler.has_buffer(buffer_name)
+
+    def set_buffer(self,buffer_name,buffer_val):
+        self._processHandler.set_buffer(buffer_name,buffer_val)
+
+    def set_buffer_to(self,minion_name,buffer_name,buffer_val):
+        self._processHandler.set_foreign_buffer(minion_name,buffer_name,buffer_val)
+
+    def get_buffer(self,buffer_name):
+        self._processHandler.get_buffer(buffer_name)
 
     def get_buffer_from(self,minion_name,buffer_name, timeout=0):
         t = 0

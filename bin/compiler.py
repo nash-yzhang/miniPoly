@@ -23,26 +23,47 @@ from src.tisgrabber import tisgrabber as tis
 
 import csv
 
+
 class AbstractCompiler(TimerMinionMixin):
-    def __init__(self, processHandler, refresh_interval=10):
+    _processHandler: TimerMinion
+
+    def __init__(self, processHandler: TimerMinion):
         super().__init__()
         self._processHandler = processHandler
-        self._processHandler.add_callback('default', self.on_time)
-        self._processHandler.interval = refresh_interval
-        self._name = self._processHandler.name
+        self._processHandler.add_callback('default', self._on_time)
+        self.refresh_interval = self._processHandler.refresh_interval
+        self.name = self._processHandler.name
+
+    def _on_time(self, t):
+        if self.status() <= 0:
+            self._on_close()
+        try:
+            self.on_time(t)
+        except:
+            self.error('Error in on_time')
+            self.debug(traceback.format_exc())
+        self._processHandler.on_time(t)
 
     def on_time(self, t):
-        self._processHandler.on_time(t)
+        pass
 
     def on_protocol(self, t):
         pass
 
+    def _on_close(self):
+        self.set_state('status', -1)
+        self.on_close()
+
+    def on_close(self):
+        pass
+
+
 class QtCompiler(AbstractCompiler, qw.QMainWindow):
 
-    def __init__(self, processHandler, refresh_interval=10, **kwargs):
-        AbstractCompiler.__init__(self, processHandler, refresh_interval)
+    def __init__(self, processHandler, **kwargs):
+        AbstractCompiler.__init__(self, processHandler)
         qw.QMainWindow.__init__(self, **kwargs)
-        self.setWindowTitle(self._name)
+        self.setWindowTitle(self.name)
         self.setWindowIcon(QIcon(ROOT_DIR + '/bin/minipoly.ico'))
         self.renderSplashScreen()
 
@@ -55,6 +76,7 @@ class QtCompiler(AbstractCompiler, qw.QMainWindow):
             splash.setWindowOpacity(1.5 - abs(1.5 - (i / 10)))
             sleep(0.05)
         splash.close()  # close the splash screen
+
 
 class GLCompiler(app.Canvas, AbstractMinionMixin):
 
@@ -231,12 +253,12 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
         self.set_state('status', -1)
         self.close()
 
-class PololuServoDriver(TimerMinion):
 
+class PololuServoCompiler(AbstractCompiler):
     AUXile_Postfix = "Pololu_AUX"
 
     def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
-        super(PololuServoDriver, self).__init__(*args, **kwargs)
+        super(PololuServoCompiler, self).__init__(*args, **kwargs)
         self._port_name = port_name
         self.servo_dict = servo_dict
 
@@ -245,38 +267,28 @@ class PololuServoDriver(TimerMinion):
         self._AUX_writer = None
         self._stream_init_time = None
 
-
-    def initialize(self):
-        super().initialize()
-
-        try:
-            self.init_pololu()
-            for i in range(24):
-                self.setRange(i, 2500, 10000)
-            self._watching_state = {}
-            for n, v in self.servo_dict.items():
-                try:
-                    self.create_state(n, self.getPosition(v))
-                except:
-                    print(traceback.format_exc())
-            self.create_state('StreamToDisk', False)
-            self.create_state('SaveDir', False)
-            self.create_state('SaveName', False)
-            self.create_state('InitTime', False)
-        except:
-            print(traceback.format_exc())
+        self.init_pololu()
+        for i in range(24):
+            self.setRange(i, 2500, 10000)
+        self._watching_state = {}
+        for n, v in self.servo_dict.items():
+            try:
+                self.create_state(n, self.getPosition(v))
+            except:
+                print(traceback.format_exc())
+        self.create_state('StreamToDisk', False)
+        self.create_state('SaveDir', False)
+        self.create_state('SaveName', False)
+        self.create_state('InitTime', False)
 
     def on_time(self, t):
-        try:
-            self._streaming_setup()
-            for n, v in self.servo_dict.items():
-                state = self.get_state(n)
-                if self.watch_state(n, state) and state is not None:
-                    self.setTarget(v, int(state))
-                    # print(f"Set {n}-{v} to {state}")
-            self._data_streaming()
-        except:
-            print(traceback.format_exc())
+        self._streaming_setup()
+        for n, v in self.servo_dict.items():
+            state = self.get_state(n)
+            if self.watch_state(n, state) and state is not None:
+                self.setTarget(v, int(state))
+                # print(f"Set {n}-{v} to {state}")
+        self._data_streaming()
 
     def _streaming_setup(self):
         if_streaming = self.get_state('StreamToDisk')
@@ -325,17 +337,8 @@ class PololuServoDriver(TimerMinion):
                 col_val.append(self.get_state(n))
             self._AUX_writer.writerow(col_val)
 
-    def shutdown(self):
+    def on_close(self):
         self._port.close()
-
-    def watch_state(self, name, val):
-        if name not in self._watching_state.keys():
-            self._watching_state[name] = val
-            return True
-        else:
-            changed = val != self._watching_state[name]
-            self._watching_state[name] = val
-            return changed
 
     ###### The following are copied from https://github.com/FRC4564/Maestro/blob/master/maestro.py with MIT license
     def init_pololu(self):
@@ -483,17 +486,16 @@ class PololuServoDriver(TimerMinion):
 
     #############################################################################################
 
-class SerialCommander(TimerMinion):
+
+class SerialCommandCompiler(AbstractCompiler):
 
     def __init__(self, *args, port_name='COM7', baud=9600, timeout=0.001, **kwargs):
-        super(SerialCommander, self).__init__(*args, **kwargs)
+        super(SerialCommandCompiler, self).__init__(*args, **kwargs)
         self._port_name = port_name
         self._baud = baud
         self._timeout = timeout
         self._port = None
 
-    def initialize(self):
-        super().initialize()
         self._port = serial.Serial(self._port_name, self._baud, timeout=self._timeout)
         self.create_state('serial', 0)
 
@@ -508,29 +510,19 @@ class SerialCommander(TimerMinion):
         except:
             print(traceback.format_exc())
 
-    def shutdown(self):
+    def on_close(self):
+        self.set_state('status', -1)
         self._port.close()
 
-    def watch_state(self, name, val):
-        if name not in self._watching_state.keys():
-            self._watching_state[name] = val
-            return True
-        else:
-            changed = val != self._watching_state[name]
-            self._watching_state[name] = val
-            return changed
 
-class ArduinoDriver(TimerMinion):
+class ArduinoCompiler(AbstractCompiler):
 
     def __init__(self, *args, port_name='COM7', pin_address={}, **kwargs):
-        super(ArduinoDriver, self).__init__(*args, **kwargs)
+        super(ArduinoCompiler, self).__init__(*args, **kwargs)
         self._port_name = port_name
         self.pin_address = pin_address
         self._port = None
         self.pin_dict = {}
-
-    def initialize(self):
-        super().initialize()
 
         try:
             self._port = fmt.Arduino(self._port_name)
@@ -545,27 +537,17 @@ class ArduinoDriver(TimerMinion):
             print(traceback.format_exc())
 
     def on_time(self, t):
-        try:
-            for n, v in self.pin_dict.items():
-                state = self.get_state(n)
-                if self.watch_state(n, state) and state is not None:
-                    v.write(state)
-        except:
-            print(traceback.format_exc())
+        for n, v in self.pin_dict.items():
+            state = self.get_state(n)
+            if self.watch_state(n, state) and state is not None:
+                v.write(state)
 
-    def shutdown(self):
-        self._port.close()
+    def on_close(self):
+        self.set_state('status', -1)
+        self._port.exit()
 
-    def watch_state(self, name, val):
-        if name not in self._watching_state.keys():
-            self._watching_state[name] = val
-            return True
-        else:
-            changed = val != self._watching_state[name]
-            self._watching_state[name] = val
-            return changed
 
-class TISCameraDriver(TimerMinion):
+class TISCameraCompiler(AbstractCompiler):
     TIS_DLL_DIR = "../src/tisgrabber/tisgrabber_x64.dll"
     TIS_Width = ctypes.c_long()
     TIS_Height = ctypes.c_long()
@@ -575,20 +557,18 @@ class TISCameraDriver(TimerMinion):
     BINFile_Postfix = "IC_IMG"
     AUXile_Postfix = "IC_AUX"
 
-    def __init__(self, *args, camera_name=None, video_format=None, frame_rate=None, save_option='binary', **kwargs):
-        super(TISCameraDriver, self).__init__(*args, **kwargs)
-        if frame_rate is not None:
-            self.refresh_interval = int(1 / frame_rate)
-        else:
-            self.frame_rate = 1000 / self.refresh_interval
+    def __init__(self, *args, camera_name=None, save_option='binary', **kwargs):
+        super(TISCameraCompiler, self).__init__(*args, **kwargs)
+
+        self.frame_rate = 1000 / self.refresh_interval
         self.ic = None
         self._camera_name = camera_name
         self._buffer_name = None
         self._buf_img = None
         self.frame_shape = None
-        self._params = {"CameraName":None, 'VideoFormat': None,
-                        'StreamToDisk': False, 'SaveDir':None, 'SaveName':None, 'InitTime':None,
-                        'FrameCount':0, 'FrameTime':0}
+        self._params = {"CameraName": None, 'VideoFormat': None,
+                        'StreamToDisk': False, 'SaveDir': None, 'SaveName': None, 'InitTime': None,
+                        'FrameCount': 0, 'FrameTime': 0}
         self.streaming = False
         self._BIN_FileHandle = None
         self._AUX_FileHandle = None
@@ -601,8 +581,6 @@ class TISCameraDriver(TimerMinion):
         else:
             raise ValueError("save_option must be either 'binary' or 'movie'")
 
-    def initialize(self):
-        super().initialize()
         for k, v in self._params.items():
             self.create_state(k, v)
         self._init_camera()
@@ -639,15 +617,12 @@ class TISCameraDriver(TimerMinion):
         if self.has_buffer(buffer_name):
             self.set_buffer(buffer_name, frame)
         else:
-            self.create_shared_buffer(buffer_name, frame, frame.nbytes)
+            self.create_shared_buffer(buffer_name, frame)
         self._buffer_name = buffer_name
         self.camera.StopLive()
 
     def on_time(self, t):
         try:
-            if self.status <= 0:
-                self.on_close()
-
             cameraName = self.get_state('CameraName')
             if self.watch_state('CameraName', cameraName):
                 if cameraName is not None:
@@ -658,7 +633,7 @@ class TISCameraDriver(TimerMinion):
                         self.info("Camera disconnected")
                     except:
                         self.error("An error occurred while disconnecting the camera")
-                        self.error(traceback.format_exc())
+                        self.debug(traceback.format_exc())
             else:
                 self._params['VideoFormat'] = self.get_state('VideoFormat')
                 if self.watch_state('VideoFormat', self._params['VideoFormat']):
@@ -667,7 +642,6 @@ class TISCameraDriver(TimerMinion):
                     self.process_frame()
         except:
             self.error("An error occurred while updating the camera")
-            self.error(traceback.format_exc())
 
     def process_frame(self):
         self._streaming_setup()
@@ -675,7 +649,7 @@ class TISCameraDriver(TimerMinion):
         frame_time = perf_counter()
         frame = self.camera.GetImage()
         self.set_buffer(self._buffer_name, frame)
-        self._data_streaming(frame_time,frame)
+        self._data_streaming(frame_time, frame)
 
     def _data_streaming(self, frame_time, frame):
         if self.streaming:
@@ -758,14 +732,3 @@ class TISCameraDriver(TimerMinion):
         if self.camera.IsDevValid():
             self.disconnect_camera()
             self.camera = None
-        self.set_state('status', -1)
-
-    def watch_state(self, name, val):
-        if name not in self._watching_state.keys():
-            self._watching_state[name] = val
-            return True
-        else:
-            changed = val != self._watching_state[name]
-            self._watching_state[name] = val
-            return changed
-

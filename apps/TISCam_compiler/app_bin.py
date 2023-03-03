@@ -1,6 +1,6 @@
 import os
 
-from bin.app import AbstractGUIAPP
+from bin.app import AbstractGUIAPP, AbstractAPP
 import time
 import traceback
 
@@ -8,7 +8,7 @@ import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
 import PyQt5.QtCore as qc
 
-from bin.compiler import QtCompiler
+from bin.compiler import QtCompiler, TISCameraCompiler, PololuServoCompiler, ArduinoCompiler
 from bin.gui import DataframeTable
 from src.tisgrabber import tisgrabber as tis
 
@@ -69,7 +69,7 @@ class CameraGUI(QtCompiler):
     def _browse_root_folder(self):
         self._root_folder = str(qw.QFileDialog.getExistingDirectory(self, 'Open Folder', '.',
                                                                     qw.QFileDialog.DontUseNativeDialog))
-                                # For some reason the native dialog doesn't work
+        # For some reason the native dialog doesn't work
         self._root_folder_textbox.setText(self._root_folder)
 
     def _save_video(self):
@@ -83,7 +83,7 @@ class CameraGUI(QtCompiler):
             self._filename_textbox.setText(self._save_filename)
 
             self._save_camera_list = []
-            for k,v in self._videoStreams.items():
+            for k, v in self._videoStreams.items():
                 if v[-1].isChecked():
                     self._save_camera_list.append(k)
             for cam in self._save_camera_list:
@@ -293,10 +293,11 @@ class CameraGUI(QtCompiler):
                 self.debug(traceback.format_exc())
         self._processHandler.on_time(t)
 
-class CameraStimGUI(QtCompiler):
 
+class CameraStimGUI(QtCompiler):
     _SERVO_MIN = 2400
     _SERVO_MAX = 9000
+
     def __init__(self, *args, **kwargs):
         super(CameraStimGUI, self).__init__(*args, **kwargs)
         self._camera_minions = [i for i in self.get_linked_minion_names() if 'tiscam' in i.lower()]
@@ -391,7 +392,7 @@ class CameraStimGUI(QtCompiler):
             self._filename_textbox.setText(self._save_filename)
 
             self._save_camera_list = []
-            for k,v in self._videoStreams.items():
+            for k, v in self._videoStreams.items():
                 if v[-1].isChecked():
                     self._save_camera_list.append(k)
 
@@ -610,7 +611,6 @@ class CameraStimGUI(QtCompiler):
                 self.debug(traceback.format_exc())
         self._processHandler.on_time(t)
 
-
     def addTableBox(self, name):
         frame = qw.QGroupBox(self)
         frame.setTitle(name)
@@ -663,14 +663,16 @@ class CameraStimGUI(QtCompiler):
                         self.tables['Protocol'].selectRow(row_idx)
                         for k in data.keys():
                             if ":" in k:
-                                m,s = k.split(':')
+                                m, s = k.split(':')
                                 if m in self.get_linked_minion_names():
                                     if s in self.get_shared_state_names(m):
                                         if 'servo' in m.lower():
-                                            state = float(data[k][row_idx]*(self._SERVO_MAX-self._SERVO_MIN)+self._SERVO_MIN)
+                                            state = float(data[k][row_idx] * (
+                                                        self._SERVO_MAX - self._SERVO_MIN) + self._SERVO_MIN)
                                         else:
                                             state = float(data[k][row_idx])
-                                        self.set_state_to(m,s,state)
+                                        self.set_state_to(m, s, state)
+
 
 class CameraInterface(AbstractGUIAPP):
     def __init__(self, *args, **kwargs):
@@ -681,3 +683,39 @@ class CameraInterface(AbstractGUIAPP):
         self._win = CameraStimGUI(self)
         self.info("Camera Interface initialized.")
         self._win.show()
+
+
+class TisCamApp(AbstractAPP):
+    def __init__(self, *args, camera_name=None, save_option='binary', **kwargs):
+        super(TisCamApp, self).__init__(*args, **kwargs)
+        self._param_to_compiler['camera_name'] = camera_name
+        self._param_to_compiler['save_option'] = save_option
+
+    def initialize(self):
+        super().initialize()
+        self._compiler = TISCameraCompiler(self, **self._param_to_compiler, )
+        self.info("Camera Interface initialized.")
+
+
+class PololuServoApp(AbstractAPP):
+    def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
+        super(PololuServoApp, self).__init__(*args, **kwargs)
+        self._param_to_compiler['port_name'] = port_name
+        self._param_to_compiler['servo_dict'] = servo_dict
+
+    def initialize(self):
+        super().initialize()
+        self._compiler = PololuServoCompiler(self, **self._param_to_compiler, )
+        self.info("Pololu compiler initialized.")
+
+
+class ArduinoApp(AbstractAPP):
+    def __init__(self, *args, port_name='COM6', pin_address={}, **kwargs):
+        super(ArduinoApp, self).__init__(*args, **kwargs)
+        self._param_to_compiler['port_name'] = port_name
+        self._param_to_compiler['pin_address'] = pin_address
+
+    def initialize(self):
+        super().initialize()
+        self._compiler = ArduinoCompiler(self, **self._param_to_compiler, )
+        self.info("Arduino Compiler initialized.")
