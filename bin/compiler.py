@@ -41,7 +41,7 @@ class AbstractCompiler(TimerMinionMixin):
             self.on_time(t)
         except:
             self.error('Error in on_time')
-            self.debug(traceback.format_exc())
+            self.error(traceback.format_exc())
         self._processHandler.on_time(t)
 
     def on_time(self, t):

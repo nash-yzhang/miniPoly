@@ -176,6 +176,7 @@ class DataframeTable(qw.QTableView):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
+        self.filename = None
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls:
@@ -194,6 +195,7 @@ class DataframeTable(qw.QTableView):
             url = event.mimeData().urls()[0].path()[1:]
             if os.path.isfile(url):
                 self.loadfile(url)
+                self.filename = url
         else:
             event.ignore()
 
