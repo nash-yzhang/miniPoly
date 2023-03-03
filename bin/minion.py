@@ -307,6 +307,8 @@ class BaseMinion:
             if minion_name == self.name:
                 if state_name in self._shared_dict.keys():
                     state_val = self._shared_dict.get(state_name)
+                elif state_name == 'ALL':
+                    state_val = dict(self._shared_dict)
                 else:
                     self.log(logging.DEBUG, f"Unknown state: '{state_name}'")
 
@@ -315,6 +317,8 @@ class BaseMinion:
                     with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
                         if state_name in tmp_dict.keys():
                             state_val = tmp_dict[state_name]
+                        elif state_name == 'ALL':
+                            state_val = dict(tmp_dict)
                         else:
                             self.log(logging.DEBUG, f"Unknown foreign state '{state_name}' in minion '{minion_name}'")
                 else:

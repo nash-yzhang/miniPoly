@@ -703,7 +703,7 @@ class TISCameraCompiler(AbstractCompiler):
                                                                int(self.frame_rate),
                                                                (self.frame_shape[1], self.frame_shape[0]))
 
-                    self._AUX_FileHandle = open(AUX_Fulldir, 'w')
+                    self._AUX_FileHandle = open(AUX_Fulldir, 'w', newline='')
                     self._AUX_writer = csv.writer(self._AUX_FileHandle)
                     self._stream_init_time = init_time
                     self._n_frame_streamed = 0
