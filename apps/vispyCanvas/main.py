@@ -1,3 +1,7 @@
+import time
+
+import numpy as np
+
 from bin.app import AbstractGUIAPP
 from bin.compiler import QtCompiler
 from bin.minion import LoggerMinion
@@ -16,9 +20,11 @@ class SimpleGUI(QtCompiler):
         super(SimpleGUI, self).__init__(*args, **kwargs)
         self._videoFn = None
         self._videoHandle = None
+        self._img_buffer = None
         self._image_handle = None
         self._scene_canvas = None
         self._is_playing = False
+        self._num_frame_avg = 1
         self._init_menu()
         self._init_main_window()
 
@@ -50,14 +56,40 @@ class SimpleGUI(QtCompiler):
         self._setup_scene_canvas()
         self.layout_main = qw.QVBoxLayout()
         self.layout_main.addWidget(self._scene_canvas.native)
+
+        self.layout_play_control = qw.QHBoxLayout()
         self.btn_playVideo = qw.QPushButton('Play')
         self.btn_playVideo.setShortcut('Ctrl+Enter')
         self.btn_playVideo.clicked.connect(self._play_video)
 
-        self.layout_main.addWidget(self.btn_playVideo)
+        self.layout_averaging = qw.QHBoxLayout()
+        self.box_averaging = qw.QCheckBox('Averaging frames')
+        self.entry_averaging = qw.QLineEdit('10')
+        self.box_averaging.clicked.connect(self._toggle_averaging)
+        self.entry_averaging.editingFinished.connect(self._set_averaging)
+        self.layout_averaging.addWidget(self.box_averaging)
+        self.layout_averaging.addWidget(self.entry_averaging)
+
+        self.layout_play_control.addLayout(self.layout_averaging)
+        self.layout_play_control.addWidget(self.btn_playVideo)
+
+
+        self.layout_main.addLayout(self.layout_play_control)
         self.main_widget = qw.QWidget()
         self.main_widget.setLayout(self.layout_main)
         self.setCentralWidget(self.main_widget)
+
+    def _toggle_averaging(self):
+        if self.box_averaging.isChecked():
+            self._num_frame_avg = int(self.entry_averaging.text())
+        else:
+            self._num_frame_avg = 1
+
+    def _set_averaging(self):
+        if self.box_averaging.isChecked():
+            self._num_frame_avg = int(self.entry_averaging.text())
+        else:
+            self._num_frame_avg = 1
 
     def _init_menu(self):
         self._menubar = self.menuBar()
@@ -80,8 +112,10 @@ class SimpleGUI(QtCompiler):
         self._videoFn = qw.QFileDialog.getOpenFileName(self, 'Open file', '.', "Video files (*.avi)")[0]
         self._videoHandle = cv.VideoCapture(self._videoFn)
         ret, frame = self._videoHandle.read()
+        self._img_buffer = np.zeros((frame.shape[0], frame.shape[1], 1), dtype=np.uint8)
+        self._img_buffer[:, :, 0] = frame.mean(axis=2)
         if ret:
-            self._image_handle.set_data(frame)
+            self._image_handle.set_data(self._img_buffer.mean(axis=2))
             self._videoHandle.set(cv.CAP_PROP_POS_FRAMES, 0)
         else:
             self.error('The video could not be loaded.')
@@ -101,9 +135,18 @@ class SimpleGUI(QtCompiler):
     def on_time(self, t):
         if self._videoHandle is not None:
             if self._is_playing:
+                t = time.perf_counter()
                 ret, frame = self._videoHandle.read()
                 if ret:
-                    self._image_handle.set_data(frame)
+                    frame = frame.mean(axis=2, keepdims=True)
+                    if self._img_buffer.shape[2] < self._num_frame_avg:
+                        self._img_buffer = np.concatenate((self._img_buffer, frame), axis=2)
+                    elif self._num_frame_avg == 1:
+                        self._img_buffer = frame
+                    else:
+                        start_from_frame = self._num_frame_avg-self._img_buffer.shape[2]+1
+                        self._img_buffer = np.concatenate((self._img_buffer[:, :, start_from_frame:], frame), axis=2)
+                    self._image_handle.set_data(self._img_buffer.mean(axis=2))
                     self._scene_canvas.update()
                 else:
                     self._is_playing = False
