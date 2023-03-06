@@ -1,4 +1,4 @@
-from apps.IOS_Servo_App.app_bin import *
+from apps.IOS_Servo_App.app_bin_TIS import *
 from bin.minion import LoggerMinion
 from time import sleep
 
