@@ -56,7 +56,7 @@ class IOApp(AbstractAPP):
 if __name__ == '__main__':
     Cam = PCOCamApp('pcocam', save_option='movie', refresh_interval=20)
     GUI = CameraInterface('GUI', refresh_interval=10)
-    Stim = StimulusApp('Stimulus', servo_port_name='COM15', arduino_port_name='COM16',
+    Stim = StimulusApp('Stimulus', servo_port_name='COM14', arduino_port_name='COM16',
                                        servo_dict={'yaw': 3, 'radius': 5, 'flagging': 1, },
                                        arduino_dict={'LED':'d:8:o'}, refresh_interval=5,)
     IO = IOApp('IO', refresh_interval=2, state_dict={'pcocam':['FrameCount'],'Stimulus':['yaw', 'radius', 'flagging', 'LED']})

@@ -14,7 +14,7 @@ import traceback
 import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
 import PyQt5.QtCore as qc
-import PyQt5
+import PyQt5.Qt
 
 
 from vispy import scene
@@ -156,6 +156,10 @@ class CameraStimGUI(QtCompiler):
         self.CamConn.setStatusTip("Connect PCO Camera")
         self.CamConn.triggered.connect(self.cam_conn)
 
+        self.loadStim = qw.QAction("Load Stim File", self)
+        self.loadStim.setShortcut("Ctrl+Shift+F")
+        self.loadStim.setStatusTip("Load Stimulus xlsx file")
+        self.loadStim.triggered.connect(self.load_file)
 
         Exit = qw.QAction("Quit", self)
         Exit.setShortcut("Ctrl+Q")
@@ -163,7 +167,14 @@ class CameraStimGUI(QtCompiler):
         Exit.triggered.connect(self.close)
 
         self._menu_file.addAction(self.CamConn)
+        self._menu_file.addAction(self.loadStim)
         self._menu_file.addAction(Exit)
+
+    def load_file(self):
+        self._stimulusFn = qw.QFileDialog.getOpenFileName(self, 'Open file', '.', "stimulus protocol (*.xlsx)", options= qw.QFileDialog.DontUseNativeDialog)[0]
+        if self.tables['Protocol'] is not None:
+            self.tables['Protocol'].loadfile(self._stimulusFn)
+            self.tables['Protocol'].filename = self._stimulusFn
 
     def cam_conn(self):
         if self._connected:
@@ -953,6 +964,7 @@ class PCOCameraCompiler(AbstractCompiler):
                 self._BIN_FileHandle.write(bytearray(frame))
             elif self.save_option == 'movie':
                 # Write to movie file
+                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
                 self._BIN_FileHandle.write(frame)
 
             self._n_frame_streamed += 1
