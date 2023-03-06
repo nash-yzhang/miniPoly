@@ -152,21 +152,24 @@ class SharedNdarray:
 
     _CLASS_NAME = 'SharedNdarray'
     _MAX_BUFFER_SIZE = 2 ** 32  # Maximum shared memory: 4 GB
-    _READ_OFFSET = 128  # The first 128 bytes represents the valid size of the shared buffer
+    _READ_OFFSET = 512  # The first 512 bytes represents the valid size of the shared buffer
     def __init__(self, name, lock: Lock, data=None, create=True):
 
         self._name = name
         self._lock = lock
         self._shared_memory = None
+        self._dtype = None
 
         if create:
             if data is None:
                 raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Shared ndarray cannot be created: Data cannot be None')
             self._shape = data.shape
+            self._elem = data.size
             self._size = data.nbytes + self._READ_OFFSET
+            self._dtype = data.dtype.str
             try:
                 self._shared_memory = shared_memory.SharedMemory(create=True, name=self._name, size=self._size)
-                header = json.dumps(f'{self._CLASS_NAME}~{self._shape}~{self._size}').encode('utf-8')
+                header = json.dumps(f'{self._CLASS_NAME}~{self._shape}~{self._size}~{self._dtype}').encode('utf-8')
                 place_holder = ' ' * (self._READ_OFFSET - len(header))
                 self._shared_memory.buf[:self._READ_OFFSET] = header+place_holder.encode('utf-8')
                 self.write(data)
@@ -184,6 +187,8 @@ class SharedNdarray:
                 else:
                     self._size = int(identity_string[2])
                     self._shape = tuple([int(x) for x in identity_string[1][1:-1].split(',')])
+                    self._elem = np.prod(self._shape)
+                    self._dtype = identity_string[-1]
             except Exception:
                 print(traceback.format_exc())
                 self.close()
@@ -216,8 +221,10 @@ class SharedNdarray:
 
     def read(self):
         self._lock.acquire()
-        data = np.frombuffer(self._shared_memory.buf, dtype=np.uint8,\
-                             count=self._size-self._READ_OFFSET, offset=self._READ_OFFSET)+0 # Copy the data
+        # data = np.frombuffer(self._shared_memory.buf, dtype=self._dtype,\
+        #                      count=self._size-self._READ_OFFSET, offset=self._READ_OFFSET)+0 # Copy the data
+        data = np.frombuffer(self._shared_memory.buf, dtype=self._dtype, \
+                             count=self._elem, offset=self._READ_OFFSET) + 0  # Copy the data
         data = data.reshape(self._shape)
         self._lock.release()
         return data
