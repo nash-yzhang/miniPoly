@@ -54,7 +54,7 @@ class IOApp(AbstractAPP):
         self.info("IO compiler initialized.")
 
 if __name__ == '__main__':
-    Cam = PCOCamApp('pcocam', save_option='movie', refresh_interval=20)
+    Cam = PCOCamApp('pcocam', save_option='tiff', refresh_interval=20)
     GUI = CameraInterface('GUI', refresh_interval=10)
     Stim = StimulusApp('Stimulus', servo_port_name='COM14', arduino_port_name='COM16',
                                        servo_dict={'yaw': 3, 'radius': 5, 'flagging': 1, },

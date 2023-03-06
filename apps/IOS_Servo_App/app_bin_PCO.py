@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import serial
+import tifffile as tifffile
 
 from bin.app import AbstractGUIAPP, AbstractAPP
 import time
@@ -693,7 +694,7 @@ class LightSaberStmulusCompiler(AbstractCompiler):
 
     def _exec_stim(self):
         if self.is_running:
-            if self.stimulus_phase_idx <= self.stimulus_phase_num:
+            if self.stimulus_phase_idx < self.stimulus_phase_num:
                 if (time.perf_counter()-self._init_time) >= self._stimulus_table['Time'][self.stimulus_phase_idx]:
                     for n, v in self.servo_dict.items():
                         state = float(self._stimulus_table[n][self.stimulus_phase_idx])  # Make sure it's not int64 or will crash the whole program as int64 is not JSON serializable
@@ -894,10 +895,10 @@ class PCOCameraCompiler(AbstractCompiler):
         self._stream_init_time = None
         self._n_frame_streamed = None
 
-        if save_option in ['binary', 'movie']:
+        if save_option in ['binary', 'movie','tiff']:
             self.save_option = save_option
         else:
-            raise ValueError("save_option must be either 'binary' or 'movie'")
+            raise ValueError("save_option must be either 'binary', 'tiff', 'movie'")
 
         for k, v in self._params.items():
             self.create_state(k, v)
@@ -944,6 +945,7 @@ class PCOCameraCompiler(AbstractCompiler):
                 self.process_frame()
         except:
             self.error("An error occurred while updating the camera")
+            self.error(traceback.format_exc())
 
     def process_frame(self):
         self._streaming_setup()
@@ -964,8 +966,11 @@ class PCOCameraCompiler(AbstractCompiler):
                 self._BIN_FileHandle.write(bytearray(frame))
             elif self.save_option == 'movie':
                 # Write to movie file
+                frame = frame.astype(float)
                 frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-                self._BIN_FileHandle.write(frame)
+                self._BIN_FileHandle.write(frame, compression='PNG')
+            elif self.save_option == 'tiff':
+                self._BIN_FileHandle.save(frame)
 
             self._n_frame_streamed += 1
             self.set_state('FrameCount', self._n_frame_streamed)
@@ -992,6 +997,10 @@ class PCOCameraCompiler(AbstractCompiler):
                 elif self.save_option == 'movie':
                     BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.avi"
                     BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
+                elif self.save_option == 'tiff':
+                    BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.tiff"
+                    BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
+
                 if os.path.isfile(BIN_Fulldir):
                     self.error(f"File {BIN_Fn} already exists in the folder {save_dir}. Please change "
                                f"the save_name.")
@@ -1002,6 +1011,9 @@ class PCOCameraCompiler(AbstractCompiler):
                         self._BIN_FileHandle = cv2.VideoWriter(BIN_Fulldir, cv2.VideoWriter_fourcc(*'MJPG'),
                                                                int(self.frame_rate),
                                                                (self.frame_shape[1], self.frame_shape[0]))
+                    elif self.save_option == 'tiff':
+                        self._BIN_FileHandle = tifffile.TiffWriter(BIN_Fulldir, bigtiff=True)
+
 
                     self._stream_init_time = init_time
                     self._n_frame_streamed = 0
@@ -1009,10 +1021,11 @@ class PCOCameraCompiler(AbstractCompiler):
 
     def _stop_streaming(self):
         if self._BIN_FileHandle is not None:
-            if self.save_option == 'binary':
+            if self.save_option in ['binary','tiff']:
                 self._BIN_FileHandle.close()
             elif self.save_option == 'movie':
                 self._BIN_FileHandle.release()
+
         self._stream_init_time = None
         self._n_frame_streamed = None
         self.streaming = False
