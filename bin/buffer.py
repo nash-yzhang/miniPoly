@@ -159,19 +159,18 @@ class SharedNdarray:
         self._lock = lock
         self._shared_memory = None
         self._dtype = None
+        self._data = None
 
         if create:
             if data is None:
                 raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Shared ndarray cannot be created: Data cannot be None')
             self._shape = data.shape
-            self._elem = data.size
-            self._size = data.nbytes + self._READ_OFFSET
             self._dtype = data.dtype.str
             try:
-                self._shared_memory = shared_memory.SharedMemory(create=True, name=self._name, size=self._size)
-                header = json.dumps(f'{self._CLASS_NAME}~{self._shape}~{self._size}~{self._dtype}').encode('utf-8')
-                place_holder = ' ' * (self._READ_OFFSET - len(header))
-                self._shared_memory.buf[:self._READ_OFFSET] = header+place_holder.encode('utf-8')
+                self._shared_memory = shared_memory.SharedMemory(create=True, name=self._name, size=data.nbytes+self._READ_OFFSET)
+                self._write_header()
+                self._data = np.ndarray(shape=self._shape, dtype=self._dtype, buffer=self._shared_memory.buf,
+                                        offset=self._READ_OFFSET)
                 self.write(data)
             except Exception:
                 if self._shared_memory is not None:
@@ -181,25 +180,22 @@ class SharedNdarray:
         else:
             self._shared_memory = shared_memory.SharedMemory(name=self._name)
             try:
-                identity_string = self._read_buffer_header().split('~')
-                if identity_string[0] != self._CLASS_NAME:
-                    raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
-                else:
-                    self._size = int(identity_string[2])
-                    self._shape = tuple([int(x) for x in identity_string[1][1:-1].split(',')])
-                    self._elem = np.prod(self._shape)
-                    self._dtype = identity_string[-1]
+                self._read_header()
             except Exception:
                 print(traceback.format_exc())
                 self.close()
                 raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
 
+
+            self._data = np.ndarray(shape=self._shape, dtype=self._dtype, buffer=self._shared_memory.buf,
+                                    offset=self._READ_OFFSET)
             if data is not None:
                 try:
                     self.write(data)
                 except Exception:
                     self.close()
                     raise Exception(f'[{self._CLASS_NAME} - {self._name}] Error in writing data: {traceback.format_exc()}')
+
 
     def __enter__(self):
         return self
@@ -221,24 +217,36 @@ class SharedNdarray:
 
     def read(self):
         self._lock.acquire()
-        # data = np.frombuffer(self._shared_memory.buf, dtype=self._dtype,\
-        #                      count=self._size-self._READ_OFFSET, offset=self._READ_OFFSET)+0 # Copy the data
-        data = np.frombuffer(self._shared_memory.buf, dtype=self._dtype, \
-                             count=self._elem, offset=self._READ_OFFSET) + 0  # Copy the data
-        data = data.reshape(self._shape)
+        data = self._data.copy()
         self._lock.release()
         return data
 
     def write(self, data):
         self._lock.acquire()
-        self._shared_memory.buf[self._READ_OFFSET:self._size] = data.tobytes()
+        self._data[:] = data
         self._lock.release()
 
-    def _read_buffer_header(self):
+    def _write_header(self):
+        header = json.dumps(f'{self._CLASS_NAME}~{self._shape}~{self._dtype}').encode('utf-8')
+        place_holder = ' ' * (self._READ_OFFSET - len(header))
+
+        self._lock.acquire()
+        self._shared_memory.buf[:self._READ_OFFSET] = header + place_holder.encode('utf-8')
+        self._lock.release()
+
+    def _read_header(self):
         self._lock.acquire()
         _decoded_header = bytes(self._shared_memory.buf[:self._READ_OFFSET]).decode('utf-8').split('\x00')[0]
         self._lock.release()
-        return json.loads(_decoded_header)
+
+        identity_string = json.loads(_decoded_header).split('~')
+        if identity_string[0] != self._CLASS_NAME:
+            raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
+        else:
+            self._shape = tuple([int(x) for x in identity_string[1][1:-1].split(',')])
+            self._dtype = identity_string[-1]
+            bytesize = np.dtype(self._dtype).itemsize
+            self._size = np.prod(self._shape)*bytesize
 
     def close(self):
         self._shared_memory.close()
@@ -418,4 +426,3 @@ class SharedDict(dict):
             self.is_alive = False
         except:
             print(traceback.format_exc())
-

@@ -1,0 +1,38 @@
+2023-03-13 16:59:05,888  TestCam logger INFO     Process-1  ----------------- START LOGGING -----------------
+2023-03-13 16:59:05,815  GUI      WARNING  Process-1 (for Process-5) Reset the callback function of the ["default"] timer
+2023-03-13 16:59:05,924  Stimulus WARNING  Process-1 (for Process-3) Reset the callback function of the ["default"] timer
+2023-03-13 16:59:05,928  Stimulus INFO     Process-1 (for Process-3) Shared state: 'is_running' created
+2023-03-13 16:59:05,930  Stimulus INFO     Process-1 (for Process-3) Shared state: 'StimulusFn' created
+2023-03-13 16:59:05,932  Stimulus INFO     Process-1 (for Process-3) Shared state: 'PhaseIdx' created
+2023-03-13 16:59:05,933  Stimulus INFO     Process-1 (for Process-3) Shared state: 'TotalPhase' created
+2023-03-13 16:59:05,940  Stimulus INFO     Process-1 (for Process-3) Shared state: 'yaw' created
+2023-03-13 16:59:05,945  Stimulus INFO     Process-1 (for Process-3) Shared state: 'radius' created
+2023-03-13 16:59:05,949  Stimulus INFO     Process-1 (for Process-3) Shared state: 'flagging' created
+2023-03-13 16:59:05,923  pcocam   WARNING  Process-1 (for Process-4) Reset the callback function of the ["default"] timer
+2023-03-13 16:59:05,927  pcocam   INFO     Process-1 (for Process-4) Shared state: 'CameraName' created
+2023-03-13 16:59:05,929  pcocam   INFO     Process-1 (for Process-4) Shared state: 'VideoFormat' created
+2023-03-13 16:59:05,931  pcocam   INFO     Process-1 (for Process-4) Shared state: 'StreamToDisk' created
+2023-03-13 16:59:05,933  pcocam   INFO     Process-1 (for Process-4) Shared state: 'SaveDir' created
+2023-03-13 16:59:05,935  pcocam   INFO     Process-1 (for Process-4) Shared state: 'SaveName' created
+2023-03-13 16:59:05,936  pcocam   INFO     Process-1 (for Process-4) Shared state: 'InitTime' created
+2023-03-13 16:59:05,937  pcocam   INFO     Process-1 (for Process-4) Shared state: 'FrameCount' created
+2023-03-13 16:59:05,939  pcocam   INFO     Process-1 (for Process-4) Shared state: 'FrameTime' created
+2023-03-13 16:59:05,939  pcocam   INFO     Process-1 (for Process-4) Searching camera...
+2023-03-13 16:59:05,902  IO       WARNING  Process-1 (for Process-2) Reset the callback function of the ["default"] timer
+2023-03-13 16:59:05,904  IO       INFO     Process-1 (for Process-2) Shared state: 'StreamToDisk' created
+2023-03-13 16:59:05,905  IO       INFO     Process-1 (for Process-2) Shared state: 'SaveDir' created
+2023-03-13 16:59:05,906  IO       INFO     Process-1 (for Process-2) Shared state: 'SaveName' created
+2023-03-13 16:59:05,907  IO       INFO     Process-1 (for Process-2) Shared state: 'InitTime' created
+2023-03-13 16:59:05,907  IO       INFO     Process-1 (for Process-2) IO compiler initialized.
+2023-03-13 16:59:07,241  GUI      INFO     Process-1 (for Process-5) Shared state: 'is_running' created
+2023-03-13 16:59:07,244  GUI      INFO     Process-1 (for Process-5) Camera Interface initialized.
+2023-03-13 16:59:10,956  Stimulus INFO     Process-1 (for Process-3) Shared state: 'LED' created
+2023-03-13 16:59:10,956  Stimulus INFO     Process-1 (for Process-3) Stimulus compiler initialized.
+2023-03-13 16:59:12,975  GUI      ERROR    Process-1 (for Process-5) No more camera minion available
+2023-03-13 16:59:18,637  GUI      ERROR    Process-1 (for Process-5) Camera not connected
+2023-03-13 16:59:23,053  GUI      ERROR    Process-1 (for Process-5) No more camera minion available
+2023-03-13 16:59:31,398  GUI      ERROR    Process-1 (for Process-5) Camera not connected
+2023-03-13 16:59:32,708  Stimulus INFO     Process-1 (for Process-3) Stimulus is off
+2023-03-13 16:59:32,723  IO       INFO     Process-1 (for Process-2) IO is off
+2023-03-13 16:59:32,729  GUI      ERROR    Process-1 (for Process-5) Dead minion 'Stimulus' or errors in connecting to its shared buffer
+2023-03-13 16:59:32,747  GUI      ERROR    Process-1 (for Process-5) Dead minion 'IO' or errors in connecting to its shared buffer

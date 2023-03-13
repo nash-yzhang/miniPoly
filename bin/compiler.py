@@ -1,4 +1,5 @@
 import os
+import time
 from time import perf_counter, sleep
 
 import cv2
@@ -600,8 +601,6 @@ class TISCameraCompiler(AbstractCompiler):
         self._camera_name = self.camera.DevName.replace(' ', '_')
         self.camera.open(self.camera.DevName)
         self.update_video_format()
-        self.camera.SetContinuousMode(0)
-        self.camera.StartLive(0)
         self.info(f"Camera {self._params['CameraName']} initialized")
 
     def update_video_format(self):
@@ -609,17 +608,21 @@ class TISCameraCompiler(AbstractCompiler):
         if self.camera.IsDevValid():
             self.camera.StopLive()
         self.camera.SetVideoFormat(self._params['VideoFormat'])
+        self.camera.SetFormat(tis.SinkFormats(0))
         buffer_name = f"frame_{self._params['VideoFormat']}".replace(' ', '_')
+        self.camera.SetContinuousMode(1)
         self.camera.StartLive(0)
         self.camera.SnapImage()
         frame = self.camera.GetImage()
+        time.sleep(0.5)
+
         self.frame_shape = frame.shape
         if self.has_buffer(buffer_name):
             self.set_buffer(buffer_name, frame)
         else:
             self.create_shared_buffer(buffer_name, frame)
         self._buffer_name = buffer_name
-        self.camera.StopLive()
+
 
     def on_time(self, t):
         try:

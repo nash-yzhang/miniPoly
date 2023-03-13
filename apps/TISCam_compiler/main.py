@@ -5,7 +5,7 @@ from time import sleep
 if __name__ == '__main__':
     Cam = TisCamApp('Tiscam_1', save_option='movie', refresh_interval=10)
     GUI = CameraInterface('GUI', refresh_interval=5)
-    pololu_servo = PololuServoApp('Servo_Pololu', refresh_interval=5, port_name='COM6',
+    pololu_servo = PololuServoApp('Servo_Pololu', refresh_interval=5, port_name='COM5',
                                        servo_dict={'yaw': 3, 'radius': 5, 'flagging': 1, })
     arduino_board = ArduinoApp('Serial_ArduinoNano', refresh_interval=1, port_name='COM7', pin_address={'LED1': 'd:8:o'})
     logger = LoggerMinion('TestCam logger')

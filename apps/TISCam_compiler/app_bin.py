@@ -604,8 +604,8 @@ class CameraStimGUI(QtCompiler):
                 frame = self.get_buffer_from(mi, self._camera_param[camName]['buffer_name'])
                 if frame is not None:
                     self._videoStreams[camName][1].setPixmap(
-                        qg.QPixmap.fromImage(qg.QImage(frame, frame.shape[1], frame.shape[0], frame.strides[0],
-                                                       qg.QImage.Format_RGB888)))
+                        qg.QPixmap.fromImage(qg.QImage(frame[:,:,0], frame.shape[1], frame.shape[0], frame.strides[0],
+                                                       qg.QImage.Format_Grayscale8)))
             except:
                 self.debug('Error when trying to get frame from camera minion.')
                 self.debug(traceback.format_exc())
