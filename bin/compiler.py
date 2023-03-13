@@ -601,6 +601,7 @@ class TISCameraCompiler(AbstractCompiler):
         self._camera_name = self.camera.DevName.replace(' ', '_')
         self.camera.open(self.camera.DevName)
         self.update_video_format()
+        self.watch_state('CameraName', self.camera.DevName)
         self.info(f"Camera {self._params['CameraName']} initialized")
 
     def update_video_format(self):
@@ -614,7 +615,6 @@ class TISCameraCompiler(AbstractCompiler):
         self.camera.StartLive(0)
         self.camera.SnapImage()
         frame = self.camera.GetImage()
-        time.sleep(0.5)
 
         self.frame_shape = frame.shape
         if self.has_buffer(buffer_name):
