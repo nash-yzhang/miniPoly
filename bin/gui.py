@@ -2,7 +2,6 @@ import os
 
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
-from PyQt5.QtCore import Qt
 import traceback, sys
 from importlib import util, reload
 

@@ -3,10 +3,8 @@ import ctypes
 import os
 
 import cv2
-import numpy as np
 import pandas as pd
 import serial
-import tifffile as tifffile
 
 from bin.app import AbstractGUIAPP, AbstractAPP
 import time
@@ -15,11 +13,6 @@ import traceback
 import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
 import PyQt5.QtCore as qc
-import PyQt5.Qt
-
-
-from vispy import scene
-from vispy.io import load_data_file, read_png
 
 from bin.compiler import AbstractCompiler, QtCompiler
 from bin.gui import DataframeTable
@@ -155,12 +148,12 @@ class CameraStimGUI(QtCompiler):
         self.CamConn = qw.QAction("Connect Camera", self)
         self.CamConn.setShortcut("Ctrl+O")
         self.CamConn.setStatusTip("Connect PCO Camera")
-        self.CamConn.triggered.connect(self.cam_conn)
+        self.CamConn.triggered.connect(self.connect_camera)
 
-        self.loadStim = qw.QAction("Load Stim File", self)
-        self.loadStim.setShortcut("Ctrl+Shift+F")
-        self.loadStim.setStatusTip("Load Stimulus xlsx file")
-        self.loadStim.triggered.connect(self.load_file)
+        Disconnect = qw.QAction("Disconnect Camera", self)
+        Disconnect.setShortcut("Ctrl+Shift+O")
+        Disconnect.setStatusTip("Remove IC Camera")
+        Disconnect.triggered.connect(self.remove_camera)
 
         Exit = qw.QAction("Quit", self)
         Exit.setShortcut("Ctrl+Q")
@@ -168,14 +161,8 @@ class CameraStimGUI(QtCompiler):
         Exit.triggered.connect(self.close)
 
         self._menu_file.addAction(self.CamConn)
-        self._menu_file.addAction(self.loadStim)
+        self._menu_file.addAction(Disconnect)
         self._menu_file.addAction(Exit)
-
-    def load_file(self):
-        self._stimulusFn = qw.QFileDialog.getOpenFileName(self, 'Open file', '.', "stimulus protocol (*.xlsx)", options= qw.QFileDialog.DontUseNativeDialog)[0]
-        if self.tables['Protocol'] is not None:
-            self.tables['Protocol'].loadfile(self._stimulusFn)
-            self.tables['Protocol'].filename = self._stimulusFn
 
     def cam_conn(self):
         if self._connected:
@@ -198,10 +185,6 @@ class CameraStimGUI(QtCompiler):
             'SaveName': None,
             'InitTime': None,
         }
-        hasGUI = cameraName in self._connected_camera_minions.keys()
-        if not hasGUI:
-            self.setupCameraFrameGUI(cameraName)
-        self.camconfig_videoFormat_list_idx = 0
 
         if cameraName in self._connected_camera_minions.keys():
             self.error('Camera already connected')
@@ -215,8 +198,10 @@ class CameraStimGUI(QtCompiler):
                 self._camera_param[cameraName]['buffer_name'] = "frame_PCO_cam"
                 self._connected_camera_minions[cameraName] = mi
 
-
-        time.sleep(5)
+        hasGUI = cameraName in self._connected_camera_minions.keys()
+        if not hasGUI:
+            self.setupCameraFrameGUI(cameraName)
+        self.camconfig_videoFormat_list_idx = 0
 
 
     def disconnect_camera(self, saveConfig=False, saveGUI=False):
@@ -239,51 +224,28 @@ class CameraStimGUI(QtCompiler):
 
     def setupCameraFrameGUI(self, cameraName):
         self._videoStreams[cameraName] = [qw.QWidget(),
-                                          None,
+                                          qw.QLabel(cameraName),
                                           qw.QPushButton('Refresh'),
                                           qw.QLabel('Save: '),
                                           qw.QCheckBox('Save')]
         cameraWidget = self._videoStreams[cameraName][0]
+        camNameLabel = self._videoStreams[cameraName][1]
         refresh_btn = self._videoStreams[cameraName][2]
         save_label = self._videoStreams[cameraName][3]
         save_checkbox = self._videoStreams[cameraName][4]
 
         layout = qw.QVBoxLayout()
-        self._videoStreams[cameraName][1] = self._setup_scene_canvas()
+        self._videoStreams[cameraName][1].setPixmap(qg.QPixmap())
         sublayout = qw.QHBoxLayout()
         refresh_btn.clicked.connect(lambda: self.refresh(cameraName))
         sublayout.addWidget(refresh_btn)
         sublayout.addWidget(save_label)
         sublayout.addWidget(save_checkbox)
 
-        layout.addWidget(self._videoStreams[cameraName][1].native)
+        layout.addWidget(camNameLabel)
         layout.addLayout(sublayout)
         cameraWidget.setLayout(layout)
         self.layout_CamView.addWidget(cameraWidget)
-
-    def _setup_scene_canvas(self):
-
-        canvas = scene.SceneCanvas(keys='interactive')
-        canvas.size = 800, 600
-
-        # Set up a viewbox to display the image with interactive pan/zoom
-        view = canvas.central_widget.add_view()
-
-        # Create the image
-        img_data = read_png(load_data_file('mona_lisa/mona_lisa_sm.png'))
-        interpolation = 'nearest'
-
-        self._image_handle = scene.visuals.Image(img_data, interpolation=interpolation,
-                                    parent=view.scene, method='subdivide')
-
-        # Set 2D camera (the camera will scale to the contents in the scene)
-        view.camera = scene.PanZoomCamera(aspect=1)
-        # flip y-axis to have correct aligment
-        view.camera.flip = (0, 1, 0)
-        view.camera.set_range()
-        view.camera.zoom(0.1, (250, 200))
-
-        return canvas
 
     def on_time(self, t):
         StimulusFn = self.tables['Protocol'].filename
@@ -301,12 +263,12 @@ class CameraStimGUI(QtCompiler):
             try:
                 frame = self.get_buffer_from(mi, self._camera_param[camName]['buffer_name'])
                 if frame is not None:
-                    frame = frame.astype(np.uint8)
-                    self._image_handle.set_data(frame)
-                    self._videoStreams['PCO'][1].update()
+                    self._videoStreams[camName][1].setPixmap(
+                        qg.QPixmap.fromImage(qg.QImage(frame, frame.shape[1], frame.shape[0], frame.strides[0],
+                                                       qg.QImage.Format_RGB888)))
             except:
-                self.error('Error when trying to get frame from camera minion.')
-                self.error(traceback.format_exc())
+                self.debug('Error when trying to get frame from camera minion.')
+                self.debug(traceback.format_exc())
         self._processHandler.on_time(t)
 
     def addTableBox(self, name):
@@ -694,7 +656,7 @@ class LightSaberStmulusCompiler(AbstractCompiler):
 
     def _exec_stim(self):
         if self.is_running:
-            if self.stimulus_phase_idx < self.stimulus_phase_num:
+            if self.stimulus_phase_idx <= self.stimulus_phase_num:
                 if (time.perf_counter()-self._init_time) >= self._stimulus_table['Time'][self.stimulus_phase_idx]:
                     for n, v in self.servo_dict.items():
                         state = float(self._stimulus_table[n][self.stimulus_phase_idx])  # Make sure it's not int64 or will crash the whole program as int64 is not JSON serializable
@@ -870,7 +832,7 @@ class LightSaberStmulusCompiler(AbstractCompiler):
     #############################################################################################
 
 
-class PCOCameraCompiler(AbstractCompiler):
+class PCOameraCompiler(AbstractCompiler):
     TIS_DLL_DIR = "../src/tisgrabber/tisgrabber_x64.dll"
     TIS_Width = ctypes.c_long()
     TIS_Height = ctypes.c_long()
@@ -880,7 +842,7 @@ class PCOCameraCompiler(AbstractCompiler):
     BINFile_Postfix = "PCO_IMG"
 
     def __init__(self, *args, camera_name=None, save_option='binary', **kwargs):
-        super(PCOCameraCompiler, self).__init__(*args, **kwargs)
+        super(PCOameraCompiler, self).__init__(*args, **kwargs)
 
         self.frame_rate = 1000 / self.refresh_interval
         self._camera_name = camera_name
@@ -895,14 +857,15 @@ class PCOCameraCompiler(AbstractCompiler):
         self._stream_init_time = None
         self._n_frame_streamed = None
 
-        if save_option in ['binary', 'movie','tiff']:
+        if save_option in ['binary', 'movie']:
             self.save_option = save_option
         else:
-            raise ValueError("save_option must be either 'binary', 'tiff', 'movie'")
+            raise ValueError("save_option must be either 'binary' or 'movie'")
 
         for k, v in self._params.items():
             self.create_state(k, v)
         self._init_camera()
+        self.info(f"Camera {self.name} initialized.")
 
     def _init_camera(self):
         self.info("Searching camera...")
@@ -910,11 +873,8 @@ class PCOCameraCompiler(AbstractCompiler):
             self._params['CameraName'] = self.get_state('CameraName')
         self.info(f"Camera {self._params['CameraName']} found")
         self.camera = pco.Camera()
-        self.camera.record(number_of_images=5,mode='fifo')
-        self.camera.wait_for_first_image()
-        # self.camera.set_exposure_time(self.refresh_interval)
+        self.camera.set_exposure_time(self.refresh_interval)
         self.update_video_format()
-        self.watch_state('CameraName', self._params['CameraName'])
         self.info(f"Camera {self._params['CameraName']} initialized")
 
     def update_video_format(self):
@@ -941,16 +901,12 @@ class PCOCameraCompiler(AbstractCompiler):
                     except:
                         self.error("An error occurred while disconnecting the camera")
                         self.debug(traceback.format_exc())
-            else:
-                self.process_frame()
         except:
             self.error("An error occurred while updating the camera")
-            self.error(traceback.format_exc())
 
     def process_frame(self):
         self._streaming_setup()
-        self.camera.wait_for_first_image()
-        frame, meta = self.camera.image(0xFFFFFFFF)
+        frame = self.camera.image()
         frame_time = time.perf_counter()
         self.set_buffer(self._buffer_name, frame)
         self._data_streaming(frame_time, frame)
@@ -966,11 +922,7 @@ class PCOCameraCompiler(AbstractCompiler):
                 self._BIN_FileHandle.write(bytearray(frame))
             elif self.save_option == 'movie':
                 # Write to movie file
-                frame = frame.astype(float)
-                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-                self._BIN_FileHandle.write(frame, compression='PNG')
-            elif self.save_option == 'tiff':
-                self._BIN_FileHandle.save(frame)
+                self._BIN_FileHandle.write(frame)
 
             self._n_frame_streamed += 1
             self.set_state('FrameCount', self._n_frame_streamed)
@@ -997,10 +949,6 @@ class PCOCameraCompiler(AbstractCompiler):
                 elif self.save_option == 'movie':
                     BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.avi"
                     BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
-                elif self.save_option == 'tiff':
-                    BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.tiff"
-                    BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
-
                 if os.path.isfile(BIN_Fulldir):
                     self.error(f"File {BIN_Fn} already exists in the folder {save_dir}. Please change "
                                f"the save_name.")
@@ -1011,9 +959,6 @@ class PCOCameraCompiler(AbstractCompiler):
                         self._BIN_FileHandle = cv2.VideoWriter(BIN_Fulldir, cv2.VideoWriter_fourcc(*'MJPG'),
                                                                int(self.frame_rate),
                                                                (self.frame_shape[1], self.frame_shape[0]))
-                    elif self.save_option == 'tiff':
-                        self._BIN_FileHandle = tifffile.TiffWriter(BIN_Fulldir, bigtiff=True)
-
 
                     self._stream_init_time = init_time
                     self._n_frame_streamed = 0
@@ -1021,21 +966,19 @@ class PCOCameraCompiler(AbstractCompiler):
 
     def _stop_streaming(self):
         if self._BIN_FileHandle is not None:
-            if self.save_option in ['binary','tiff']:
+            if self.save_option == 'binary':
                 self._BIN_FileHandle.close()
             elif self.save_option == 'movie':
                 self._BIN_FileHandle.release()
-
         self._stream_init_time = None
         self._n_frame_streamed = None
         self.streaming = False
 
     def disconnect_camera(self):
-        self.camera.stop()
         self.camera.close()
+        self.camera = pco.Camera()
         self._params = {"CameraName": None, 'VideoFormat': None,
                         'Trigger': 0, 'FrameCount': 0, 'FrameTime': 0}
 
     def on_close(self):
-        self.camera.stop()
         self.camera.close()

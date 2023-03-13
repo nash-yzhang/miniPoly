@@ -1,4 +1,4 @@
-from apps.IOS_Servo_App.app_bin_PCO import *
+from apps.IOS_Servo_App.app_bin_TIS import *
 from bin.minion import LoggerMinion
 from time import sleep
 
@@ -13,15 +13,15 @@ class CameraInterface(AbstractGUIAPP):
         self._win.show()
 
 
-class PCOCamApp(AbstractAPP):
+class TisCamApp(AbstractAPP):
     def __init__(self, *args, camera_name=None, save_option='binary', **kwargs):
-        super(PCOCamApp, self).__init__(*args, **kwargs)
+        super(TisCamApp, self).__init__(*args, **kwargs)
         self._param_to_compiler['camera_name'] = camera_name
         self._param_to_compiler['save_option'] = save_option
 
     def initialize(self):
         super().initialize()
-        self._compiler = PCOCameraCompiler(self, **self._param_to_compiler, )
+        self._compiler = TISCameraCompiler(self, **self._param_to_compiler, )
         self.info("Camera Interface initialized.")
 
 
@@ -54,12 +54,12 @@ class IOApp(AbstractAPP):
         self.info("IO compiler initialized.")
 
 if __name__ == '__main__':
-    Cam = PCOCamApp('pcocam', save_option='tiff', refresh_interval=20)
+    Cam = TisCamApp('Tiscam_1', save_option='movie', refresh_interval=20)
     GUI = CameraInterface('GUI', refresh_interval=10)
-    Stim = StimulusApp('Stimulus', servo_port_name='COM14', arduino_port_name='COM16',
+    Stim = StimulusApp('Stimulus', servo_port_name='COM6', arduino_port_name='COM7',
                                        servo_dict={'yaw': 3, 'radius': 5, 'flagging': 1, },
                                        arduino_dict={'LED':'d:8:o'}, refresh_interval=5,)
-    IO = IOApp('IO', refresh_interval=2, state_dict={'pcocam':['FrameCount'],'Stimulus':['yaw', 'radius', 'flagging', 'LED']})
+    IO = IOApp('IO', refresh_interval=2, state_dict={'Tiscam_1':['FrameCount'],'Stimulus':['yaw', 'radius', 'flagging', 'LED']})
     logger = LoggerMinion('TestCam logger')
     logger.set_level('DEBUG')
 
