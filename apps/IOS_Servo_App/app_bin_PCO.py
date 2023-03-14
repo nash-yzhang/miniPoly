@@ -299,7 +299,7 @@ class CameraStimGUI(QtCompiler):
 
         for camName, mi in self._connected_camera_minions.items():
             try:
-                frame = self.get_buffer_from(mi, self._camera_param[camName]['buffer_name'])
+                frame = self.get_state_from(mi, self._camera_param[camName]['buffer_name'])
                 if frame is not None:
                     frame = frame.astype(np.uint8)
                     self._image_handle.set_data(frame)
@@ -598,9 +598,9 @@ class IOStreamingCompiler(AbstractCompiler):
                 for mi, i_buf in self._buffer_streaming_handle.items():
                     for buf_name, v in i_buf.items():
                         if v[1] is None or v[1] == 'binary':
-                            self._buffer_streaming_handle[mi][buf_name].write(bytearray(self.get_buffer_from(mi, buf_name)))
+                            self._buffer_streaming_handle[mi][buf_name].write(bytearray(self.get_state_from(mi, buf_name)))
                         elif v[1] == 'movie':
-                            self._buffer_streaming_handle[mi][buf_name].write(self.get_buffer_from(mi, buf_name))
+                            self._buffer_streaming_handle[mi][buf_name].write(self.get_state_from(mi, buf_name))
                         else:
                             pass
 
@@ -632,8 +632,8 @@ class LightSaberStmulusCompiler(AbstractCompiler):
         self.stimulus_phase_num = 0
         self.create_state('is_running', False)
         self.create_state('StimulusFn', 0)
-        self.create_state('PhaseIdx', self.stimulus_phase_idx)
-        self.create_state('TotalPhase', self.stimulus_phase_num)
+        self.create_state('PhaseIdx', self.stimulus_phase_idx, use_buffer=True, dtype=int)
+        self.create_state('TotalPhase', self.stimulus_phase_num, use_buffer=True, dtype=int)
 
         self.init_pololu()
         self.init_arduino()
@@ -923,9 +923,9 @@ class PCOCameraCompiler(AbstractCompiler):
         frame,meta = self.camera.image()
         self.frame_shape = frame.shape
         if self.has_state(buffer_name):
-            self.set_buffer(buffer_name, frame)
+            self.set_state(buffer_name, frame)
         else:
-            self.create_shared_buffer(buffer_name, frame)
+            self.create_state(buffer_name, frame, use_buffer=True)
         self._buffer_name = buffer_name
 
     def on_time(self, t):
@@ -952,7 +952,7 @@ class PCOCameraCompiler(AbstractCompiler):
         self.camera.wait_for_first_image()
         frame, meta = self.camera.image(0xFFFFFFFF)
         frame_time = time.perf_counter()
-        self.set_buffer(self._buffer_name, frame)
+        self.set_state(self._buffer_name, frame)
         self._data_streaming(frame_time, frame)
 
     def _data_streaming(self, frame_time, frame):
