@@ -973,7 +973,7 @@ class TISCameraCompiler(AbstractCompiler):
         self.camera.SnapImage()
         frame = self.camera.GetImage()
         self.frame_shape = frame.shape
-        if self.has_buffer(buffer_name):
+        if self.has_state(buffer_name):
             self.set_buffer(buffer_name, frame)
         else:
             self.create_shared_buffer(buffer_name, frame)

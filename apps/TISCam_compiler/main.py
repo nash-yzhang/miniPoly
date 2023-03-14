@@ -12,13 +12,13 @@ if __name__ == '__main__':
     logger.set_level('DEBUG')
 
     Cam.connect(GUI)
-    pololu_servo.connect(GUI)
-    arduino_board.connect(GUI)
+    # pololu_servo.connect(GUI)
+    # arduino_board.connect(GUI)
 
     Cam.attach_logger(logger)
     GUI.attach_logger(logger)
-    pololu_servo.attach_logger(logger)
-    arduino_board.attach_logger(logger)
+    # pololu_servo.attach_logger(logger)
+    # arduino_board.attach_logger(logger)
 
     logger.run()
     # arduino_board.run()

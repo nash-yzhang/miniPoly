@@ -617,10 +617,10 @@ class TISCameraCompiler(AbstractCompiler):
         frame = self.camera.GetImage()
 
         self.frame_shape = frame.shape
-        if self.has_buffer(buffer_name):
-            self.set_buffer(buffer_name, frame)
+        if self.has_state(buffer_name):
+            self.set_state(buffer_name, frame)
         else:
-            self.create_shared_buffer(buffer_name, frame)
+            self.create_state(buffer_name, frame, use_buffer=True)
         self._buffer_name = buffer_name
 
 
@@ -645,13 +645,14 @@ class TISCameraCompiler(AbstractCompiler):
                     self.process_frame()
         except:
             self.error("An error occurred while updating the camera")
+            self.error(traceback.format_exc())
 
     def process_frame(self):
         self._streaming_setup()
         self.camera.SnapImage()
         frame_time = perf_counter()
         frame = self.camera.GetImage()
-        self.set_buffer(self._buffer_name, frame)
+        self.set_state(self._buffer_name, frame)
         self._data_streaming(frame_time, frame)
 
     def _data_streaming(self, frame_time, frame):

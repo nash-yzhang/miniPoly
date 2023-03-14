@@ -601,7 +601,7 @@ class CameraStimGUI(QtCompiler):
     def on_time(self, t):
         for camName, mi in self._connected_camera_minions.items():
             try:
-                frame = self.get_buffer_from(mi, self._camera_param[camName]['buffer_name'])
+                frame = self.get_state_from(mi, self._camera_param[camName]['buffer_name'])
                 if frame is not None:
                     self._videoStreams[camName][1].setPixmap(
                         qg.QPixmap.fromImage(qg.QImage(frame[:,:,0], frame.shape[1], frame.shape[0], frame.strides[0],

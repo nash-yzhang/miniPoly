@@ -243,7 +243,7 @@ class SharedNdarray:
         if identity_string[0] != self._CLASS_NAME:
             raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
         else:
-            self._shape = tuple([int(x) for x in identity_string[1][1:-1].split(',')])
+            self._shape = tuple([int(x) for x in identity_string[1][1:-1].split(',') if x])
             self._dtype = identity_string[-1]
             bytesize = np.dtype(self._dtype).itemsize
             self._size = np.prod(self._shape)*bytesize

@@ -922,7 +922,7 @@ class PCOCameraCompiler(AbstractCompiler):
         self.info('Request ignored because updating video format is not available for PCO camera')
         frame,meta = self.camera.image()
         self.frame_shape = frame.shape
-        if self.has_buffer(buffer_name):
+        if self.has_state(buffer_name):
             self.set_buffer(buffer_name, frame)
         else:
             self.create_shared_buffer(buffer_name, frame)
