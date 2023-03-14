@@ -567,9 +567,8 @@ class TISCameraCompiler(AbstractCompiler):
         self._buffer_name = None
         self._buf_img = None
         self.frame_shape = None
-        self._params = {"CameraName": None, 'VideoFormat': None,
-                        'StreamToDisk': False, 'SaveDir': None, 'SaveName': None, 'InitTime': None,
-                        'FrameCount': 0, 'FrameTime': 0}
+        self._params = {"CameraName": None, 'VideoFormat': None, 'SaveDir': None, 'SaveName': None,
+                        'StreamToDisk': False, 'InitTime': 0., 'FrameCount': int(0), 'FrameTime': 0.}
         self.streaming = False
         self._BIN_FileHandle = None
         self._AUX_FileHandle = None
@@ -583,7 +582,12 @@ class TISCameraCompiler(AbstractCompiler):
             raise ValueError("save_option must be either 'binary' or 'movie'")
 
         for k, v in self._params.items():
-            self.create_state(k, v)
+            if k in ['StreamToDisk', 'FrameCount']:
+                self.create_state(k, v, use_buffer=True)
+            elif k in ['FrameTime', 'InitTime']:
+                self.create_state(k, v, use_buffer=True, dtype=np.float)
+            else:
+                self.create_state(k, v)
         self._init_camera()
         self.info(f"Camera {self.name} initialized.")
 
@@ -667,7 +671,7 @@ class TISCameraCompiler(AbstractCompiler):
                 self._BIN_FileHandle.write(bytearray(frame))
             elif self.save_option == 'movie':
                 # Write to movie file
-                self._BIN_FileHandle.write(frame)
+                self._BIN_FileHandle.write(frame.repeat(3,axis=2))
 
             self._n_frame_streamed += 1
             self.set_state('FrameCount', self._n_frame_streamed)

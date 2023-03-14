@@ -481,7 +481,6 @@ class CameraStimGUI(QtCompiler):
         self.camConfigWindow.show()
 
     def remove_camera(self):
-
         self.disconnectWindow = qw.QWidget()
         self.disconnectWindow.setWindowTitle('Choose camera to disconnect')
         layout_configMain = qw.QVBoxLayout()

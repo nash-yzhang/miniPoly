@@ -158,7 +158,7 @@ class BaseMinion:
             else:
                 sleep(0.1)
 
-    def create_shared_buffer(self, name, data):
+    def create_shared_buffer(self, name, data, dtype=None):
         # The reference name of any shared buffer should have the structure 'b*{minion_name}_{buffer_name}' The
         # builtin state dictionary for all minions are the SharedDict whose name is 'b*{self.name}_shared_dict'
         # The names of all other buffers created later will be saved in the builtin SharedDict as a shared state as
@@ -169,11 +169,14 @@ class BaseMinion:
         if type(data) in [list, tuple]:
             data = np.array(data)
         elif type(data) in [int, float, bool]:
-            data = np.array([data])
+            data = np.array([data], dtype = type(data))
         elif type(data) == np.ndarray:
             pass
         else:
             raise TypeError(f"Data type {type(data)} is not supported")
+        if dtype is not None:
+            data = data.astype(dtype)
+
         if name not in self._shared_dict.keys():
             shared_buffer_name = f"{self.name}_{name}"
             try:
@@ -218,12 +221,12 @@ class BaseMinion:
             self.log(logging.INFO, f"Already linked to minion: {minion_name}")
             return 0
 
-    def create_state(self, state_name: str, state_val: object, use_buffer: bool = False):
+    def create_state(self, state_name: str, state_val: object, use_buffer: bool = False, dtype=None):
         if state_name in self._shared_dict.keys():
             self.log(logging.ERROR, f"State '{state_name}' already exists")
         else:
             if use_buffer:
-                self.create_shared_buffer(state_name, state_val)
+                self.create_shared_buffer(state_name, state_val, dtype=dtype)
             else:
                 self._shared_dict[state_name] = state_val
             self.log(logging.INFO, f"Shared state: '{state_name}' created")
@@ -298,7 +301,7 @@ class BaseMinion:
             state_val = self._shared_dict.get(state_name)
             if type(state_val) == str:
                 if state_val.startswith('b*'):
-                    state_val = self._shared_buffer[state_val[2:]].read()
+                    state_val = self._shared_buffer[state_val].read()
         elif state_name == 'ALL':
             state_val = dict(self._shared_dict)
         else:
@@ -938,8 +941,8 @@ class AbstractMinionMixin:
     def get_shared_state_names(self,minion_name):
         return list(self._processHandler.get_shared_state_names(minion_name))
 
-    def create_state(self, state_name, state_val, use_buffer = False):
-        self._processHandler.create_state(state_name, state_val, use_buffer)
+    def create_state(self, state_name, state_val, use_buffer=False, dtype=None):
+        self._processHandler.create_state(state_name, state_val, use_buffer, dtype)
 
     def remove_state(self, state_name):
         self._processHandler.remove_state(state_name)
