@@ -21,7 +21,7 @@ if __name__ == '__main__':
     arduino_board.attach_logger(logger)
 
     logger.run()
-    arduino_board.run()
-    pololu_servo.run()
+    # arduino_board.run()
+    # pololu_servo.run()
     Cam.run()
     GUI.run()

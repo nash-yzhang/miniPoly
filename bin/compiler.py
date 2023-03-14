@@ -598,10 +598,10 @@ class TISCameraCompiler(AbstractCompiler):
         self.camera.DevName = self._params['CameraName']
         if self.camera.IsDevValid():
             self.camera.StopLive()
+        self.watch_state('CameraName', self.camera.DevName)
         self._camera_name = self.camera.DevName.replace(' ', '_')
         self.camera.open(self.camera.DevName)
         self.update_video_format()
-        self.watch_state('CameraName', self.camera.DevName)
         self.info(f"Camera {self._params['CameraName']} initialized")
 
     def update_video_format(self):
@@ -611,7 +611,7 @@ class TISCameraCompiler(AbstractCompiler):
         self.camera.SetVideoFormat(self._params['VideoFormat'])
         self.camera.SetFormat(tis.SinkFormats(0))
         buffer_name = f"frame_{self._params['VideoFormat']}".replace(' ', '_')
-        self.camera.SetContinuousMode(1)
+        self.camera.SetContinuousMode(0)
         self.camera.StartLive(0)
         self.camera.SnapImage()
         frame = self.camera.GetImage()

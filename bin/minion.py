@@ -98,6 +98,7 @@ class BaseMinion:
         # called _shared_buffer_index_dict, whose content will be updated into the _shared_buffer.
         self._shared_buffer = {}
         self._linked_minion = {}
+        self._shared_buffer_shortcuts = {}  # a dictionary of shortcuts for accessing shared buffer
         self.minion_to_link = []
 
     ############# Logging module #############
@@ -139,13 +140,6 @@ class BaseMinion:
         self.log(logging.ERROR, msg)
 
     ############# shared buffer/state module #############
-    def pid_check(self):
-        if self._pid is not None:
-            current_pid = os.getpid()
-            is_pid_changed = current_pid == self._pid
-            return current_pid, is_pid_changed
-        else:
-            return None, None
 
     def prepare_shared_buffer(self):
         self._shared_dict = SharedDict(f'{self.name}_shared_dict', lock=self.lock, create=True, name=self.name,
@@ -172,58 +166,50 @@ class BaseMinion:
         # #
         # For safety consideration, it is compulsory to use "with" statement to access any foreign buffers.
 
-        pid, pid_checked = self.pid_check()
-        if pid_checked:
-            shared_buffer_name = f"{self.name}_{name}"
-            shared_buffer_reference_name = f"b*{shared_buffer_name}"
-            if shared_buffer_reference_name not in self._shared_dict.keys():
-                try:
-                    # self._shared_buffer[shared_buffer_name] = SharedBuffer(shared_buffer_name, self.lock, data, size,
-                    #                                                        create=True)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
-                    self._shared_buffer[shared_buffer_name] = SharedNdarray(shared_buffer_name, self.lock, data)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
-                except Exception:
-                    self.log(logging.ERROR,
-                             f"Error in creating buffer '{shared_buffer_name}'.\n{traceback.format_exc()}")
-                    print(f"Error in creating buffer '{shared_buffer_name}'.\n{traceback.format_exc()}")
-                self._shared_dict[shared_buffer_reference_name] = shared_buffer_name
-            else:
-                self.log(logging.ERROR, f"SharedBuffer '{shared_buffer_name}' already exist")
+        shared_buffer_name = f"{self.name}_{name}"
+        shared_buffer_reference_name = f"b*{shared_buffer_name}"
+        if shared_buffer_reference_name not in self._shared_dict.keys():
+            try:
+                # self._shared_buffer[shared_buffer_name] = SharedBuffer(shared_buffer_name, self.lock, data, size,
+                #                                                        create=True)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
+                self._shared_buffer[shared_buffer_name] = SharedNdarray(shared_buffer_name, self.lock, data)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
+            except Exception:
+                self.log(logging.ERROR,
+                         f"Error in creating buffer '{shared_buffer_name}'.\n{traceback.format_exc()}")
+                print(f"Error in creating buffer '{shared_buffer_name}'.\n{traceback.format_exc()}")
+            self._shared_dict[shared_buffer_reference_name] = shared_buffer_name
         else:
-            self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+            self.log(logging.ERROR, f"SharedBuffer '{shared_buffer_name}' already exist")
 
     def link_minion(self, minion_name):
-        pid, pid_checked = self.pid_check()
-        if pid_checked:
-            shared_buffer_name = f"{minion_name}_shared_dict"
-            shared_buffer_reference_name = f"b*{shared_buffer_name}"
-            if shared_buffer_reference_name not in self._shared_dict.keys():
-                try:
-                    with SharedDict(shared_buffer_name, lock=self.lock) as tmp_dict:
-                        # Just to test if the SharedDict exist and the name is correct
-                        dict_name = tmp_dict.get('name')
-                        if dict_name is None:
-                            dict_name = 'N/A'
-                        if dict_name == minion_name:
-                            self.log(logging.INFO, f"Successfully connected to '{minion_name}.")
-                            self._shared_dict[shared_buffer_reference_name] = shared_buffer_name
-                            self._linked_minion[minion_name] = [
-                                'shared_dict']  # The name of the shared buffer from this minion
-                            return 1
-                        else:
-                            self.log(logging.ERROR,
-                                     f'[{self.name}] Pre-execution error: The "name" state of the linked shared buffer {dict_name} is inconsistent with input minion name {minion_name}.')
-                            return 2
-                except FileNotFoundError:
-                    self.log(logging.INFO, f"SharedDict '{minion_name} not found'.")
-                    return -1
-                except:
-                    self.log(logging.ERROR, f"Error when connecting to '{minion_name}'.\n{traceback.format_exc()}")
-                    return 3
-            else:
-                self.log(logging.INFO, f"Already linked to minion: {minion_name}")
-                return 1
+        shared_buffer_name = f"{minion_name}_shared_dict"
+        shared_buffer_reference_name = f"b*{shared_buffer_name}"
+        if shared_buffer_reference_name not in self._shared_dict.keys():
+            try:
+                with SharedDict(shared_buffer_name, lock=self.lock) as tmp_dict:
+                    # Just to test if the SharedDict exist and the name is correct
+                    dict_name = tmp_dict.get('name')
+                    if dict_name is None:
+                        dict_name = 'N/A'
+                    if dict_name == minion_name:
+                        self.log(logging.INFO, f"Successfully connected to '{minion_name}.")
+                        self._shared_dict[shared_buffer_reference_name] = shared_buffer_name
+                        self._linked_minion[minion_name] = [
+                            'shared_dict']  # The name of the shared buffer from this minion
+                        return 1
+                    else:
+                        self.log(logging.ERROR,
+                                 f'[{self.name}] Pre-execution error: The "name" state of the linked shared buffer {dict_name} is inconsistent with input minion name {minion_name}.')
+                        return 2
+            except FileNotFoundError:
+                self.log(logging.INFO, f"SharedDict '{minion_name} not found'.")
+                return -1
+            except:
+                self.log(logging.ERROR, f"Error when connecting to '{minion_name}'.\n{traceback.format_exc()}")
+                return 3
         else:
-            self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+            self.log(logging.INFO, f"Already linked to minion: {minion_name}")
+            return 1
 
     def link_foreign_buffer(self, minion_name: str, buffer_name: str):
         """
@@ -232,65 +218,49 @@ class BaseMinion:
         :param minion_name: Foreign minion's name
         :param buffer_name: Foreign minion's buffer's name
         """
-        pid, pid_checked = self.pid_check()
-        if pid_checked:
-            shared_buffer_reference_name = f"b*{minion_name}_{buffer_name}"
-            if shared_buffer_reference_name not in self._shared_dict.keys():
-                if minion_name in self._linked_minion.keys():
-                    with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
-                        if shared_buffer_reference_name in tmp_dict.keys():
-                            self._shared_dict[shared_buffer_reference_name] = tmp_dict[shared_buffer_reference_name]
-                        else:
-                            self.log(logging.ERROR, f"Unknown foreign buffer '{buffer_name}' in minion '{minion_name}'")
-                    self._linked_minion[minion_name].append(
-                        buffer_name)  # The name of the shared buffer from this minion
-                else:
-                    self.log(logging.ERROR, f"Unknown minion: '{minion_name}'")
-
+        shared_buffer_reference_name = f"b*{minion_name}_{buffer_name}"
+        if shared_buffer_reference_name not in self._shared_dict.keys():
+            if minion_name in self._linked_minion.keys():
+                with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
+                    if shared_buffer_reference_name in tmp_dict.keys():
+                        self._shared_dict[shared_buffer_reference_name] = tmp_dict[shared_buffer_reference_name]
+                    else:
+                        self.log(logging.ERROR, f"Unknown foreign buffer '{buffer_name}' in minion '{minion_name}'")
+                self._linked_minion[minion_name].append(
+                    buffer_name)  # The name of the shared buffer from this minion
             else:
-                self.log(logging.INFO, f"Already linked to the foreign buffer {buffer_name} from minion {minion_name}")
+                self.log(logging.ERROR, f"Unknown minion: '{minion_name}'")
+
         else:
-            self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+            self.log(logging.INFO, f"Already linked to the foreign buffer {buffer_name} from minion {minion_name}")
 
     def create_state(self, state_name: str, state_val: object):
-        pid, pid_checked = self.pid_check()
-        if pid_checked:
-            if state_name in self._shared_dict.keys():
-                self.log(logging.ERROR, f"State '{state_name}' already exists")
-            else:
-                self._shared_dict[state_name] = state_val
-                self.log(logging.INFO, f"Shared state: '{state_name}' created")
+        if state_name in self._shared_dict.keys():
+            self.log(logging.ERROR, f"State '{state_name}' already exists")
         else:
-            self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+            self._shared_dict[state_name] = state_val
+            self.log(logging.INFO, f"Shared state: '{state_name}' created")
 
     def remove_state(self,state_name: str):
-        pid, pid_checked = self.pid_check()
-        if pid_checked:
-            if state_name in self._shared_dict.keys():
-                del self._shared_dict[state_name]
-                self.log(logging.INFO, f"Shared state: '{state_name}' DELETED")
-            else:
-                self.log(logging.ERROR, f"State '{state_name}' cannot be deleted because it does not exist")
-
+        if state_name in self._shared_dict.keys():
+            del self._shared_dict[state_name]
+            self.log(logging.INFO, f"Shared state: '{state_name}' DELETED")
         else:
-            self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+            self.log(logging.ERROR, f"State '{state_name}' cannot be deleted because it does not exist")
+
 
     def get_shared_state_names(self,minion_name:str):
-        pid, pid_checked = self.pid_check()
-        if pid_checked:
-            if minion_name == self.name:
-                    return list(self._shared_dict.keys())
+        if minion_name == self.name:
+                return list(self._shared_dict.keys())
 
-            elif minion_name in self._linked_minion.keys():
-                if self.is_minion_alive(minion_name):
-                    with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
-                        return list(tmp_dict.keys())
-                else:
-                    self.log(logging.DEBUG, f"Dead minion '{minion_name}' or errors in connecting to its shared buffer")
+        elif minion_name in self._linked_minion.keys():
+            if self.is_minion_alive(minion_name):
+                with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
+                    return list(tmp_dict.keys())
             else:
-                self.log(logging.DEBUG, f"Unknown minion: '{minion_name}'")
+                self.log(logging.DEBUG, f"Dead minion '{minion_name}' or errors in connecting to its shared buffer")
         else:
-            self.log(logging.DEBUG, f'Access denied because of the invalid PID ({self._pid}->{pid})')
+            self.log(logging.DEBUG, f"Unknown minion: '{minion_name}'")
 
 
     def get_state_from(self, minion_name: str, state_name: str):
@@ -302,31 +272,27 @@ class BaseMinion:
             obj: None if any error occurs in the process
         """
         state_val = None  # Return None if exception to avoid error
-        pid, pid_checked = self.pid_check()
-        if pid_checked:
-            if minion_name == self.name:
-                if state_name in self._shared_dict.keys():
-                    state_val = self._shared_dict.get(state_name)
-                elif state_name == 'ALL':
-                    state_val = dict(self._shared_dict)
-                else:
-                    self.log(logging.DEBUG, f"Unknown state: '{state_name}'")
-
-            elif minion_name in self._linked_minion.keys():
-                if self.is_minion_alive(minion_name):
-                    with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
-                        if state_name in tmp_dict.keys():
-                            state_val = tmp_dict[state_name]
-                        elif state_name == 'ALL':
-                            state_val = dict(tmp_dict)
-                        else:
-                            self.log(logging.DEBUG, f"Unknown foreign state '{state_name}' in minion '{minion_name}'")
-                else:
-                    self.log(logging.DEBUG, f"Dead minion '{minion_name}' or errors in connecting to its shared buffer")
+        if minion_name == self.name:
+            if state_name in self._shared_dict.keys():
+                state_val = self._shared_dict.get(state_name)
+            elif state_name == 'ALL':
+                state_val = dict(self._shared_dict)
             else:
-                self.log(logging.DEBUG, f"Unknown minion: '{minion_name}'")
+                self.log(logging.DEBUG, f"Unknown state: '{state_name}'")
+
+        elif minion_name in self._linked_minion.keys():
+            if self.is_minion_alive(minion_name):
+                with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
+                    if state_name in tmp_dict.keys():
+                        state_val = tmp_dict[state_name]
+                    elif state_name == 'ALL':
+                        state_val = dict(tmp_dict)
+                    else:
+                        self.log(logging.DEBUG, f"Unknown foreign state '{state_name}' in minion '{minion_name}'")
+            else:
+                self.log(logging.DEBUG, f"Dead minion '{minion_name}' or errors in connecting to its shared buffer")
         else:
-            self.log(logging.DEBUG, f'Access denied because of the invalid PID ({self._pid}->{pid})')
+            self.log(logging.DEBUG, f"Unknown minion: '{minion_name}'")
 
         return state_val
 
@@ -340,27 +306,23 @@ class BaseMinion:
         :param state_name: str, shared dictionary key
         :param val: the value to be set
         """
-        pid, pid_checked = self.pid_check()
-        if pid_checked:
-            if minion_name == self.name:
-                if state_name in self._shared_dict.keys():
-                    self._shared_dict[state_name] = val
-                else:
-                    self.log(logging.ERROR, f"Unknown state: '{state_name}'")
-
-            elif minion_name in self._linked_minion.keys():
-                if self.is_minion_alive(minion_name):
-                    with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
-                        if state_name in tmp_dict.keys():
-                            tmp_dict[state_name] = val
-                        else:
-                            self.log(logging.ERROR, f"Unknown foreign state '{state_name}' in minion '{minion_name}'")
-                else:
-                    self.log(logging.ERROR, f"Dead minion '{minion_name}' or errors in connecting to its shared buffer")
+        if minion_name == self.name:
+            if state_name in self._shared_dict.keys():
+                self._shared_dict[state_name] = val
             else:
-                self.log(logging.ERROR, f"Unknown minion: '{minion_name}'")
+                self.log(logging.ERROR, f"Unknown state: '{state_name}'")
+
+        elif minion_name in self._linked_minion.keys():
+            if self.is_minion_alive(minion_name):
+                with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
+                    if state_name in tmp_dict.keys():
+                        tmp_dict[state_name] = val
+                    else:
+                        self.log(logging.ERROR, f"Unknown foreign state '{state_name}' in minion '{minion_name}'")
+            else:
+                self.log(logging.ERROR, f"Dead minion '{minion_name}' or errors in connecting to its shared buffer")
         else:
-            self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+            self.log(logging.ERROR, f"Unknown minion: '{minion_name}'")
 
     def set_state(self, state_name: str, state_val):
         self.set_state_to(self.name, state_name, state_val)
@@ -384,25 +346,21 @@ class BaseMinion:
 
         buffer_val = None
 
-        pid, pid_checked = self.pid_check()
-        if pid_checked:
-            shared_buffer_reference_name = f"b*{minion_name}_{buffer_name}"
-            if shared_buffer_reference_name in self._shared_dict.keys():
-                shared_buffer_name = self._shared_dict[shared_buffer_reference_name]
-                tmp_buffer: SharedBuffer
-                if self.is_buffer_alive(minion_name, buffer_name):
-                    # with SharedBuffer(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
-                    with SharedNdarray(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
-                        buffer_val = tmp_buffer.read()
-                elif minion_name == self.name:
-                    tmp_buffer = SharedNdarray(shared_buffer_name, lock=self.lock, create=False)
+        shared_buffer_reference_name = f"b*{minion_name}_{buffer_name}"
+        if shared_buffer_reference_name in self._shared_dict.keys():
+            shared_buffer_name = self._shared_dict[shared_buffer_reference_name]
+            tmp_buffer: SharedBuffer
+            if self.is_buffer_alive(minion_name, buffer_name):
+                # with SharedBuffer(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
+                with SharedNdarray(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
                     buffer_val = tmp_buffer.read()
-                else:
-                    self.log(logging.ERROR, f"Invalid buffer '{minion_name}_{buffer_name}' or errors in connections")
+            elif minion_name == self.name:
+                tmp_buffer = SharedNdarray(shared_buffer_name, lock=self.lock, create=False)
+                buffer_val = tmp_buffer.read()
             else:
-                self.log(logging.ERROR, f"Unknown buffer: '{shared_buffer_reference_name}'")
+                self.log(logging.ERROR, f"Invalid buffer '{minion_name}_{buffer_name}' or errors in connections")
         else:
-            self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+            self.log(logging.ERROR, f"Unknown buffer: '{shared_buffer_reference_name}'")
 
         return buffer_val
 
@@ -414,22 +372,18 @@ class BaseMinion:
         :param buffer_name: Foreign minion's buffer's name
         :param val: New value to be stored in the buffer
         """
-        pid, pid_checked = self.pid_check()
-        if pid_checked:
-            shared_buffer_reference_name = f"b*{minion_name}_{buffer_name}"
-            if shared_buffer_reference_name in self._shared_dict.keys():
-                shared_buffer_name = self._shared_dict[shared_buffer_reference_name]
-                tmp_buffer: SharedBuffer
-                # with SharedBuffer(shared_buffer_name, lock=sel, create=False) as tmp_buffer:
-                with SharedNdarray(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
-                    try:
-                        buffer_val = tmp_buffer.write(val)
-                    except:
-                        self.log(logging.ERROR, traceback.format_exc())
-            else:
-                self.log(logging.ERROR, f"Unknown buffer: '{shared_buffer_reference_name}'")
+        shared_buffer_reference_name = f"b*{minion_name}_{buffer_name}"
+        if shared_buffer_reference_name in self._shared_dict.keys():
+            shared_buffer_name = self._shared_dict[shared_buffer_reference_name]
+            tmp_buffer: SharedBuffer
+            # with SharedBuffer(shared_buffer_name, lock=sel, create=False) as tmp_buffer:
+            with SharedNdarray(shared_buffer_name, lock=self.lock, create=False) as tmp_buffer:
+                try:
+                    buffer_val = tmp_buffer.write(val)
+                except:
+                    self.log(logging.ERROR, traceback.format_exc())
         else:
-            self.log(logging.DEBUG, f'Access denied because of the changed PID ({self._pid}->{pid})')
+            self.log(logging.ERROR, f"Unknown buffer: '{shared_buffer_reference_name}'")
 
     def get_buffer(self, buffer_name: str):
         buffer_name = f"{self.name}_{buffer_name}"
