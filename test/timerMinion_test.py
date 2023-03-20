@@ -2,12 +2,11 @@ import traceback
 
 from bin.gui import DataframeTable
 from bin.minion import LoggerMinion
-from bin.compiler import QtCompiler
-from bin.app import AbstractGUIAPP
+from bin.compiler.graphics import QtCompiler
+from bin.widgets.prototypes import AbstractGUIAPP
 import PyQt5.QtWidgets as qw
 from time import sleep
-import PyQt5.QtCore as qc
-from PyQt5.Qt import Qt as qt
+
 
 class TestApp(AbstractGUIAPP):
 

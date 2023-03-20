@@ -6,15 +6,14 @@ import cv2
 import pandas as pd
 import serial
 
-from bin.app import AbstractGUIAPP, AbstractAPP
 import time
 import traceback
 
 import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
-import PyQt5.QtCore as qc
 
-from bin.compiler import AbstractCompiler, QtCompiler
+from bin.compiler.prototypes import AbstractCompiler
+from bin.compiler.graphics import QtCompiler
 from bin.gui import DataframeTable
 from src.tisgrabber import tisgrabber as tis
 

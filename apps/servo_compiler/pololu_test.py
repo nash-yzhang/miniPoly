@@ -1,4 +1,4 @@
-from bin.compiler import PololuServoCompiler, ArduinoCompiler, SerialCommandCompiler
+from bin.compiler.serial_devices import PololuServoCompiler, SerialCommandCompiler
 from bin.minion import LoggerMinion
 from apps.servo_compiler.app_bin import ServoCompilerGUI
 

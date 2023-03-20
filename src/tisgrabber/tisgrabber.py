@@ -704,7 +704,7 @@ class TIS_CAM(object):
             return error
 
         def GetPropertyAbsoluteValue(self, Property, Element,Value ):
-            """ Get a property value of absolute values interface, e.g. seconds or dB.
+            """ Get a property value of absolute values compiler, e.g. seconds or dB.
             Example code:
             ExposureTime=[0]
             Camera.GetPropertyAbsoluteValue("Exposure","Value", ExposureTime)

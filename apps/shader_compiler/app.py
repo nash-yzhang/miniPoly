@@ -1,4 +1,4 @@
-from bin.app import AbstractGUIAPP, AbstractGLAPP
+from bin.widgets.prototypes import AbstractGUIAPP, AbstractGLAPP
 from compiler import GLProtocolCommander, GLProtocolCompiler
 
 

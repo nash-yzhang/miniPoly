@@ -1,4 +1,4 @@
-from bin.app import APP, CanvasModule
+from bin.widgets.prototypes import APP, CanvasModule
 from bin.minion import LoggerMinion
 from multiprocessing import Lock
 class GLapp:

@@ -13,7 +13,7 @@ from bin.minion import BaseMinion, AbstractMinionMixin
 
 class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
     """
-    Base class serving as an interface between "minion" process handler and Qt GUI
+    Base class serving as an compiler between "minion" process handler and Qt GUI
     """
 
     def __init__(self, processHandler: BaseMinion = None, windowSize=(400, 400), rendererPath=None):

@@ -1,6 +1,9 @@
 from apps.IOS_Servo_App.app_bin_PCO import *
+from bin.widgets.prototypes import AbstractGUIAPP, AbstractAPP
+from bin.compiler import IOStreamingCompiler
+from bin.compiler.cameras import PCOCameraCompiler
 from bin.minion import LoggerMinion
-from time import sleep
+
 
 class CameraInterface(AbstractGUIAPP):
     def __init__(self, *args, **kwargs):

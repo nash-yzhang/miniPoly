@@ -1,12 +1,10 @@
 import ctypes
 import traceback
-import numpy as np
-import cv2
 import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
 
-from bin.app import AbstractGUIAPP
-from bin.compiler import QtCompiler
+from bin.widgets.prototypes import AbstractGUIAPP
+from bin.compiler.graphics import QtCompiler
 from src.tisgrabber import tisgrabber as tis
 from bin.minion import TimerMinion, LoggerMinion
 

@@ -1,68 +1,95 @@
-2023-03-13 18:35:20,731  TestCam logger INFO     Process-1  ----------------- START LOGGING -----------------
-2023-03-13 18:35:20,629  Servo_Pololu WARNING  Process-1 (for Process-3) Reset the callback function of the ["default"] timer
-2023-03-13 18:35:20,637  GUI      WARNING  Process-1 (for Process-5) Reset the callback function of the ["default"] timer
-2023-03-13 18:35:20,728  Serial_ArduinoNano WARNING  Process-1 (for Process-2) Reset the callback function of the ["default"] timer
-2023-03-13 18:35:22,052  GUI      INFO     Process-1 (for Process-5) Shared state: 'is_running' created
-2023-03-13 18:35:22,054  GUI      INFO     Process-1 (for Process-5) Camera Interface initialized.
-2023-03-13 18:35:20,725  Tiscam_1 WARNING  Process-1 (for Process-4) Reset the callback function of the ["default"] timer
-2023-03-13 18:35:20,728  Tiscam_1 INFO     Process-1 (for Process-4) Shared state: 'CameraName' created
-2023-03-13 18:35:20,729  Tiscam_1 INFO     Process-1 (for Process-4) Shared state: 'VideoFormat' created
-2023-03-13 18:35:20,730  Tiscam_1 INFO     Process-1 (for Process-4) Shared state: 'StreamToDisk' created
-2023-03-13 18:35:20,730  Tiscam_1 INFO     Process-1 (for Process-4) Shared state: 'SaveDir' created
-2023-03-13 18:35:20,731  Tiscam_1 INFO     Process-1 (for Process-4) Shared state: 'SaveName' created
-2023-03-13 18:35:20,731  Tiscam_1 INFO     Process-1 (for Process-4) Shared state: 'InitTime' created
-2023-03-13 18:35:20,732  Tiscam_1 INFO     Process-1 (for Process-4) Shared state: 'FrameCount' created
-2023-03-13 18:35:20,733  Tiscam_1 INFO     Process-1 (for Process-4) Shared state: 'FrameTime' created
-2023-03-13 18:35:20,733  Tiscam_1 INFO     Process-1 (for Process-4) Searching camera...
-2023-03-13 18:35:23,712  Tiscam_1 INFO     Process-1 (for Process-4) Camera DMx 22BUC03 33010546 found
-2023-03-13 18:35:23,727  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,727  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,733  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,734  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,740  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,741  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,743  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,743  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,749  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,750  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,755  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,755  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,760  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,760  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,764  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,764  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,769  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,769  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,774  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,774  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,779  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,779  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,784  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,784  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,789  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,789  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,794  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,794  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,799  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,799  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,804  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,805  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,809  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,810  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,814  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,814  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,820  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,820  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,825  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,825  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,829  GUI      ERROR    Process-1 (for Process-5) Unknown foreign buffer 'frame_Y800_(320x240)' in minion 'Tiscam_1'
-2023-03-13 18:35:23,830  GUI      ERROR    Process-1 (for Process-5) Unknown buffer: 'b*Tiscam_1_frame_Y800_(320x240)'
-2023-03-13 18:35:23,834  Tiscam_1 INFO     Process-1 (for Process-4) Camera DMx 22BUC03 33010546 initialized
-2023-03-13 18:35:23,834  Tiscam_1 INFO     Process-1 (for Process-4) Camera Tiscam_1 initialized.
-2023-03-13 18:35:23,834  Tiscam_1 INFO     Process-1 (for Process-4) Camera Interface initialized.
-2023-03-13 18:35:25,752  Serial_ArduinoNano INFO     Process-1 (for Process-2) Shared state: 'LED1' created
-2023-03-13 18:35:25,752  Serial_ArduinoNano INFO     Process-1 (for Process-2) Arduino Compiler initialized.
-2023-03-13 18:35:29,805  Serial_ArduinoNano INFO     Process-1 (for Process-2) Serial_ArduinoNano is off
-2023-03-13 18:35:29,806  Tiscam_1 INFO     Process-1 (for Process-4) Tiscam_1 is off
-2023-03-13 18:35:29,822  GUI      ERROR    Process-1 (for Process-5) Error when executing custom function during polling
-2023-03-13 18:35:29,825  GUI      ERROR    Process-1 (for Process-5) Dead minion 'Tiscam_1' or errors in connecting to its shared buffer
+2023-03-14 16:28:02,317  TestCam logger INFO     Process-1  ----------------- START LOGGING -----------------
+2023-03-14 16:28:02,355  GUI      WARNING  Process-1 (for Process-3) Reset the callback function of the ["default"] timer
+2023-03-14 16:28:03,800  GUI      INFO     Process-1 (for Process-3) Shared state: 'is_running' created
+2023-03-14 16:28:03,803  GUI      INFO     Process-1 (for Process-3) Camera Interface initialized.
+2023-03-14 16:28:02,314  Tiscam_1 WARNING  Process-1 (for Process-2) Reset the callback function of the ["default"] timer
+2023-03-14 16:28:02,318  Tiscam_1 INFO     Process-1 (for Process-2) Shared state: 'CameraName' created
+2023-03-14 16:28:02,319  Tiscam_1 INFO     Process-1 (for Process-2) Shared state: 'VideoFormat' created
+2023-03-14 16:28:02,320  Tiscam_1 INFO     Process-1 (for Process-2) Shared state: 'SaveDir' created
+2023-03-14 16:28:02,321  Tiscam_1 INFO     Process-1 (for Process-2) Shared state: 'SaveName' created
+2023-03-14 16:28:02,322  Tiscam_1 INFO     Process-1 (for Process-2) Shared state: 'StreamToDisk' created
+2023-03-14 16:28:02,324  Tiscam_1 INFO     Process-1 (for Process-2) Shared state: 'InitTime' created
+2023-03-14 16:28:02,326  Tiscam_1 INFO     Process-1 (for Process-2) Shared state: 'FrameCount' created
+2023-03-14 16:28:02,328  Tiscam_1 INFO     Process-1 (for Process-2) Shared state: 'FrameTime' created
+2023-03-14 16:28:02,328  Tiscam_1 INFO     Process-1 (for Process-2) Searching camera...
+2023-03-14 16:28:07,215  Tiscam_1 INFO     Process-1 (for Process-2) Camera DMx 22BUC03 33010546 found
+2023-03-14 16:28:07,233  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,242  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,246  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,251  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,256  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,261  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,266  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,271  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,276  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,281  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,286  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,291  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,296  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,301  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,306  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,311  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,316  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,323  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,327  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(320x240)' in minion 'Tiscam_1'
+2023-03-14 16:28:07,328  Tiscam_1 INFO     Process-1 (for Process-2) Shared state: 'frame_Y800_(320x240)' created
+2023-03-14 16:28:07,328  Tiscam_1 INFO     Process-1 (for Process-2) Camera DMx 22BUC03 33010546 initialized
+2023-03-14 16:28:07,328  Tiscam_1 INFO     Process-1 (for Process-2) Camera Tiscam_1 initialized.
+2023-03-14 16:28:07,329  Tiscam_1 INFO     Process-1 (for Process-2) Camera Interface initialized.
+2023-03-14 16:29:01,725  Tiscam_1 INFO     Process-1 (for Process-2) Camera disconnected
+2023-03-14 16:29:04,993  Tiscam_1 INFO     Process-1 (for Process-2) Searching camera...
+2023-03-14 16:29:04,994  Tiscam_1 INFO     Process-1 (for Process-2) Camera DMx 22BUC03 33010546 found
+2023-03-14 16:29:04,999  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,004  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,009  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,014  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,017  Tiscam_1 INFO     Process-1 (for Process-2) Camera DMx 22BUC03 33010546 initialized
+2023-03-14 16:29:05,019  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,024  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,029  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,034  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,039  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,044  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,049  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,054  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,059  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,065  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,069  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,074  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,079  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,084  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,089  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,095  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,099  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,104  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,111  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,114  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,119  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,124  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,129  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,134  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,139  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,145  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,149  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,154  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,159  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,164  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,169  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,174  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,180  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,186  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,189  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,194  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,201  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,205  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,210  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,214  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,219  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,224  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,229  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,234  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,239  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,244  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,250  GUI      ERROR    Process-1 (for Process-3) Unknown foreign state 'frame_Y800_(744x480)' in minion 'Tiscam_1'
+2023-03-14 16:29:05,252  Tiscam_1 INFO     Process-1 (for Process-2) Shared state: 'frame_Y800_(744x480)' created
+2023-03-14 16:30:04,960  Tiscam_1 INFO     Process-1 (for Process-2) Tiscam_1 is off

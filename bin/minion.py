@@ -469,7 +469,7 @@ class BaseMinion:
 
     @status.setter
     def status(self, value):
-        self._shared_dict[self._status_name].write(value)
+        self._shared_buffer[self._status_name].write(value)
 
     def is_minion_alive(self, minion_name: str):
         """
@@ -562,6 +562,7 @@ class BaseMinion:
         if self.logger is not None:
             self.log(logging.INFO, self.name + " is off")
             self.status = -2
+
         for i in list(self._queue.keys()):
             self.disconnect(i)
         for i in list(self._queue.keys()):
@@ -886,7 +887,7 @@ class TimerMinion(BaseMinion):
 
 class AbstractMinionMixin:
     '''
-    This class should serve as an interface between Qt window and minion process handler,
+    This class should serve as an compiler between Qt window and minion process handler,
     All interaction rules between the two components should be defined here
     '''
     _processHandler: BaseMinion
