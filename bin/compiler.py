@@ -585,7 +585,7 @@ class TISCameraCompiler(AbstractCompiler):
             if k in ['StreamToDisk', 'FrameCount']:
                 self.create_state(k, v, use_buffer=True)
             elif k in ['FrameTime', 'InitTime']:
-                self.create_state(k, v, use_buffer=True, dtype=np.float)
+                self.create_state(k, v, use_buffer=True, dtype=np.float64)
             else:
                 self.create_state(k, v)
         self._init_camera()
