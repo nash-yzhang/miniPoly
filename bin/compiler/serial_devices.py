@@ -3,8 +3,11 @@ import os
 import traceback
 from time import perf_counter
 
+import numpy as np
 import pyfirmata as fmt
 import serial
+import usb.core
+import usb.util
 
 from bin.compiler.prototypes import AbstractCompiler
 
@@ -300,3 +303,63 @@ class ArduinoCompiler(AbstractCompiler):
     def on_close(self):
         self.set_state('status', -1)
         self._port.exit()
+
+class OMSCompiler(AbstractCompiler):
+
+    def __init__(self, *args, VID=None, PID=None, timeout=10, mw_size=1, **kwargs):
+        super(OMSCompiler, self).__init__(*args, **kwargs)
+        if VID is None or PID is None:
+            raise ValueError('VID and PID must be set')
+        else:
+            self._VID = VID
+            self._PID = PID
+
+        self.device = usb.core.find(idVendor=self._VID, idProduct=self._PID)
+        if self.device is not None:
+            self.device.set_configuration()
+            self._endpoint = self.device[0][(0,0)][0]
+        else:
+            raise ValueError(f'Device not found. VID: {self._VID}, PID: {self._PID}')
+
+        self._timeout = timeout
+        self._mw_size = mw_size
+        self._pos_buffer = np.zeros((self._mw_size, 2))
+
+        self.create_state('xPos', 0)
+        self.create_state('yPos', 0)
+
+    def on_time(self, t):
+        try:
+            x, y = self._read_device()
+            if x is not None and y is not None:
+                self._pos_buffer = np.roll(self._pos_buffer, -1, axis=0)
+                self._pos_buffer[-1, 0] = x
+                self._pos_buffer[-1, 1] = y
+                xPos,yPos = np.nanmean(self._pos_buffer, axis=0)
+
+                self.set_state('xPos', xPos)
+                self.set_state('yPos', yPos)
+        except:
+            print(traceback.format_exc())
+
+    def _read_device(self):
+        try:
+            data = self.device.read(self._endpoint.bEndpointAddress, self._endpoint.wMaxPacketSize, self._timeout)
+            if data is not None:
+                x = data[2]
+                y = data[4]
+                if x > 127:
+                    x = (x - 256)/128
+                else:
+                    x = (x+1)/128
+                if y > 127:
+                    y = (y - 256)/128
+                else:
+                    y = (y+1)/128
+                return x, y
+        except:
+            self.debug('OMS device timeout')
+            return None, None
+
+    def on_close(self):
+        self.set_state('status', -1)

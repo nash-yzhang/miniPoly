@@ -1,23 +1,26 @@
 import os
 
+import numpy as np
+
 from bin.widgets.prototypes import AbstractGUIAPP, AbstractAPP
 import time
 import traceback
 
 import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
+import pyqtgraph as pg
 
 from bin.compiler.graphics import QtCompiler
-from bin.compiler.serial_devices import PololuServoCompiler, ArduinoCompiler
-from bin.compiler.cameras import TISCameraCompiler
 from bin.gui import DataframeTable
+from bin.compiler.serial_devices import OMSCompiler
 from src.tisgrabber import tisgrabber as tis
+
 
 class CameraStimGUI(QtCompiler):
     _SERVO_MIN = 2400
     _SERVO_MAX = 9000
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, surveillance_state={}, **kwargs):
         super(CameraStimGUI, self).__init__(*args, **kwargs)
         self._camera_minions = [i for i in self.get_linked_minion_names() if 'tiscam' in i.lower()]
         self._connected_camera_minions = {}
@@ -28,6 +31,8 @@ class CameraStimGUI(QtCompiler):
         self._root_folder = None
         self._save_camera_list = []
 
+        self.surveillance_state = surveillance_state
+
         self._tiscamHandle = tis.TIS_CAM()
 
         self._deviceList = self._tiscamHandle.GetDevices()
@@ -35,11 +40,33 @@ class CameraStimGUI(QtCompiler):
         self._servo_minion = [i for i in self.get_linked_minion_names() if 'servo' in i.lower()]
         self._serial_minion = [i for i in self.get_linked_minion_names() if 'serial' in i.lower()]
 
+        # OMS module
+        self._OMS_minion = [i for i in self.get_linked_minion_names() if 'oms' in i.lower()][0]
+
+        self._plots = {}
+        self._plots_arr = {}
+        self._time_arr = np.zeros(2000, dtype=np.float64)
+        self._update_surveillance_state_list()
+
         self._init_main_window()
         self._init_menu()
 
+    def _update_surveillance_state_list(self):
+        for k, v_list in self.surveillance_state.items():
+            for v in v_list:
+                val = self.get_state_from(k, v)
+                val_type = type(val)
+                if self._plots_arr.get(k) is None:
+                    self._plots_arr[k] = {}
+                if val_type in [int, float, bool]:
+                    self._plots_arr[k][v] = np.zeros(2000, dtype=np.float64)
+                else:
+                    self._plots_arr[k][v] = None
+                    self.warning(
+                        f'The type of the state {k}.{v} ({val_type}) is not unsupported for plotting')
+
     def _init_main_window(self):
-        self.layout_main = qw.QVBoxLayout()
+        self.layout_main = qw.QGridLayout()
         self.layout_CamView = qw.QHBoxLayout()
 
         self.layout_SavePanel = qw.QVBoxLayout()
@@ -84,9 +111,27 @@ class CameraStimGUI(QtCompiler):
         self.layout_stimGUI.addLayout(self.groupbox_layout)
         self.layout_stimGUI.addWidget(self.timer_switcher)
 
-        self.layout_main.addLayout(self.layout_CamView)
-        self.layout_main.addLayout(self.layout_SavePanel)
-        self.layout_main.addLayout(self.layout_stimGUI)
+        self.layout_state_monitor = qw.QHBoxLayout()
+        self.layout_state_monitor.heightForWidth(50)
+        self.qtPlotWidget = pg.PlotWidget()
+        self.qtPlotWidget.setBackground('w')
+        self.layout_state_monitor.addWidget(self.qtPlotWidget, 5)
+        for k, v_list in self.surveillance_state.items():
+            for v in v_list:
+                if self._plots_arr[k][v] is not None:
+                    if self._plots.get(k) is None:
+                        self._plots[k] = {}
+                    self._plots[k][v] = self.qtPlotWidget.plot(self._time_arr, self._plots_arr[k][v], pen=pg.mkPen(np.random.randint(0,255,3), width=2))
+
+        self.layout_main.addLayout(self.layout_CamView, 0, 0, 2, 2)
+        self.layout_main.addLayout(self.layout_SavePanel, 0, 2, 1, 1)
+        self.layout_main.addLayout(self.layout_stimGUI, 1, 2, 1, 1)
+        self.layout_main.addLayout(self.layout_state_monitor, 2, 0, 1, 3)
+
+        self.layout_main.setColumnStretch(0, 2)
+        self.layout_main.setColumnStretch(2, 1)
+        self.layout_main.setRowStretch(1, 2)
+        self.layout_main.setRowStretch(2, 1)
 
         self.main_widget = qw.QWidget()
         self.main_widget.setLayout(self.layout_main)
@@ -276,14 +321,16 @@ class CameraStimGUI(QtCompiler):
     def _disconnect_camera(self, cameraName, saveConfig=False, saveGUI=False):
 
         if cameraName not in self._connected_camera_minions.keys():
-            self.error('Camera not connected')
+            self.error('Camera has not been connected')
         else:
             self.set_state_to(self._connected_camera_minions[cameraName], 'CameraName', None)
             self._connected_camera_minions.pop(cameraName)
             if not saveConfig:
                 self._camera_param.pop(cameraName)
             if not saveGUI:
-                self.layout_CamView.removeWidget(self._videoStreams[cameraName][0])
+                for i in self._videoStreams[cameraName]:
+                    self.layout_CamView.removeWidget(i)
+                    i.deleteLater()
                 self._videoStreams.pop(cameraName)
 
     def refresh(self, cameraName):
@@ -292,42 +339,70 @@ class CameraStimGUI(QtCompiler):
         self._connect_camera(cameraName)
 
     def setupCameraFrameGUI(self, cameraName):
-        self._videoStreams[cameraName] = [qw.QWidget(),
-                                          qw.QLabel(cameraName),
+        self._videoStreams[cameraName] = [pg.ImageView(name=cameraName,),
                                           qw.QPushButton('Refresh'),
-                                          qw.QLabel('Save: '),
+                                          qw.QPushButton('toggleImageSettings'),
                                           qw.QCheckBox('Save')]
         cameraWidget = self._videoStreams[cameraName][0]
-        camNameLabel = self._videoStreams[cameraName][1]
-        refresh_btn = self._videoStreams[cameraName][2]
-        save_label = self._videoStreams[cameraName][3]
-        save_checkbox = self._videoStreams[cameraName][4]
+        refresh_btn = self._videoStreams[cameraName][1]
+        toggle_btn = self._videoStreams[cameraName][2]
+        save_checkbox = self._videoStreams[cameraName][3]
 
-        layout = qw.QVBoxLayout()
-        self._videoStreams[cameraName][1].setPixmap(qg.QPixmap())
-        sublayout = qw.QHBoxLayout()
+        layout = qw.QGridLayout()
+        cameraWidget: pg.ImageView
+        cameraWidget.setColorMap(pg.colormap.get('CET-L1'))
+        cameraWidget.show()
         refresh_btn.clicked.connect(lambda: self.refresh(cameraName))
-        sublayout.addWidget(refresh_btn)
-        sublayout.addWidget(save_label)
-        sublayout.addWidget(save_checkbox)
+        toggle_btn.clicked.connect(lambda: self.toggle_ImageViewControl(cameraName))
+        self.toggle_ImageViewControl(cameraName)
+        layout.addWidget(cameraWidget,0, 0, 2, 3)
+        layout.addWidget(refresh_btn, 2, 0, 1, 1)
+        layout.addWidget(toggle_btn, 2, 1, 1, 1)
+        layout.addWidget(save_checkbox, 2, 2, 1, 1)
 
-        layout.addWidget(camNameLabel)
-        layout.addLayout(sublayout)
-        cameraWidget.setLayout(layout)
-        self.layout_CamView.addWidget(cameraWidget)
+        self.layout_CamView.addLayout(layout)
+
+    def toggle_ImageViewControl(self, cameraName):
+        cameraWidget = self._videoStreams[cameraName][0]
+        if cameraWidget.ui.menuBtn.isVisible():
+            cameraWidget.ui.roiBtn.hide()
+            cameraWidget.ui.menuBtn.hide()
+            cameraWidget.ui.histogram.hide()
+        else:
+            cameraWidget.ui.roiBtn.show()
+            cameraWidget.ui.menuBtn.show()
+            cameraWidget.ui.histogram.show()
 
     def on_time(self, t):
         for camName, mi in self._connected_camera_minions.items():
             try:
                 frame = self.get_state_from(mi, self._camera_param[camName]['buffer_name'])
                 if frame is not None:
-                    self._videoStreams[camName][1].setPixmap(
-                        qg.QPixmap.fromImage(qg.QImage(frame[:,:,0], frame.shape[1], frame.shape[0], frame.strides[0],
-                                                       qg.QImage.Format_Grayscale8)))
+                    camWidget = self._videoStreams[camName][0]
+                    camWidget: pg.ImageView
+                    if camWidget.image is None:
+                        _init_auto_level=True
+                    camWidget.setImage(frame[:, :, 0], autoRange=False, autoLevels=False)
+                    if _init_auto_level:
+                        camWidget.autoLevels()
             except:
                 self.debug('Error when trying to get frame from camera minion.')
                 self.debug(traceback.format_exc())
+
+        self.update_plot_arr(t)
         self._processHandler.on_time(t)
+
+    def update_plot_arr(self, t):
+        self._time_arr[:-1] = self._time_arr[1:]
+        self._time_arr[-1] = t
+        for k, v_list in self.surveillance_state.items():
+            for v in v_list:
+                if self._plots_arr[k][v] is not None:
+                    self._plots_arr[k][v][:-1] = self._plots_arr[k][v][1:]
+                    new_val = self.get_state_from(k, v)
+                    if new_val is not None:
+                        self._plots_arr[k][v][-1] = new_val
+                    self._plots[k][v].setData(self._time_arr, self._plots_arr[k][v])
 
     def addTableBox(self, name):
         frame = qw.QGroupBox(self)
@@ -386,18 +461,32 @@ class CameraStimGUI(QtCompiler):
                                     if s in self.get_shared_state_names(m):
                                         if 'servo' in m.lower():
                                             state = float(data[k][row_idx] * (
-                                                        self._SERVO_MAX - self._SERVO_MIN) + self._SERVO_MIN)
+                                                    self._SERVO_MAX - self._SERVO_MIN) + self._SERVO_MIN)
                                         else:
                                             state = float(data[k][row_idx])
                                         self.set_state_to(m, s, state)
 
 
 class CameraInterface(AbstractGUIAPP):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, surveillance_state=None, **kwargs):
         super(CameraInterface, self).__init__(*args, **kwargs)
+        self._surveillance_state = surveillance_state
 
     def initialize(self):
         super().initialize()
-        self._win = CameraStimGUI(self)
+        self._win = CameraStimGUI(self, surveillance_state=self._surveillance_state)
         self.info("Camera Interface initialized.")
         self._win.show()
+
+
+class OMSInterface(AbstractAPP):
+    def __init__(self, *args, VID=None, PID=None, mw_size=1, **kwargs):
+        super(OMSInterface, self).__init__(*args, **kwargs)
+        self._VID = VID
+        self._PID = PID
+        self._mw_size = mw_size
+
+    def initialize(self):
+        super().initialize()
+        self._compiler = OMSCompiler(self, VID=self._VID, PID=self._PID, mw_size=self._mw_size)
+        self.info("OMS compiler initialized.")

@@ -1,31 +1,25 @@
-from apps.TISCam_compiler.app_bin import *
+from apps.CaImg_App.app_bin import *
 from bin.widgets.cameras import TisCamApp
 from bin.minion import LoggerMinion
 
+VENDOR_ID = 0X046D
+PRODUCT_ID = 0xC24E
+
 if __name__ == '__main__':
     Cam = TisCamApp('Tiscam_1', save_option='movie', refresh_interval=10)
-    Cam2 = TisCamApp('Tiscam_2', save_option='movie', refresh_interval=10)
     GUI = CameraInterface('GUI', refresh_interval=5)
-    # pololu_servo = PololuServoApp('Servo_Pololu', refresh_interval=5, port_name='COM5',
-    #                                    servo_dict={'yaw': 3, 'radius': 5, 'flagging': 1, })
-    # arduino_board = ArduinoApp('Serial_ArduinoNano', refresh_interval=1, port_name='COM7', pin_address={'LED1': 'd:8:o'})
+    OMS = OMSInterface('OMS', refresh_interval=5, VID = VENDOR_ID, PID = PRODUCT_ID)
     logger = LoggerMinion('TestCam logger')
     logger.set_level('DEBUG')
 
     Cam.connect(GUI)
-    Cam2.connect(GUI)
-    # pololu_servo.connect(GUI)
-    # arduino_board.connect(GUI)
+    OMS.connect(GUI)
 
     Cam.attach_logger(logger)
-    Cam2.attach_logger(logger)
     GUI.attach_logger(logger)
-    # pololu_servo.attach_logger(logger)
-    # arduino_board.attach_logger(logger)
+    OMS.attach_logger(logger)
 
     logger.run()
-    # arduino_board.run()
-    # pololu_servo.run()
+    OMS.run()
     Cam.run()
-    Cam2.run()
     GUI.run()
