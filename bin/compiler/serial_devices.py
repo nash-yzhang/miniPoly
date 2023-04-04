@@ -280,22 +280,37 @@ class ArduinoCompiler(AbstractCompiler):
         self._port_name = port_name
         self.pin_address = pin_address
         self._port = None
-        self.pin_dict = {}
+        self.input_pin_dict = {}
+        self.output_pin_dict = {}
 
         try:
             self._port = fmt.Arduino(self._port_name)
             self._watching_state = {}
             for n, v in self.pin_address.items():
-                try:
-                    self.pin_dict[n] = self._port.get_pin(v)
-                    self.create_state(n, self.pin_dict[n].read())
-                except:
-                    print(traceback.format_exc())
+                if v.split(":")[-1] == 'i':
+                    try:
+                        self.input_pin_dict[n] = self._port.get_pin(v)
+                        self.create_state(n, self.input_pin_dict[n].read())
+                    except:
+                        print(traceback.format_exc())
+                elif v.split(":")[-1] == 'o':
+                    try:
+                        self.output_pin_dict[n] = self._port.get_pin(v)
+                        self.create_state(n, 0)
+                    except:
+                        print(traceback.format_exc())
         except:
             print(traceback.format_exc())
 
     def on_time(self, t):
-        for n, v in self.pin_dict.items():
+        while self._port.bytes_available():
+            self._port.iterate()
+        for n, v in self.input_pin_dict.items():
+            state = v.read()
+            if self.watch_state(n, state) and state is not None:
+                self.set_state(n,state)
+
+        for n, v in self.output_pin_dict.items():
             state = self.get_state(n)
             if self.watch_state(n, state) and state is not None:
                 v.write(state)

@@ -12,7 +12,7 @@ import pyqtgraph as pg
 
 from bin.compiler.graphics import QtCompiler
 from bin.gui import DataframeTable
-from bin.compiler.serial_devices import OMSCompiler
+from bin.compiler.serial_devices import OMSCompiler, ArduinoCompiler
 from src.tisgrabber import tisgrabber as tis
 
 
@@ -41,7 +41,9 @@ class CameraStimGUI(QtCompiler):
         self._serial_minion = [i for i in self.get_linked_minion_names() if 'serial' in i.lower()]
 
         # OMS module
-        self._OMS_minion = [i for i in self.get_linked_minion_names() if 'oms' in i.lower()][0]
+        self._OMS_minion = [i for i in self.get_linked_minion_names() if 'oms' in i.lower()]
+        if self._OMS_minion:
+            self._OMS_minion = self._OMS_minion[0]
 
         self._plots = {}
         self._plots_arr = {}
@@ -490,3 +492,53 @@ class OMSInterface(AbstractAPP):
         super().initialize()
         self._compiler = OMSCompiler(self, VID=self._VID, PID=self._PID, mw_size=self._mw_size)
         self.info("OMS compiler initialized.")
+
+class PeakDetectorCompiler(ArduinoCompiler):
+
+    def __init__(self, *args, peak_detect_chn=None, **kwargs):
+        super(PeakDetectorCompiler, self).__init__(*args, **kwargs)
+        self._peak_detect_chn = peak_detect_chn
+        self._iter_counter = 0
+        self._time_buffer = 0
+        if self._peak_detect_chn is not None:
+            self._detect_peak = True
+            self._peak_detect_buffer = {}
+            for chn in self._peak_detect_chn:
+                self.create_state('PEAK_'+chn, 0)
+                self._peak_detect_buffer[chn] = np.zeros(100)
+        else:
+            self._detect_peak = False
+
+    def on_time(self, t):
+        super().on_time(t)
+        if self._iter_counter == 1000:
+            self._iter_counter = 0
+            print(t-self._time_buffer)
+            self._time_buffer = t
+        else:
+            self._iter_counter += 1
+        if self._detect_peak:
+            for chn in self._peak_detect_chn:
+                cur_state = self.get_state(chn)
+                buffer = self._peak_detect_buffer[chn]
+                grad_mean = np.diff(buffer).mean()
+                buffer_std = 0.05
+                if buffer.mean()+grad_mean+2*buffer_std < cur_state:
+                    self.set_state('PEAK_'+chn, -1)
+                    self.set_state('PEAK_'+chn, 0)
+                elif buffer.mean()+grad_mean-2*buffer_std > cur_state:
+                    self.set_state('PEAK_'+chn, 1)
+                    self.set_state('PEAK_'+chn, 0)
+                self._peak_detect_buffer[chn] = np.roll(self._peak_detect_buffer[chn],-1)
+                self._peak_detect_buffer[chn][-1] = cur_state
+
+
+class ArduinoInterface(AbstractAPP):
+    def __init__(self, *args, port_name=None, pin_address={}, peak_detect_chn=None, **kwargs):
+        super(ArduinoInterface, self).__init__(*args, **kwargs)
+        self._param_to_compiler = {'port_name': port_name, 'pin_address': pin_address, 'peak_detect_chn': peak_detect_chn}
+
+    def initialize(self):
+        super().initialize()
+        self._compiler = PeakDetectorCompiler(self, **self._param_to_compiler)
+        self.info("Arduino compiler initialized.")
