@@ -15,6 +15,10 @@ from bin.gui import DataframeTable
 from bin.compiler.serial_devices import OMSCompiler, ArduinoCompiler
 from src.tisgrabber import tisgrabber as tis
 
+from bin.compiler.prototypes import AbstractCompiler
+from serial import Serial
+# import pyfirmata2 as fmt
+
 
 class CameraStimGUI(QtCompiler):
     _SERVO_MIN = 2400
@@ -62,10 +66,12 @@ class CameraStimGUI(QtCompiler):
                     self._plots_arr[k] = {}
                 if val_type in [int, float, bool]:
                     self._plots_arr[k][v] = np.zeros(2000, dtype=np.float64)
+                elif val_type == np.ndarray:
+                    self._plots_arr[k][v] = val
                 else:
                     self._plots_arr[k][v] = None
                     self.warning(
-                        f'The type of the state {k}.{v} ({val_type}) is not unsupported for plotting')
+                        f'The type of the state {k}.{v} ({val_type}) is not supported for plotting')
 
     def _init_main_window(self):
         self.layout_main = qw.QGridLayout()
@@ -113,7 +119,7 @@ class CameraStimGUI(QtCompiler):
         self.layout_stimGUI.addLayout(self.groupbox_layout)
         self.layout_stimGUI.addWidget(self.timer_switcher)
 
-        self.layout_state_monitor = qw.QHBoxLayout()
+        self.layout_state_monitor = qw.QVBoxLayout()
         self.layout_state_monitor.heightForWidth(50)
         self.qtPlotWidget = pg.PlotWidget()
         self.qtPlotWidget.setBackground('w')
@@ -123,7 +129,23 @@ class CameraStimGUI(QtCompiler):
                 if self._plots_arr[k][v] is not None:
                     if self._plots.get(k) is None:
                         self._plots[k] = {}
-                    self._plots[k][v] = self.qtPlotWidget.plot(self._time_arr, self._plots_arr[k][v], pen=pg.mkPen(np.random.randint(0,255,3), width=2))
+                    if self._plots_arr[k][v].ndim == 2:
+                        data = self._plots_arr[k][v]
+                        self._plots[k][v] = []
+                        for i in range(1,data.shape[1]):
+                            self._plots[k][v].append(self.qtPlotWidget.plot(data[:,0], data[:,i],
+                                                                   pen=pg.mkPen(np.random.randint(0, 255, 3), width=2)))
+                    else:
+                        self._plots[k][v] = self.qtPlotWidget.plot(self._time_arr, self._plots_arr[k][v],
+                                                               pen=pg.mkPen(np.random.randint(0, 255, 3), width=2))
+        self.btn_frame_reset = qw.QPushButton('Reset')
+        self.btn_frame_reset.clicked.connect(self._reset_frame)
+        self.btn_freeze_frame = qw.QPushButton('Freeze')
+        self.btn_freeze_frame.clicked.connect(self._freeze_frame)
+        self.layout_state_monitor_controller = qw.QHBoxLayout()
+        self.layout_state_monitor_controller.addWidget(self.btn_freeze_frame, 1)
+        self.layout_state_monitor_controller.addWidget(self.btn_frame_reset, 1)
+        self.layout_state_monitor.addLayout(self.layout_state_monitor_controller, 1)
 
         self.layout_main.addLayout(self.layout_CamView, 0, 0, 2, 2)
         self.layout_main.addLayout(self.layout_SavePanel, 0, 2, 1, 1)
@@ -138,6 +160,19 @@ class CameraStimGUI(QtCompiler):
         self.main_widget = qw.QWidget()
         self.main_widget.setLayout(self.layout_main)
         self.setCentralWidget(self.main_widget)
+
+    def _reset_frame(self):
+        self.set_state_to('Aux', 'frames', 0)
+
+    def _freeze_frame(self):
+        if self.btn_freeze_frame.text() == 'Freeze':
+            self.btn_freeze_frame.setStyleSheet('background-color: gray')
+            self.btn_freeze_frame.setText('Unfreeze')
+            self.set_state_to('Aux', 'freeze', 0)
+        else:
+            self.btn_freeze_frame.setStyleSheet('background-color: cyan')
+            self.btn_freeze_frame.setText('Freeze')
+            self.set_state_to('Aux', 'freeze', 1)
 
     def _browse_root_folder(self):
         self._root_folder = str(qw.QFileDialog.getExistingDirectory(self, 'Open Folder', '.',
@@ -341,7 +376,7 @@ class CameraStimGUI(QtCompiler):
         self._connect_camera(cameraName)
 
     def setupCameraFrameGUI(self, cameraName):
-        self._videoStreams[cameraName] = [pg.ImageView(name=cameraName,),
+        self._videoStreams[cameraName] = [pg.ImageView(name=cameraName, ),
                                           qw.QPushButton('Refresh'),
                                           qw.QPushButton('toggleImageSettings'),
                                           qw.QCheckBox('Save')]
@@ -357,7 +392,7 @@ class CameraStimGUI(QtCompiler):
         refresh_btn.clicked.connect(lambda: self.refresh(cameraName))
         toggle_btn.clicked.connect(lambda: self.toggle_ImageViewControl(cameraName))
         self.toggle_ImageViewControl(cameraName)
-        layout.addWidget(cameraWidget,0, 0, 2, 3)
+        layout.addWidget(cameraWidget, 0, 0, 2, 3)
         layout.addWidget(refresh_btn, 2, 0, 1, 1)
         layout.addWidget(toggle_btn, 2, 1, 1, 1)
         layout.addWidget(save_checkbox, 2, 2, 1, 1)
@@ -383,7 +418,7 @@ class CameraStimGUI(QtCompiler):
                     camWidget = self._videoStreams[camName][0]
                     camWidget: pg.ImageView
                     if camWidget.image is None:
-                        _init_auto_level=True
+                        _init_auto_level = True
                     camWidget.setImage(frame[:, :, 0], autoRange=False, autoLevels=False)
                     if _init_auto_level:
                         camWidget.autoLevels()
@@ -403,8 +438,12 @@ class CameraStimGUI(QtCompiler):
                     self._plots_arr[k][v][:-1] = self._plots_arr[k][v][1:]
                     new_val = self.get_state_from(k, v)
                     if new_val is not None:
-                        self._plots_arr[k][v][-1] = new_val
-                    self._plots[k][v].setData(self._time_arr, self._plots_arr[k][v])
+                        if type(new_val) is np.ndarray:
+                            for i in range(len(self._plots[k][v])):
+                                self._plots[k][v][i].setData(new_val[:, 0], new_val[:, i+1])
+                        else:
+                            self._plots_arr[k][v][-1] = new_val
+                            self._plots[k][v].setData(self._time_arr, self._plots_arr[k][v])
 
     def addTableBox(self, name):
         frame = qw.QGroupBox(self)
@@ -493,50 +532,104 @@ class OMSInterface(AbstractAPP):
         self._compiler = OMSCompiler(self, VID=self._VID, PID=self._PID, mw_size=self._mw_size)
         self.info("OMS compiler initialized.")
 
-class PeakDetectorCompiler(ArduinoCompiler):
 
-    def __init__(self, *args, peak_detect_chn=None, **kwargs):
+class PeakDetectorCompiler(AbstractCompiler):
+
+    def __init__(self, *args, port_name='COM7', **kwargs):
         super(PeakDetectorCompiler, self).__init__(*args, **kwargs)
-        self._peak_detect_chn = peak_detect_chn
-        self._iter_counter = 0
-        self._time_buffer = 0
-        if self._peak_detect_chn is not None:
-            self._detect_peak = True
-            self._peak_detect_buffer = {}
-            for chn in self._peak_detect_chn:
-                self.create_state('PEAK_'+chn, 0)
-                self._peak_detect_buffer[chn] = np.zeros(100)
-        else:
-            self._detect_peak = False
+        self._port_name = port_name
+        self._port = None
+        self.input_pin_dict = {}
+        self.output_pin_dict = {}
+
+        # self._port = fmt.Arduino(self._port_name)
+        self._port = Serial(self._port_name, baudrate=115200, timeout=1)
+        # self._port.samplingOn(1000/1000)
+        #
+        # self._port.analog[0].register_callback(self._analog_callback)
+        # self._port.analog[0].enable_reporting()
+        self._buffer_data = np.zeros([5000,3], dtype=np.int64)
+        self._emitted = False
+        self.create_shared_buffer('mirPos', self._buffer_data)
+        self.create_state('frames', 0)
+        self.create_state('freeze', 0)
+        # self._integrator_buffer = []
+        # self._outputfile_handle = open('peak_detect.csv', 'w', newline='')
+        # self._outputfile_writer = csv.writer(self._outputfile_handle)
+        # name_row = []
+        # for k in self.input_pin_dict.keys():
+        #     name_row.append(k)
+        #
+        # for k in self.output_pin_dict.keys():
+        #     name_row.append(k)
+        #
+        # self._outputfile_writer.writerow(name_row)
+        #
+        # self._peak_detect_chn = peak_detect_chn
+        # self._iter_counter = 0
+        # self._time_buffer = 0
+        # if self._peak_detect_chn is not None:
+        #     self._detect_peak = True
+        #     self._peak_detect_buffer = {}
+        #     for chn in self._peak_detect_chn:
+        #         self.create_state('PEAK_'+chn, 0)
+        #         self._peak_detect_buffer[chn] = np.zeros(100)
+        # else:
+        #     self._detect_peak = False
+
+    # def _analog_callback(self, data):
+    #     self.set_state('mirPos', data)
+        # self._integrator_buffer.append(data)
+        # if len(self._integrator_buffer) > 20:
+        #     self._integrator_buffer = self._integrator_buffer[-20:]
+        #     if np.mean(self._integrator_buffer[:10]) - np.mean(self._integrator_buffer[-10:]) > 0.1:
+        #         self.set_state('mirPos', 1)
+        #     else:
+        #         self.set_state('mirPos', 0)
+        # else:
+        #     self.set_state('mirPos', -1)
+        # val_row = []
+        # for k in self.input_pin_dict.keys():
+        #     val_row.append(self.get_state(k))
+        # for k in self.output_pin_dict.keys():
+        #     val_row.append(self.get_state(k))
+        # self._outputfile_writer.writerow(val_row)
+    def detect_frame(self):
+        baseline_thre = 100
+        reset_grad_thre = -40
+        try:
+            getData = self._port.readline()
+            data = getData.decode('utf-8')
+            if "---" in data and "+++" in data:
+                data = data.split('---')[1].split('+++')[0]
+                data = data.split(',')
+                self._buffer_data[:-1, :] = self._buffer_data[1:, :]
+                self._buffer_data[-1, :] = [int(data[0]), int(data[1]), int(data[1]) - self._buffer_data[-2, 1]]
+                ttl_pulse = self._buffer_data[-1, 2] < reset_grad_thre and self._buffer_data[-2, 2] > reset_grad_thre
+                cur_frame_num = self.get_state('frames')
+                if ttl_pulse:
+                    cur_frame_num += 1
+                    self.set_state('frames', cur_frame_num)
+                    print(cur_frame_num)
+                self.set_state('mirPos', self._buffer_data)
+                if self._buffer_data[-20:,1].max() < baseline_thre and cur_frame_num > 0:
+                    self.set_state('frames', 0)
+        except Exception as e:
+            self.error(e)
+
 
     def on_time(self, t):
-        super().on_time(t)
-        if self._iter_counter == 1000:
-            self._iter_counter = 0
-            print(t-self._time_buffer)
-            self._time_buffer = t
-        else:
-            self._iter_counter += 1
-        if self._detect_peak:
-            for chn in self._peak_detect_chn:
-                cur_state = self.get_state(chn)
-                buffer = self._peak_detect_buffer[chn]
-                grad_mean = np.diff(buffer).mean()
-                buffer_std = 0.05
-                if buffer.mean()+grad_mean+2*buffer_std < cur_state:
-                    self.set_state('PEAK_'+chn, -1)
-                    self.set_state('PEAK_'+chn, 0)
-                elif buffer.mean()+grad_mean-2*buffer_std > cur_state:
-                    self.set_state('PEAK_'+chn, 1)
-                    self.set_state('PEAK_'+chn, 0)
-                self._peak_detect_buffer[chn] = np.roll(self._peak_detect_buffer[chn],-1)
-                self._peak_detect_buffer[chn][-1] = cur_state
+        if not self.get_state('freeze'):
+            self.detect_frame()
 
+    def on_close(self):
+        self._outputfile_handle.close()
+        super().on_close()
 
 class ArduinoInterface(AbstractAPP):
-    def __init__(self, *args, port_name=None, pin_address={}, peak_detect_chn=None, **kwargs):
+    def __init__(self, *args, port_name=None, **kwargs):
         super(ArduinoInterface, self).__init__(*args, **kwargs)
-        self._param_to_compiler = {'port_name': port_name, 'pin_address': pin_address, 'peak_detect_chn': peak_detect_chn}
+        self._param_to_compiler = {'port_name': port_name}
 
     def initialize(self):
         super().initialize()

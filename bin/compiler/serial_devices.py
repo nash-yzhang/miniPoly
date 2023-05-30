@@ -4,7 +4,7 @@ import traceback
 from time import perf_counter
 
 import numpy as np
-import pyfirmata as fmt
+import pyfirmata2 as fmt
 import serial
 import usb.core
 import usb.util
@@ -303,8 +303,8 @@ class ArduinoCompiler(AbstractCompiler):
             print(traceback.format_exc())
 
     def on_time(self, t):
-        while self._port.bytes_available():
-            self._port.iterate()
+        # while self._port.bytes_available():
+        #     self._port.iterate()
         for n, v in self.input_pin_dict.items():
             state = v.read()
             if self.watch_state(n, state) and state is not None:

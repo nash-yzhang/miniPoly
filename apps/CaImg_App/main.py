@@ -11,8 +11,8 @@ if __name__ == '__main__':
     # Cam2 = TisCamApp('Tiscam_2', save_option='movie', refresh_interval=10)
     # OMS = OMSInterface('OMS', refresh_interval=5, VID=VENDOR_ID, PID=PRODUCT_ID,mw_size=5)
     # GUI = CameraInterface('GUI', refresh_interval=5, surveillance_state={'OMS': ['xPos', 'yPos']})
-    GUI = CameraInterface('GUI', refresh_interval=5, surveillance_state={'Aux': ['mirPos','PEAK_mirPos']})
-    Aux = ArduinoInterface('Aux', refresh_interval=1, port_name='COM21', pin_address={'mirPos': 'a:0:i'}, peak_detect_chn=['mirPos'])
+    GUI = CameraInterface('GUI', refresh_interval=.4, surveillance_state={'Aux': ['mirPos']})
+    Aux = ArduinoInterface('Aux', refresh_interval=.2, port_name='COM6')
     logger = LoggerMinion('TestCam logger')
     logger.set_level('DEBUG')
 
