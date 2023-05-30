@@ -27,8 +27,11 @@ class AbstractGLAPP(TimerMinion):
 
 
 class AbstractGUIAPP(TimerMinion):
-    def __init__(self, *args, **kwargs):
-        super(AbstractGUIAPP, self).__init__(*args, **kwargs)
+    def __init__(self, *args, refresh_interval=None):
+        if refresh_interval is None:
+            super(AbstractGUIAPP, self).__init__(*args)
+        else:
+            super(AbstractGUIAPP, self).__init__(*args, refresh_interval=refresh_interval)
 
     def initialize(self):
         self._app = qw.QApplication(sys.argv)

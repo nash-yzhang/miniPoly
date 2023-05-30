@@ -7,8 +7,6 @@ from time import perf_counter
 
 import cv2
 import numpy as np
-import pco
-import tifffile as tifffile
 
 from bin.compiler.prototypes import AbstractCompiler
 from src.tisgrabber import tisgrabber as tis
@@ -208,172 +206,174 @@ class TISCameraCompiler(AbstractCompiler):
             self.camera = None
 
 
-class PCOCameraCompiler(AbstractCompiler):
-    TIS_DLL_DIR = "../src/tisgrabber/tisgrabber_x64.dll"
-    TIS_Width = ctypes.c_long()
-    TIS_Height = ctypes.c_long()
-    TIS_BitsPerPixel = ctypes.c_int()
-    TIS_colorformat = ctypes.c_int()
-
-    BINFile_Postfix = "PCO_IMG"
-
-    def __init__(self, *args, camera_name=None, save_option='binary', **kwargs):
-        super(PCOCameraCompiler, self).__init__(*args, **kwargs)
-
-        self.frame_rate = 1000 / self.refresh_interval
-        self._camera_name = camera_name
-        self._buffer_name = None
-        self._buf_img = None
-        self.frame_shape = None
-        self._params = {"CameraName": None, 'VideoFormat': None,
-                        'StreamToDisk': False, 'SaveDir': None, 'SaveName': None, 'InitTime': None,
-                        'FrameCount': 0, 'FrameTime': 0}
-        self.streaming = False
-        self._BIN_FileHandle = None
-        self._stream_init_time = None
-        self._n_frame_streamed = None
-
-        if save_option in ['binary', 'movie','tiff']:
-            self.save_option = save_option
-        else:
-            raise ValueError("save_option must be either 'binary', 'tiff', 'movie'")
-
-        for k, v in self._params.items():
-            self.create_state(k, v)
-        self._init_camera()
-
-    def _init_camera(self):
-        self.info("Searching camera...")
-        while self._params['CameraName'] is None:
-            self._params['CameraName'] = self.get_state('CameraName')
-        self.info(f"Camera {self._params['CameraName']} found")
-        self.camera = pco.Camera()
-        self.camera.record(number_of_images=5,mode='fifo')
-        self.camera.wait_for_first_image()
-        # self.camera.set_exposure_time(self.refresh_interval)
-        self.update_video_format()
-        self.watch_state('CameraName', self._params['CameraName'])
-        self.info(f"Camera {self._params['CameraName']} initialized")
-
-    def update_video_format(self):
-        buffer_name = "frame_PCO_cam"
-        self.info('Request ignored because updating video format is not available for PCO camera')
-        frame,meta = self.camera.image()
-        self.frame_shape = frame.shape
-        if self.has_state(buffer_name):
-            self.set_state(buffer_name, frame)
-        else:
-            self.create_state(buffer_name, frame, use_buffer=True)
-        self._buffer_name = buffer_name
-
-    def on_time(self, t):
-        try:
-            cameraName = self.get_state('CameraName')
-            if self.watch_state('CameraName', cameraName):
-                if cameraName is not None:
-                    self._init_camera()
-                else:
-                    try:
-                        self.disconnect_camera()
-                        self.info("Camera disconnected")
-                    except:
-                        self.error("An error occurred while disconnecting the camera")
-                        self.debug(traceback.format_exc())
-            else:
-                self.process_frame()
-        except:
-            self.error("An error occurred while updating the camera")
-            self.error(traceback.format_exc())
-
-    def process_frame(self):
-        self._streaming_setup()
-        self.camera.wait_for_first_image()
-        frame, meta = self.camera.image(0xFFFFFFFF)
-        frame_time = time.perf_counter()
-        self.set_state(self._buffer_name, frame)
-        self._data_streaming(frame_time, frame)
-
-    def _data_streaming(self, frame_time, frame):
-        if self.streaming:
-            frame_time = frame_time - self._stream_init_time
-            # Write to AUX file
-            n_frame = self._n_frame_streamed
-
-            if self.save_option == 'binary':
-                # Write to BIN file
-                self._BIN_FileHandle.write(bytearray(frame))
-            elif self.save_option == 'movie':
-                # Write to movie file
-                frame = frame.astype(float)
-                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-                self._BIN_FileHandle.write(frame, compression='PNG')
-            elif self.save_option == 'tiff':
-                self._BIN_FileHandle.save(frame)
-
-            self._n_frame_streamed += 1
-            self.set_state('FrameCount', self._n_frame_streamed)
-
-    def _streaming_setup(self):
-        if_streaming = self.get_state('StreamToDisk')
-        if self.watch_state('StreamToDisk', if_streaming):  # Triggered at the onset and the end of streaming
-            if if_streaming:
-                self._start_streaming()
-            else:  # close all files before streaming stops
-                self._stop_streaming()
-
-    def _start_streaming(self):
-        save_dir = self.get_state('SaveDir')
-        file_name = self.get_state('SaveName')
-        init_time = self.get_state('InitTime')
-        if save_dir is None or file_name is None or init_time is None:
-            self.error("Please set the save directory, file name and initial time before streaming.")
-        else:
-            if os.path.isdir(save_dir):
-                if self.save_option == 'binary':
-                    BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.bin"
-                    BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
-                elif self.save_option == 'movie':
-                    BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.avi"
-                    BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
-                elif self.save_option == 'tiff':
-                    BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.tiff"
-                    BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
-
-                if os.path.isfile(BIN_Fulldir):
-                    self.error(f"File {BIN_Fn} already exists in the folder {save_dir}. Please change "
-                               f"the save_name.")
-                else:
-                    if self.save_option == 'binary':
-                        self._BIN_FileHandle = open(BIN_Fulldir, 'wb')
-                    elif self.save_option == 'movie':
-                        self._BIN_FileHandle = cv2.VideoWriter(BIN_Fulldir, cv2.VideoWriter_fourcc(*'MJPG'),
-                                                               int(self.frame_rate),
-                                                               (self.frame_shape[1], self.frame_shape[0]))
-                    elif self.save_option == 'tiff':
-                        self._BIN_FileHandle = tifffile.TiffWriter(BIN_Fulldir, bigtiff=True)
-
-
-                    self._stream_init_time = init_time
-                    self._n_frame_streamed = 0
-                    self.streaming = True
-
-    def _stop_streaming(self):
-        if self._BIN_FileHandle is not None:
-            if self.save_option in ['binary','tiff']:
-                self._BIN_FileHandle.close()
-            elif self.save_option == 'movie':
-                self._BIN_FileHandle.release()
-
-        self._stream_init_time = None
-        self._n_frame_streamed = None
-        self.streaming = False
-
-    def disconnect_camera(self):
-        self.camera.stop()
-        self.camera.close()
-        self._params = {"CameraName": None, 'VideoFormat': None,
-                        'Trigger': 0, 'FrameCount': 0, 'FrameTime': 0}
-
-    def on_close(self):
-        self.camera.stop()
-        self.camera.close()
+# import tifffile as tifffile
+# import pco
+# class PCOCameraCompiler(AbstractCompiler):
+#     TIS_DLL_DIR = "../src/tisgrabber/tisgrabber_x64.dll"
+#     TIS_Width = ctypes.c_long()
+#     TIS_Height = ctypes.c_long()
+#     TIS_BitsPerPixel = ctypes.c_int()
+#     TIS_colorformat = ctypes.c_int()
+#
+#     BINFile_Postfix = "PCO_IMG"
+#
+#     def __init__(self, *args, camera_name=None, save_option='binary', **kwargs):
+#         super(PCOCameraCompiler, self).__init__(*args, **kwargs)
+#
+#         self.frame_rate = 1000 / self.refresh_interval
+#         self._camera_name = camera_name
+#         self._buffer_name = None
+#         self._buf_img = None
+#         self.frame_shape = None
+#         self._params = {"CameraName": None, 'VideoFormat': None,
+#                         'StreamToDisk': False, 'SaveDir': None, 'SaveName': None, 'InitTime': None,
+#                         'FrameCount': 0, 'FrameTime': 0}
+#         self.streaming = False
+#         self._BIN_FileHandle = None
+#         self._stream_init_time = None
+#         self._n_frame_streamed = None
+#
+#         if save_option in ['binary', 'movie','tiff']:
+#             self.save_option = save_option
+#         else:
+#             raise ValueError("save_option must be either 'binary', 'tiff', 'movie'")
+#
+#         for k, v in self._params.items():
+#             self.create_state(k, v)
+#         self._init_camera()
+#
+#     def _init_camera(self):
+#         self.info("Searching camera...")
+#         while self._params['CameraName'] is None:
+#             self._params['CameraName'] = self.get_state('CameraName')
+#         self.info(f"Camera {self._params['CameraName']} found")
+#         self.camera = pco.Camera()
+#         self.camera.record(number_of_images=5,mode='fifo')
+#         self.camera.wait_for_first_image()
+#         # self.camera.set_exposure_time(self.refresh_interval)
+#         self.update_video_format()
+#         self.watch_state('CameraName', self._params['CameraName'])
+#         self.info(f"Camera {self._params['CameraName']} initialized")
+#
+#     def update_video_format(self):
+#         buffer_name = "frame_PCO_cam"
+#         self.info('Request ignored because updating video format is not available for PCO camera')
+#         frame,meta = self.camera.image()
+#         self.frame_shape = frame.shape
+#         if self.has_state(buffer_name):
+#             self.set_state(buffer_name, frame)
+#         else:
+#             self.create_state(buffer_name, frame, use_buffer=True)
+#         self._buffer_name = buffer_name
+#
+#     def on_time(self, t):
+#         try:
+#             cameraName = self.get_state('CameraName')
+#             if self.watch_state('CameraName', cameraName):
+#                 if cameraName is not None:
+#                     self._init_camera()
+#                 else:
+#                     try:
+#                         self.disconnect_camera()
+#                         self.info("Camera disconnected")
+#                     except:
+#                         self.error("An error occurred while disconnecting the camera")
+#                         self.debug(traceback.format_exc())
+#             else:
+#                 self.process_frame()
+#         except:
+#             self.error("An error occurred while updating the camera")
+#             self.error(traceback.format_exc())
+#
+#     def process_frame(self):
+#         self._streaming_setup()
+#         self.camera.wait_for_first_image()
+#         frame, meta = self.camera.image(0xFFFFFFFF)
+#         frame_time = time.perf_counter()
+#         self.set_state(self._buffer_name, frame)
+#         self._data_streaming(frame_time, frame)
+#
+#     def _data_streaming(self, frame_time, frame):
+#         if self.streaming:
+#             frame_time = frame_time - self._stream_init_time
+#             # Write to AUX file
+#             n_frame = self._n_frame_streamed
+#
+#             if self.save_option == 'binary':
+#                 # Write to BIN file
+#                 self._BIN_FileHandle.write(bytearray(frame))
+#             elif self.save_option == 'movie':
+#                 # Write to movie file
+#                 frame = frame.astype(float)
+#                 frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+#                 self._BIN_FileHandle.write(frame, compression='PNG')
+#             elif self.save_option == 'tiff':
+#                 self._BIN_FileHandle.save(frame)
+#
+#             self._n_frame_streamed += 1
+#             self.set_state('FrameCount', self._n_frame_streamed)
+#
+#     def _streaming_setup(self):
+#         if_streaming = self.get_state('StreamToDisk')
+#         if self.watch_state('StreamToDisk', if_streaming):  # Triggered at the onset and the end of streaming
+#             if if_streaming:
+#                 self._start_streaming()
+#             else:  # close all files before streaming stops
+#                 self._stop_streaming()
+#
+#     def _start_streaming(self):
+#         save_dir = self.get_state('SaveDir')
+#         file_name = self.get_state('SaveName')
+#         init_time = self.get_state('InitTime')
+#         if save_dir is None or file_name is None or init_time is None:
+#             self.error("Please set the save directory, file name and initial time before streaming.")
+#         else:
+#             if os.path.isdir(save_dir):
+#                 if self.save_option == 'binary':
+#                     BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.bin"
+#                     BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
+#                 elif self.save_option == 'movie':
+#                     BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.avi"
+#                     BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
+#                 elif self.save_option == 'tiff':
+#                     BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.tiff"
+#                     BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
+#
+#                 if os.path.isfile(BIN_Fulldir):
+#                     self.error(f"File {BIN_Fn} already exists in the folder {save_dir}. Please change "
+#                                f"the save_name.")
+#                 else:
+#                     if self.save_option == 'binary':
+#                         self._BIN_FileHandle = open(BIN_Fulldir, 'wb')
+#                     elif self.save_option == 'movie':
+#                         self._BIN_FileHandle = cv2.VideoWriter(BIN_Fulldir, cv2.VideoWriter_fourcc(*'MJPG'),
+#                                                                int(self.frame_rate),
+#                                                                (self.frame_shape[1], self.frame_shape[0]))
+#                     elif self.save_option == 'tiff':
+#                         self._BIN_FileHandle = tifffile.TiffWriter(BIN_Fulldir, bigtiff=True)
+#
+#
+#                     self._stream_init_time = init_time
+#                     self._n_frame_streamed = 0
+#                     self.streaming = True
+#
+#     def _stop_streaming(self):
+#         if self._BIN_FileHandle is not None:
+#             if self.save_option in ['binary','tiff']:
+#                 self._BIN_FileHandle.close()
+#             elif self.save_option == 'movie':
+#                 self._BIN_FileHandle.release()
+#
+#         self._stream_init_time = None
+#         self._n_frame_streamed = None
+#         self.streaming = False
+#
+#     def disconnect_camera(self):
+#         self.camera.stop()
+#         self.camera.close()
+#         self._params = {"CameraName": None, 'VideoFormat': None,
+#                         'Trigger': 0, 'FrameCount': 0, 'FrameTime': 0}
+#
+#     def on_close(self):
+#         self.camera.stop()
+#         self.camera.close()

@@ -740,8 +740,8 @@ class LoggerMinion(BaseMinion, QueueListener):
 
 class TimerMinion(BaseMinion):
 
-    def __init__(self, *args, refresh_interval=10, **kwargs):
-        super(TimerMinion, self).__init__(*args, **kwargs)
+    def __init__(self, *args, refresh_interval=10):
+        super(TimerMinion, self).__init__(*args)
         self.timer = {'default': [-1,-1]}  # 1. interval, 2. elapsed time, 3. init_time
         self.timer_cb_func = {'default': self.on_time}
         self._isrunning = False
