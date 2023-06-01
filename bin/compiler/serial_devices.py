@@ -17,6 +17,7 @@ class PololuServoCompiler(AbstractCompiler):
 
     def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
         super(PololuServoCompiler, self).__init__(*args, **kwargs)
+        self._port = None
         self._port_name = port_name
         self.servo_dict = servo_dict
 
@@ -97,6 +98,7 @@ class PololuServoCompiler(AbstractCompiler):
 
     def on_close(self):
         self._port.close()
+        self.set_state('status', -1)
 
     ###### The following are copied from https://github.com/FRC4564/Maestro/blob/master/maestro.py with MIT license
     def init_pololu(self):
@@ -242,6 +244,8 @@ class PololuServoCompiler(AbstractCompiler):
         cmd = chr(0x24)
         self.sendCmd(cmd)
 
+    def on_close(self):
+        self.set_state('status', -1)
     #############################################################################################
 
 

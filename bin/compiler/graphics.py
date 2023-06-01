@@ -26,7 +26,7 @@ class QtCompiler(AbstractCompiler, qw.QMainWindow):
         splash.show()
         for i in range(20):
             splash.setWindowOpacity(1.5 - abs(1.5 - (i / 10)))
-            sleep(0.05)
+            sleep(0.03)
         splash.close()  # close the splash screen
 
 

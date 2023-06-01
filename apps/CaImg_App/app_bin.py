@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pandas as pd
 
 from bin.widgets.prototypes import AbstractGUIAPP, AbstractAPP
 import time
@@ -11,8 +12,8 @@ import PyQt5.QtGui as qg
 import pyqtgraph as pg
 
 from bin.compiler.graphics import QtCompiler
-from bin.gui import DataframeTable
-from bin.compiler.serial_devices import OMSCompiler, ArduinoCompiler
+from bin.gui import DataframeTable, DataframeModel
+from bin.compiler.serial_devices import OMSCompiler, ArduinoCompiler, PololuServoCompiler
 from src.tisgrabber import tisgrabber as tis
 
 from bin.compiler.prototypes import AbstractCompiler
@@ -144,8 +145,6 @@ class MainGUICompiler(QtCompiler):
                                                                pen=pg.mkPen(np.random.randint(0, 255, 3), width=2))
         self.label_ca_frame = qw.QLabel('Frame: NaN [0]')
         self.label_arduino_time = qw.QLabel('Arduino Time: NaN')
-        self.btn_frame_reset = qw.QPushButton('Reset')
-        self.btn_frame_reset.clicked.connect(self._reset_frame)
         self.btn_freeze_frame = qw.QPushButton('Freeze Frame!')
         self.btn_freeze_frame.setStyleSheet("background-color: light gray")
         self.btn_freeze_frame.clicked.connect(self._freeze_frame)
@@ -153,25 +152,21 @@ class MainGUICompiler(QtCompiler):
         self.layout_state_monitor_controller.addWidget(self.label_ca_frame, 1)
         self.layout_state_monitor_controller.addWidget(self.label_arduino_time, 1)
         self.layout_state_monitor_controller.addWidget(self.btn_freeze_frame, 1)
-        self.layout_state_monitor_controller.addWidget(self.btn_frame_reset, 1)
         self.layout_state_monitor.addLayout(self.layout_state_monitor_controller, 1)
 
-        self.layout_main.addLayout(self.layout_CamView, 0, 0, 2, 2)
-        self.layout_main.addLayout(self.layout_SavePanel, 0, 2, 1, 1)
-        self.layout_main.addLayout(self.layout_stimGUI, 1, 2, 1, 1)
-        self.layout_main.addLayout(self.layout_state_monitor, 2, 0, 1, 3)
+        self.layout_main.addLayout(self.layout_CamView, 0, 0, 2, 3)
+        self.layout_main.addLayout(self.layout_SavePanel, 0, 3, 1, 2)
+        self.layout_main.addLayout(self.layout_stimGUI, 1, 3, 1, 2)
+        self.layout_main.addLayout(self.layout_state_monitor, 2, 0, 1, 5)
 
-        self.layout_main.setColumnStretch(0, 2)
-        self.layout_main.setColumnStretch(2, 1)
+        self.layout_main.setColumnStretch(0, 3)
+        self.layout_main.setColumnStretch(3, 2)
         self.layout_main.setRowStretch(1, 2)
         self.layout_main.setRowStretch(2, 1)
 
         self.main_widget = qw.QWidget()
         self.main_widget.setLayout(self.layout_main)
         self.setCentralWidget(self.main_widget)
-
-    def _reset_frame(self):
-        self.set_state_to('Aux', 'frames', 0)
 
     def _freeze_frame(self):
         if self.btn_freeze_frame.text() == 'Freeze Frame!':
@@ -478,11 +473,19 @@ class MainGUICompiler(QtCompiler):
         frame = qw.QGroupBox(self)
         frame.setTitle(name)
         table = DataframeTable(self.centralWidget())
+        browse_btn = qw.QPushButton('Browse')
+        browse_btn.clicked.connect(lambda: self.browse_table(name))
         frame_layout = qw.QVBoxLayout()
         frame_layout.addWidget(table)
+        frame_layout.addWidget(browse_btn)
         frame.setLayout(frame_layout)
         self.frames[name] = frame
         self.tables[name] = table
+
+    def browse_table(self,name):
+        # open file dialog for browsing data file (start from the current directory)
+        file_name = qw.QFileDialog.getOpenFileName(self, 'Open file', os.getcwd(), "Excel table (*.xlsx *.xls)", options=qw.QFileDialog.DontUseNativeDialog)
+        self.tables[name].setModel(DataframeModel(data=pd.read_excel(file_name[0])))
 
     def switch_timer(self):
         if self._timer_started:
@@ -631,3 +634,15 @@ class ArduinoInterface(AbstractAPP):
         super().initialize()
         self._compiler = PeakDetectorCompiler(self, **self._param_to_compiler)
         self.info("Arduino compiler initialized.")
+
+class PololuServoApp(AbstractAPP):
+    def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
+        super(PololuServoApp, self).__init__(*args, **kwargs)
+        self._param_to_compiler['port_name'] = port_name
+        self._param_to_compiler['servo_dict'] = servo_dict
+
+    def initialize(self):
+        super().initialize()
+        self._compiler = PololuServoCompiler(self, **self._param_to_compiler, )
+        self.info("Pololu compiler initialized.")
+

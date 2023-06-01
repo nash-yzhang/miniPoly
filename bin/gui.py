@@ -177,15 +177,18 @@ class DataframeTable(qw.QTableView):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
+        self.setDragEnabled(True)
         self.filename = None
 
     def dragEnterEvent(self, event):
+        print('SOMETHING HAPPENED!')
         if event.mimeData().hasUrls:
             event.accept()
         else:
             event.ignore()
 
     def dragMoveEvent(self, event):
+        print('SOMETHING HAPPENED!')
         if event.mimeData().hasUrls:
             event.accept()
         else:
