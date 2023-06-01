@@ -7,7 +7,7 @@ PRODUCT_ID = 0xC24E
 
 if __name__ == '__main__':
     Cam = TisCamApp('Tiscam_1', save_option='movie', refresh_interval=10)
-    GUI = CameraInterface('GUI', refresh_interval=5)
+    GUI = MainGUI('GUI', refresh_interval=5)
     OMS = OMSInterface('OMS', refresh_interval=5, VID = VENDOR_ID, PID = PRODUCT_ID)
     logger = LoggerMinion('TestCam logger')
     logger.set_level('DEBUG')

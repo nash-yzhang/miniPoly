@@ -20,12 +20,14 @@ from serial import Serial
 # import pyfirmata2 as fmt
 
 
-class CameraStimGUI(QtCompiler):
+class MainGUICompiler(QtCompiler):
     _SERVO_MIN = 2400
     _SERVO_MAX = 9000
 
     def __init__(self, *args, surveillance_state={}, **kwargs):
-        super(CameraStimGUI, self).__init__(*args, **kwargs)
+        super(MainGUICompiler, self).__init__(*args, **kwargs)
+        self._ca_frame_num = -1
+        self.ca_session_num = 0
         self._camera_minions = [i for i in self.get_linked_minion_names() if 'tiscam' in i.lower()]
         self._connected_camera_minions = {}
         self._camera_param = {}
@@ -42,7 +44,7 @@ class CameraStimGUI(QtCompiler):
         self._deviceList = self._tiscamHandle.GetDevices()
 
         self._servo_minion = [i for i in self.get_linked_minion_names() if 'servo' in i.lower()]
-        self._serial_minion = [i for i in self.get_linked_minion_names() if 'serial' in i.lower()]
+        self._aux_minion = 'AUX'
 
         # OMS module
         self._OMS_minion = [i for i in self.get_linked_minion_names() if 'oms' in i.lower()]
@@ -119,6 +121,8 @@ class CameraStimGUI(QtCompiler):
         self.layout_stimGUI.addLayout(self.groupbox_layout)
         self.layout_stimGUI.addWidget(self.timer_switcher)
 
+
+        #### STATE MONITOR MODULE ####
         self.layout_state_monitor = qw.QVBoxLayout()
         self.layout_state_monitor.heightForWidth(50)
         self.qtPlotWidget = pg.PlotWidget()
@@ -138,11 +142,16 @@ class CameraStimGUI(QtCompiler):
                     else:
                         self._plots[k][v] = self.qtPlotWidget.plot(self._time_arr, self._plots_arr[k][v],
                                                                pen=pg.mkPen(np.random.randint(0, 255, 3), width=2))
+        self.label_ca_frame = qw.QLabel('Frame: NaN [0]')
+        self.label_arduino_time = qw.QLabel('Arduino Time: NaN')
         self.btn_frame_reset = qw.QPushButton('Reset')
         self.btn_frame_reset.clicked.connect(self._reset_frame)
-        self.btn_freeze_frame = qw.QPushButton('Freeze')
+        self.btn_freeze_frame = qw.QPushButton('Freeze Frame!')
+        self.btn_freeze_frame.setStyleSheet("background-color: light gray")
         self.btn_freeze_frame.clicked.connect(self._freeze_frame)
         self.layout_state_monitor_controller = qw.QHBoxLayout()
+        self.layout_state_monitor_controller.addWidget(self.label_ca_frame, 1)
+        self.layout_state_monitor_controller.addWidget(self.label_arduino_time, 1)
         self.layout_state_monitor_controller.addWidget(self.btn_freeze_frame, 1)
         self.layout_state_monitor_controller.addWidget(self.btn_frame_reset, 1)
         self.layout_state_monitor.addLayout(self.layout_state_monitor_controller, 1)
@@ -165,14 +174,14 @@ class CameraStimGUI(QtCompiler):
         self.set_state_to('Aux', 'frames', 0)
 
     def _freeze_frame(self):
-        if self.btn_freeze_frame.text() == 'Freeze':
-            self.btn_freeze_frame.setStyleSheet('background-color: gray')
-            self.btn_freeze_frame.setText('Unfreeze')
-            self.set_state_to('Aux', 'freeze', 0)
-        else:
-            self.btn_freeze_frame.setStyleSheet('background-color: cyan')
-            self.btn_freeze_frame.setText('Freeze')
+        if self.btn_freeze_frame.text() == 'Freeze Frame!':
+            self.btn_freeze_frame.setStyleSheet('background-color: #dcf3ff')
+            self.btn_freeze_frame.setText('Unfreeze Frame!')
             self.set_state_to('Aux', 'freeze', 1)
+        else:
+            self.btn_freeze_frame.setStyleSheet('background-color: light gray')
+            self.btn_freeze_frame.setText('Freeze')
+            self.set_state_to('Aux', 'freeze', 0)
 
     def _browse_root_folder(self):
         self._root_folder = str(qw.QFileDialog.getExistingDirectory(self, 'Open Folder', '.',
@@ -427,23 +436,43 @@ class CameraStimGUI(QtCompiler):
                 self.debug(traceback.format_exc())
 
         self.update_plot_arr(t)
+        self.update_aux_state()
         self._processHandler.on_time(t)
 
+    def update_aux_state(self):
+        arduino_time = self.get_state_from(self._aux_minion, 'arduino_time')
+        ca_frame_num = self.get_state_from(self._aux_minion, 'ca_frame_num')
+
+        if type(ca_frame_num) == int and type(arduino_time) == int:
+            arduino_time /= 1000  # convert to seconds
+
+            if self._ca_frame_num - ca_frame_num > 0:  # When the ca_frame_num is reset, add 1 to the ca_session_num
+                self.ca_session_num += 1
+
+            if self.ca_session_num > 0:  # for the second session and afterwards, preserve the last ca_frame_num in the previous session
+                if ca_frame_num > 0:
+                    self.label_ca_frame.setText(f"Ca session num: {ca_frame_num} [{self.ca_session_num}] ")  # To preserve the last ca_frame_num
+            else:
+                self.label_ca_frame.setText(f"Ca session num: {ca_frame_num} [0]")
+
+            self.label_arduino_time.setText(f"Arduino time: {(arduino_time):.2f} s")
+            self._ca_frame_num = ca_frame_num
+
     def update_plot_arr(self, t):
-        self._time_arr[:-1] = self._time_arr[1:]
-        self._time_arr[-1] = t
-        for k, v_list in self.surveillance_state.items():
-            for v in v_list:
-                if self._plots_arr[k][v] is not None:
-                    self._plots_arr[k][v][:-1] = self._plots_arr[k][v][1:]
-                    new_val = self.get_state_from(k, v)
-                    if new_val is not None:
-                        if type(new_val) is np.ndarray:
-                            for i in range(len(self._plots[k][v])):
-                                self._plots[k][v][i].setData(new_val[:, 0], new_val[:, i+1])
-                        else:
-                            self._plots_arr[k][v][-1] = new_val
-                            self._plots[k][v].setData(self._time_arr, self._plots_arr[k][v])
+            self._time_arr[:-1] = self._time_arr[1:]
+            self._time_arr[-1] = t
+            for k, v_list in self.surveillance_state.items():
+                for v in v_list:
+                    if self._plots_arr[k][v] is not None:
+                        self._plots_arr[k][v][:-1] = self._plots_arr[k][v][1:]
+                        new_val = self.get_state_from(k, v)
+                        if new_val is not None:
+                            if type(new_val) is np.ndarray:
+                                for i in range(len(self._plots[k][v])):
+                                    self._plots[k][v][i].setData(new_val[:, 0], new_val[:, i+1])
+                            else:
+                                self._plots_arr[k][v][-1] = new_val
+                                self._plots[k][v].setData(self._time_arr, self._plots_arr[k][v])
 
     def addTableBox(self, name):
         frame = qw.QGroupBox(self)
@@ -508,15 +537,15 @@ class CameraStimGUI(QtCompiler):
                                         self.set_state_to(m, s, state)
 
 
-class CameraInterface(AbstractGUIAPP):
+class MainGUI(AbstractGUIAPP):
     def __init__(self, *args, surveillance_state=None, **kwargs):
-        super(CameraInterface, self).__init__(*args, **kwargs)
+        super(MainGUI, self).__init__(*args, **kwargs)
         self._surveillance_state = surveillance_state
 
     def initialize(self):
         super().initialize()
-        self._win = CameraStimGUI(self, surveillance_state=self._surveillance_state)
-        self.info("Camera Interface initialized.")
+        self._win = MainGUICompiler(self, surveillance_state=self._surveillance_state)
+        self.info("Main GUI initialized.")
         self._win.show()
 
 
@@ -537,85 +566,52 @@ class PeakDetectorCompiler(AbstractCompiler):
 
     def __init__(self, *args, port_name='COM7', **kwargs):
         super(PeakDetectorCompiler, self).__init__(*args, **kwargs)
+        self._session_start_time = 0
         self._port_name = port_name
         self._port = None
         self.input_pin_dict = {}
         self.output_pin_dict = {}
 
-        # self._port = fmt.Arduino(self._port_name)
         self._port = Serial(self._port_name, baudrate=115200, timeout=1)
-        # self._port.samplingOn(1000/1000)
-        #
-        # self._port.analog[0].register_callback(self._analog_callback)
-        # self._port.analog[0].enable_reporting()
-        self._buffer_data = np.zeros([5000,3], dtype=np.int64)
-        self._emitted = False
-        self.create_shared_buffer('mirPos', self._buffer_data)
-        self.create_state('frames', 0)
-        self.create_state('freeze', 0)
-        # self._integrator_buffer = []
-        # self._outputfile_handle = open('peak_detect.csv', 'w', newline='')
-        # self._outputfile_writer = csv.writer(self._outputfile_handle)
-        # name_row = []
-        # for k in self.input_pin_dict.keys():
-        #     name_row.append(k)
-        #
-        # for k in self.output_pin_dict.keys():
-        #     name_row.append(k)
-        #
-        # self._outputfile_writer.writerow(name_row)
-        #
-        # self._peak_detect_chn = peak_detect_chn
-        # self._iter_counter = 0
-        # self._time_buffer = 0
-        # if self._peak_detect_chn is not None:
-        #     self._detect_peak = True
-        #     self._peak_detect_buffer = {}
-        #     for chn in self._peak_detect_chn:
-        #         self.create_state('PEAK_'+chn, 0)
-        #         self._peak_detect_buffer[chn] = np.zeros(100)
-        # else:
-        #     self._detect_peak = False
 
-    # def _analog_callback(self, data):
-    #     self.set_state('mirPos', data)
-        # self._integrator_buffer.append(data)
-        # if len(self._integrator_buffer) > 20:
-        #     self._integrator_buffer = self._integrator_buffer[-20:]
-        #     if np.mean(self._integrator_buffer[:10]) - np.mean(self._integrator_buffer[-10:]) > 0.1:
-        #         self.set_state('mirPos', 1)
-        #     else:
-        #         self.set_state('mirPos', 0)
-        # else:
-        #     self.set_state('mirPos', -1)
-        # val_row = []
-        # for k in self.input_pin_dict.keys():
-        #     val_row.append(self.get_state(k))
-        # for k in self.output_pin_dict.keys():
-        #     val_row.append(self.get_state(k))
-        # self._outputfile_writer.writerow(val_row)
+        self._buffer_data = np.zeros([5000,3], dtype=np.int64)
+        self._last_frame_num = 0
+
+        self.create_shared_buffer('mirPos', self._buffer_data)
+        self.create_state('arduino_time', 0)
+        self.create_state('ca_frame_num', 0)
+        self.create_state('freeze', 0)
+
     def detect_frame(self):
         baseline_thre = 100
-        reset_grad_thre = -40
+        reset_grad_thre = -150
         try:
             getData = self._port.readline()
             data = getData.decode('utf-8')
             if "---" in data and "+++" in data:
                 data = data.split('---')[1].split('+++')[0]
                 data = data.split(',')
-                self._buffer_data[:-1, :] = self._buffer_data[1:, :]
-                self._buffer_data[-1, :] = [int(data[0]), int(data[1]), int(data[1]) - self._buffer_data[-2, 1]]
-                ttl_pulse = self._buffer_data[-1, 2] < reset_grad_thre and self._buffer_data[-2, 2] > reset_grad_thre
-                cur_frame_num = self.get_state('frames')
-                if ttl_pulse:
-                    cur_frame_num += 1
-                    self.set_state('frames', cur_frame_num)
-                    print(cur_frame_num)
-                self.set_state('mirPos', self._buffer_data)
-                if self._buffer_data[-20:,1].max() < baseline_thre and cur_frame_num > 0:
-                    self.set_state('frames', 0)
-        except Exception as e:
-            self.error(e)
+
+                arduino_time = int(data[0])
+                cur_frame_num = int(data[2])
+
+                self.set_state('arduino_time', arduino_time)  # broadcast arduino time
+
+                frame_changed = cur_frame_num - self._last_frame_num  # omit report if frame number is not changed
+                self._last_frame_num = cur_frame_num
+
+                if frame_changed != 0:  # if frame number is changed, report frame number
+                    self.set_state('ca_frame_num', cur_frame_num)
+
+                ##### For debugging purpose ####
+                # self._buffer_data[:-1, :] = self._buffer_data[1:, :]
+                # self._buffer_data[-1, :] = [int(data[0]), int(data[1]), 500*(frame_changed>0)]
+                # self.set_state('mirPos', self._buffer_data)
+
+        except:
+            pass
+        # except Exception as e:
+            # self.error(e)
 
 
     def on_time(self, t):
