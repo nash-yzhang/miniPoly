@@ -13,23 +13,32 @@ import pyqtgraph as pg
 
 from bin.compiler.graphics import QtCompiler
 from bin.gui import DataframeTable, DataframeModel
-from bin.compiler.serial_devices import OMSCompiler, ArduinoCompiler, PololuServoCompiler
+from bin.compiler.serial_devices import OMSInterface, ArduinoCompiler, PololuServoInterface
 from src.tisgrabber import tisgrabber as tis
 
-from bin.compiler.prototypes import AbstractCompiler
+from bin.compiler.prototypes import AbstractCompiler, IOStreamingCompiler
 from serial import Serial
+
+
 # import pyfirmata2 as fmt
 
 
-class MainGUICompiler(QtCompiler):
+class MainGUI(QtCompiler):
     _SERVO_MIN = 2400
     _SERVO_MAX = 9000
 
     def __init__(self, *args, surveillance_state={}, **kwargs):
-        super(MainGUICompiler, self).__init__(*args, **kwargs)
+        super(MainGUI, self).__init__(*args, **kwargs)
+
+        self._IO_minion = 'IO'
+        self._scanlistener_minion = 'SCAN'
+        self._linked_minion_names = self.get_linked_minion_names()
+        self._servo_minion = [i for i in self._linked_minion_names if 'servo' in i.lower()]
+        self._OMS_minion = [i for i in self._linked_minion_names if 'oms' in i.lower()]
+        self._camera_minions = [i for i in self._linked_minion_names if 'cam' in i.lower()]
+
         self._ca_frame_num = -1
         self.ca_session_num = 0
-        self._camera_minions = [i for i in self.get_linked_minion_names() if 'tiscam' in i.lower()]
         self._connected_camera_minions = {}
         self._camera_param = {}
         self._videoStreams = {}
@@ -41,14 +50,9 @@ class MainGUICompiler(QtCompiler):
         self.surveillance_state = surveillance_state
 
         self._tiscamHandle = tis.TIS_CAM()
-
         self._deviceList = self._tiscamHandle.GetDevices()
 
-        self._servo_minion = [i for i in self.get_linked_minion_names() if 'servo' in i.lower()]
-        self._aux_minion = 'AUX'
-
         # OMS module
-        self._OMS_minion = [i for i in self.get_linked_minion_names() if 'oms' in i.lower()]
         if self._OMS_minion:
             self._OMS_minion = self._OMS_minion[0]
 
@@ -122,7 +126,6 @@ class MainGUICompiler(QtCompiler):
         self.layout_stimGUI.addLayout(self.groupbox_layout)
         self.layout_stimGUI.addWidget(self.timer_switcher)
 
-
         #### STATE MONITOR MODULE ####
         self.layout_state_monitor = qw.QVBoxLayout()
         self.layout_state_monitor.heightForWidth(50)
@@ -137,20 +140,21 @@ class MainGUICompiler(QtCompiler):
                     if self._plots_arr[k][v].ndim == 2:
                         data = self._plots_arr[k][v]
                         self._plots[k][v] = []
-                        for i in range(1,data.shape[1]):
-                            self._plots[k][v].append(self.qtPlotWidget.plot(data[:,0], data[:,i],
-                                                                   pen=pg.mkPen(np.random.randint(0, 255, 3), width=2)))
+                        for i in range(1, data.shape[1]):
+                            self._plots[k][v].append(self.qtPlotWidget.plot(data[:, 0], data[:, i],
+                                                                            pen=pg.mkPen(np.random.randint(0, 255, 3),
+                                                                                         width=2)))
                     else:
                         self._plots[k][v] = self.qtPlotWidget.plot(self._time_arr, self._plots_arr[k][v],
-                                                               pen=pg.mkPen(np.random.randint(0, 255, 3), width=2))
+                                                                   pen=pg.mkPen(np.random.randint(0, 255, 3), width=2))
         self.label_ca_frame = qw.QLabel('Frame: NaN [0]')
-        self.label_arduino_time = qw.QLabel('Arduino Time: NaN')
+        self.label_timestamp = qw.QLabel('Arduino Time: NaN')
         self.btn_freeze_frame = qw.QPushButton('Freeze Frame!')
         self.btn_freeze_frame.setStyleSheet("background-color: light gray")
         self.btn_freeze_frame.clicked.connect(self._freeze_frame)
         self.layout_state_monitor_controller = qw.QHBoxLayout()
         self.layout_state_monitor_controller.addWidget(self.label_ca_frame, 1)
-        self.layout_state_monitor_controller.addWidget(self.label_arduino_time, 1)
+        self.layout_state_monitor_controller.addWidget(self.label_timestamp, 1)
         self.layout_state_monitor_controller.addWidget(self.btn_freeze_frame, 1)
         self.layout_state_monitor.addLayout(self.layout_state_monitor_controller, 1)
 
@@ -172,11 +176,11 @@ class MainGUICompiler(QtCompiler):
         if self.btn_freeze_frame.text() == 'Freeze Frame!':
             self.btn_freeze_frame.setStyleSheet('background-color: #dcf3ff')
             self.btn_freeze_frame.setText('Unfreeze Frame!')
-            self.set_state_to('Aux', 'freeze', 1)
+            self.set_state_to('SCAN', 'freeze', 1)
         else:
             self.btn_freeze_frame.setStyleSheet('background-color: light gray')
             self.btn_freeze_frame.setText('Freeze')
-            self.set_state_to('Aux', 'freeze', 0)
+            self.set_state_to('SCAN', 'freeze', 0)
 
     def _browse_root_folder(self):
         self._root_folder = str(qw.QFileDialog.getExistingDirectory(self, 'Open Folder', '.',
@@ -208,11 +212,16 @@ class MainGUICompiler(QtCompiler):
                 self.set_state_to(mi_name, 'InitTime', self._save_init_time)
                 self.set_state_to(mi_name, 'StreamToDisk', True)
 
-            for servoM in self._servo_minion:
-                self.set_state_to(servoM, 'SaveDir', self._save_dir)
-                self.set_state_to(servoM, 'SaveName', self._save_filename)
-                self.set_state_to(servoM, 'InitTime', self._save_init_time)
-                self.set_state_to(servoM, 'StreamToDisk', True)
+            # for servoM in self._servo_minion:
+            #     self.set_state_to(servoM, 'SaveDir', self._save_dir)
+            #     self.set_state_to(servoM, 'SaveName', self._save_filename)
+            #     self.set_state_to(servoM, 'InitTime', self._save_init_time)
+            #     self.set_state_to(servoM, 'StreamToDisk', True)
+
+            self.set_state_to(self._IO_minion, 'SaveDir', self._save_dir)
+            self.set_state_to(self._IO_minion, 'SaveName', self._save_filename)
+            self.set_state_to(self._IO_minion, 'InitTime', self._save_init_time)
+            self.set_state_to(self._IO_minion, 'StreamToDisk', True)
 
         else:
             self._save_btn.setText('Start Recording')
@@ -220,8 +229,9 @@ class MainGUICompiler(QtCompiler):
             for cam in self._save_camera_list:
                 mi_name = self._connected_camera_minions[cam]
                 self.set_state_to(mi_name, 'StreamToDisk', False)
-            for servoM in self._servo_minion:
-                self.set_state_to(servoM, 'StreamToDisk', False)
+            # for servoM in self._servo_minion:
+            #     self.set_state_to(servoM, 'StreamToDisk', False)
+            self.set_state_to(self._IO_minion, 'StreamToDisk', False)
 
     def _init_menu(self):
         self._menubar = self.menuBar()
@@ -431,43 +441,44 @@ class MainGUICompiler(QtCompiler):
                 self.debug(traceback.format_exc())
 
         self.update_plot_arr(t)
-        self.update_aux_state()
+        self.update_scan_state()
         self._processHandler.on_time(t)
 
-    def update_aux_state(self):
-        arduino_time = self.get_state_from(self._aux_minion, 'arduino_time')
-        ca_frame_num = self.get_state_from(self._aux_minion, 'ca_frame_num')
+    def update_scan_state(self):
+        timestamp = self.get_state_from(self._scanlistener_minion, 'timestamp')
+        ca_frame_num = self.get_state_from(self._scanlistener_minion, 'ca_frame_num')
 
-        if type(ca_frame_num) == int and type(arduino_time) == int:
-            arduino_time /= 1000  # convert to seconds
+        if type(ca_frame_num) == int and type(timestamp) == int:
+            timestamp /= 1000  # convert to seconds
 
             if self._ca_frame_num - ca_frame_num > 0:  # When the ca_frame_num is reset, add 1 to the ca_session_num
                 self.ca_session_num += 1
 
             if self.ca_session_num > 0:  # for the second session and afterwards, preserve the last ca_frame_num in the previous session
                 if ca_frame_num > 0:
-                    self.label_ca_frame.setText(f"Ca session num: {ca_frame_num} [{self.ca_session_num}] ")  # To preserve the last ca_frame_num
+                    self.label_ca_frame.setText(
+                        f"Ca session num: {ca_frame_num} [{self.ca_session_num}] ")  # To preserve the last ca_frame_num
             else:
                 self.label_ca_frame.setText(f"Ca session num: {ca_frame_num} [0]")
 
-            self.label_arduino_time.setText(f"Arduino time: {(arduino_time):.2f} s")
+            self.label_timestamp.setText(f"Arduino time: {(timestamp):.2f} s")
             self._ca_frame_num = ca_frame_num
 
     def update_plot_arr(self, t):
-            self._time_arr[:-1] = self._time_arr[1:]
-            self._time_arr[-1] = t
-            for k, v_list in self.surveillance_state.items():
-                for v in v_list:
-                    if self._plots_arr[k][v] is not None:
-                        self._plots_arr[k][v][:-1] = self._plots_arr[k][v][1:]
-                        new_val = self.get_state_from(k, v)
-                        if new_val is not None:
-                            if type(new_val) is np.ndarray:
-                                for i in range(len(self._plots[k][v])):
-                                    self._plots[k][v][i].setData(new_val[:, 0], new_val[:, i+1])
-                            else:
-                                self._plots_arr[k][v][-1] = new_val
-                                self._plots[k][v].setData(self._time_arr, self._plots_arr[k][v])
+        self._time_arr[:-1] = self._time_arr[1:]
+        self._time_arr[-1] = t
+        for k, v_list in self.surveillance_state.items():
+            for v in v_list:
+                if self._plots_arr[k][v] is not None:
+                    self._plots_arr[k][v][:-1] = self._plots_arr[k][v][1:]
+                    new_val = self.get_state_from(k, v)
+                    if new_val is not None:
+                        if type(new_val) is np.ndarray:
+                            for i in range(len(self._plots[k][v])):
+                                self._plots[k][v][i].setData(new_val[:, 0], new_val[:, i + 1])
+                        else:
+                            self._plots_arr[k][v][-1] = new_val
+                            self._plots[k][v].setData(self._time_arr, self._plots_arr[k][v])
 
     def addTableBox(self, name):
         frame = qw.QGroupBox(self)
@@ -482,9 +493,10 @@ class MainGUICompiler(QtCompiler):
         self.frames[name] = frame
         self.tables[name] = table
 
-    def browse_table(self,name):
+    def browse_table(self, name):
         # open file dialog for browsing data file (start from the current directory)
-        file_name = qw.QFileDialog.getOpenFileName(self, 'Open file', os.getcwd(), "Excel table (*.xlsx *.xls)", options=qw.QFileDialog.DontUseNativeDialog)
+        file_name = qw.QFileDialog.getOpenFileName(self, 'Open file', os.getcwd(), "Excel table (*.xlsx *.xls)",
+                                                   options=qw.QFileDialog.DontUseNativeDialog)
         self.tables[name].setModel(DataframeModel(data=pd.read_excel(file_name[0])))
 
     def switch_timer(self):
@@ -540,35 +552,10 @@ class MainGUICompiler(QtCompiler):
                                         self.set_state_to(m, s, state)
 
 
-class MainGUI(AbstractGUIAPP):
-    def __init__(self, *args, surveillance_state=None, **kwargs):
-        super(MainGUI, self).__init__(*args, **kwargs)
-        self._surveillance_state = surveillance_state
-
-    def initialize(self):
-        super().initialize()
-        self._win = MainGUICompiler(self, surveillance_state=self._surveillance_state)
-        self.info("Main GUI initialized.")
-        self._win.show()
-
-
-class OMSInterface(AbstractAPP):
-    def __init__(self, *args, VID=None, PID=None, mw_size=1, **kwargs):
-        super(OMSInterface, self).__init__(*args, **kwargs)
-        self._VID = VID
-        self._PID = PID
-        self._mw_size = mw_size
-
-    def initialize(self):
-        super().initialize()
-        self._compiler = OMSCompiler(self, VID=self._VID, PID=self._PID, mw_size=self._mw_size)
-        self.info("OMS compiler initialized.")
-
-
-class PeakDetectorCompiler(AbstractCompiler):
+class ScanListener(AbstractCompiler):
 
     def __init__(self, *args, port_name='COM7', **kwargs):
-        super(PeakDetectorCompiler, self).__init__(*args, **kwargs)
+        super(ScanListener, self).__init__(*args, **kwargs)
         self._session_start_time = 0
         self._port_name = port_name
         self._port = None
@@ -577,11 +564,11 @@ class PeakDetectorCompiler(AbstractCompiler):
 
         self._port = Serial(self._port_name, baudrate=115200, timeout=1)
 
-        self._buffer_data = np.zeros([5000,3], dtype=np.int64)
+        self._buffer_data = np.zeros([5000, 3], dtype=np.int64)
         self._last_frame_num = 0
 
         self.create_shared_buffer('mirPos', self._buffer_data)
-        self.create_state('arduino_time', 0)
+        self.create_state('timestamp', 0)
         self.create_state('ca_frame_num', 0)
         self.create_state('freeze', 0)
 
@@ -595,10 +582,10 @@ class PeakDetectorCompiler(AbstractCompiler):
                 data = data.split('---')[1].split('+++')[0]
                 data = data.split(',')
 
-                arduino_time = int(data[0])
+                timestamp = int(data[0])
                 cur_frame_num = int(data[2])
 
-                self.set_state('arduino_time', arduino_time)  # broadcast arduino time
+                self.set_state('timestamp', timestamp)  # broadcast arduino time
 
                 frame_changed = cur_frame_num - self._last_frame_num  # omit report if frame number is not changed
                 self._last_frame_num = cur_frame_num
@@ -611,29 +598,58 @@ class PeakDetectorCompiler(AbstractCompiler):
                 # self._buffer_data[-1, :] = [int(data[0]), int(data[1]), 500*(frame_changed>0)]
                 # self.set_state('mirPos', self._buffer_data)
 
-        except:
-            pass
-        # except Exception as e:
-            # self.error(e)
-
+        except Exception as e:
+            self.debug(e)
 
     def on_time(self, t):
         if not self.get_state('freeze'):
             self.detect_frame()
 
     def on_close(self):
-        self._outputfile_handle.close()
         super().on_close()
 
-class ArduinoInterface(AbstractAPP):
+
+
+class DataIOApp(AbstractAPP):
+    def __init__(self, *args, ts_minion_name=None, state_dict={}, buffer_dict={}, buffer_saving_opt={}, trigger=None, **kwargs):
+        super(DataIOApp, self).__init__(*args, **kwargs)
+        self._param_to_compiler = {
+            "state_dict": state_dict,
+            "buffer_dict": buffer_dict,
+            "buffer_saving_opt": buffer_saving_opt,
+            "trigger": trigger,
+            "ts_minion_name": ts_minion_name
+        }
+
+    def initialize(self):
+        super().initialize()
+        self._compiler = IOStreamingCompiler(self, **self._param_to_compiler)
+        self.info("Aux IO initialized.")
+
+
+class OMSInterfaceApp(AbstractAPP):
+    def __init__(self, *args, VID=None, PID=None, mw_size=1, **kwargs):
+        super(OMSInterfaceApp, self).__init__(*args, **kwargs)
+        self._VID = VID
+        self._PID = PID
+        self._mw_size = mw_size
+
+    def initialize(self):
+        super().initialize()
+        self._compiler = OMSInterface(self, VID=self._VID, PID=self._PID, mw_size=self._mw_size)
+        self.info("OMS compiler initialized.")
+
+
+class ScanListenerApp(AbstractAPP):
     def __init__(self, *args, port_name=None, **kwargs):
-        super(ArduinoInterface, self).__init__(*args, **kwargs)
+        super(ScanListenerApp, self).__init__(*args, **kwargs)
         self._param_to_compiler = {'port_name': port_name}
 
     def initialize(self):
         super().initialize()
-        self._compiler = PeakDetectorCompiler(self, **self._param_to_compiler)
-        self.info("Arduino compiler initialized.")
+        self._compiler = ScanListener(self, **self._param_to_compiler)
+        self.info("Scan Listener initialized.")
+
 
 class PololuServoApp(AbstractAPP):
     def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
@@ -643,6 +659,17 @@ class PololuServoApp(AbstractAPP):
 
     def initialize(self):
         super().initialize()
-        self._compiler = PololuServoCompiler(self, **self._param_to_compiler, )
+        self._compiler = PololuServoInterface(self, **self._param_to_compiler, )
         self.info("Pololu compiler initialized.")
 
+
+class MainGUIApp(AbstractGUIAPP):
+    def __init__(self, *args, surveillance_state=None, **kwargs):
+        super(MainGUIApp, self).__init__(*args, **kwargs)
+        self._surveillance_state = surveillance_state
+
+    def initialize(self):
+        super().initialize()
+        self._win = MainGUI(self, surveillance_state=self._surveillance_state)
+        self.info("Main GUI initialized.")
+        self._win.show()

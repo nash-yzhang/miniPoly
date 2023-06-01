@@ -1,11 +1,11 @@
-from bin.compiler.serial_devices import PololuServoCompiler, SerialCommandCompiler
+from bin.compiler.serial_devices import PololuServoInterface, SerialCommandCompiler
 from bin.minion import LoggerMinion
 from apps.servo_compiler.app_bin import ServoCompilerGUI
 
 if __name__ == '__main__':
     GUI = ServoCompilerGUI('GUI', refresh_interval=1)
-    pololu_servo = PololuServoCompiler('Pololu', refresh_interval=1, port_name='COM6',
-                                       servo_dict={'yaw': 3, 'radius': 5, 'flagging': 1, })
+    pololu_servo = PololuServoInterface('Pololu', refresh_interval=1, port_name='COM6',
+                                        servo_dict={'yaw': 3, 'radius': 5, 'flagging': 1, })
     arduino_board = SerialCommandCompiler('Arduino', refresh_interval=1, port_name='COM7')
     logger = LoggerMinion('Logger')
 

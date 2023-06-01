@@ -8,7 +8,7 @@ import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
 
 from bin.compiler.graphics import QtCompiler
-from bin.compiler.serial_devices import PololuServoCompiler, ArduinoCompiler
+from bin.compiler.serial_devices import PololuServoInterface, ArduinoCompiler
 from bin.gui import DataframeTable
 from src.tisgrabber import tisgrabber as tis
 
@@ -692,7 +692,7 @@ class PololuServoApp(AbstractAPP):
 
     def initialize(self):
         super().initialize()
-        self._compiler = PololuServoCompiler(self, **self._param_to_compiler, )
+        self._compiler = PololuServoInterface(self, **self._param_to_compiler, )
         self.info("Pololu compiler initialized.")
 
 

@@ -45,7 +45,7 @@ class AbstractCompiler(TimerMinionMixin):
 
 class IOStreamingCompiler(AbstractCompiler):
 
-    def __init__(self, *args, state_dict={}, buffer_dict={}, buffer_saving_opt={}, trigger=None, **kwargs):
+    def __init__(self, *args, ts_minion_name=None, state_dict={}, buffer_dict={}, buffer_saving_opt={}, trigger=None, **kwargs):
         '''
         A compiler for the IOHandler class that receives and save all data from its connected minions.
         :param state_dict: a dictionary whose keys will be the names of the minions and the values will be lists of parameters to save in a csv file.
@@ -55,6 +55,7 @@ class IOStreamingCompiler(AbstractCompiler):
         '''
         super().__init__(*args, **kwargs)
 
+        self._ts_minion_name = ts_minion_name
         self.state_dict = state_dict
         self.buffer_dict = buffer_dict
         self.buffer_saving_opt = buffer_saving_opt
@@ -294,7 +295,7 @@ class IOStreamingCompiler(AbstractCompiler):
                 if trigger_state is not None:
                     trigger = self.watch_state('Trigger', trigger_state)
             if trigger:
-                t = time.perf_counter() - self._streaming_start_time
+                t = self.get_timestamp() - self._streaming_start_time
                 val_row = [t]
                 for mi_name, state_name in self.state_dict.items():
                     state_dict = self.get_state_from(mi_name, 'ALL')
@@ -310,6 +311,12 @@ class IOStreamingCompiler(AbstractCompiler):
                             self._buffer_streaming_handle[mi][buf_name].write(self.get_state_from(mi, buf_name))
                         else:
                             pass
+
+    def get_timestamp(self):
+        if self._ts_minion_name is not None:
+            return self.get_state_from(self._ts_minion_name, 'timestamp')
+        else:
+            return time.perf_counter()
 
     def on_time(self, t):
         self._streaming_setup()

@@ -1,7 +1,7 @@
-import csv
-import os
+# import csv
+# import os
 import traceback
-from time import perf_counter
+# from time import perf_counter
 
 import numpy as np
 import pyfirmata2 as fmt
@@ -12,11 +12,11 @@ import usb.util
 from bin.compiler.prototypes import AbstractCompiler
 
 
-class PololuServoCompiler(AbstractCompiler):
+class PololuServoInterface(AbstractCompiler):
     AUXile_Postfix = "Pololu_AUX"
 
     def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
-        super(PololuServoCompiler, self).__init__(*args, **kwargs)
+        super(PololuServoInterface, self).__init__(*args, **kwargs)
         self._port = None
         self._port_name = port_name
         self.servo_dict = servo_dict
@@ -35,66 +35,66 @@ class PololuServoCompiler(AbstractCompiler):
                 self.create_state(n, self.getPosition(v))
             except:
                 print(traceback.format_exc())
-        self.create_state('StreamToDisk', False)
-        self.create_state('SaveDir', False)
-        self.create_state('SaveName', False)
-        self.create_state('InitTime', False)
+        # self.create_state('StreamToDisk', False)
+        # self.create_state('SaveDir', False)
+        # self.create_state('SaveName', False)
+        # self.create_state('InitTime', False)
 
     def on_time(self, t):
-        self._streaming_setup()
+        # self._streaming_setup()
         for n, v in self.servo_dict.items():
             state = self.get_state(n)
             if self.watch_state(n, state) and state is not None:
                 self.setTarget(v, int(state))
                 # print(f"Set {n}-{v} to {state}")
-        self._data_streaming()
+    #     self._data_streaming()
+    #
+    # def _streaming_setup(self):
+    #     if_streaming = self.get_state('StreamToDisk')
+    #     if self.watch_state('StreamToDisk', if_streaming):
+    #         if if_streaming:
+    #             self._start_streaming()
+    #         else:
+    #             self._stop_streaming()
+    #
+    # def _start_streaming(self):
+    #     save_dir = self.get_state('SaveDir')
+    #     file_name = self.get_state('SaveName')
+    #     init_time = self.get_state('InitTime')
+    #     if save_dir is None or file_name is None or init_time is None:
+    #         self.error("Please set the save directory, file name and initial time before streaming.")
+    #     else:
+    #         if os.path.isdir(save_dir):
+    #             AUX_Fn = f"{self.name}_{file_name}_{self.AUXile_Postfix}.csv"
+    #             AUX_Fulldir = os.path.join(save_dir, AUX_Fn)
+    #             if os.path.isfile(AUX_Fulldir):
+    #                 self.error(f"File {AUX_Fn} already exists in the folder {save_dir}. Please change "
+    #                            f"the save_name.")
+    #             else:
+    #                 self._AUX_FileHandle = open(AUX_Fulldir, 'w')
+    #                 self._AUX_writer = csv.writer(self._AUX_FileHandle)
+    #                 col_name = ['Time']
+    #                 for n in self.servo_dict.keys():
+    #                     col_name.append(n)
+    #                 self._AUX_writer.writerow(col_name)
+    #                 self._stream_init_time = init_time
+    #                 self.streaming = True
+    #
+    # def _stop_streaming(self):
+    #     if self._AUX_FileHandle is not None:
+    #         self._AUX_FileHandle.close()
+    #     self._AUX_writer = None
+    #     self._stream_init_time = None
+    #     self._n_frame_streamed = None
+    #     self.streaming = False
 
-    def _streaming_setup(self):
-        if_streaming = self.get_state('StreamToDisk')
-        if self.watch_state('StreamToDisk', if_streaming):
-            if if_streaming:
-                self._start_streaming()
-            else:
-                self._stop_streaming()
-
-    def _start_streaming(self):
-        save_dir = self.get_state('SaveDir')
-        file_name = self.get_state('SaveName')
-        init_time = self.get_state('InitTime')
-        if save_dir is None or file_name is None or init_time is None:
-            self.error("Please set the save directory, file name and initial time before streaming.")
-        else:
-            if os.path.isdir(save_dir):
-                AUX_Fn = f"{self.name}_{file_name}_{self.AUXile_Postfix}.csv"
-                AUX_Fulldir = os.path.join(save_dir, AUX_Fn)
-                if os.path.isfile(AUX_Fulldir):
-                    self.error(f"File {AUX_Fn} already exists in the folder {save_dir}. Please change "
-                               f"the save_name.")
-                else:
-                    self._AUX_FileHandle = open(AUX_Fulldir, 'w')
-                    self._AUX_writer = csv.writer(self._AUX_FileHandle)
-                    col_name = ['Time']
-                    for n in self.servo_dict.keys():
-                        col_name.append(n)
-                    self._AUX_writer.writerow(col_name)
-                    self._stream_init_time = init_time
-                    self.streaming = True
-
-    def _stop_streaming(self):
-        if self._AUX_FileHandle is not None:
-            self._AUX_FileHandle.close()
-        self._AUX_writer = None
-        self._stream_init_time = None
-        self._n_frame_streamed = None
-        self.streaming = False
-
-    def _data_streaming(self):
-        if self.streaming:
-            # Write to AUX file
-            col_val = [perf_counter() - self._stream_init_time]
-            for n in self.servo_dict.keys():
-                col_val.append(self.get_state(n))
-            self._AUX_writer.writerow(col_val)
+    # def _data_streaming(self):
+    #     if self.streaming:
+    #         # Write to AUX file
+    #         col_val = [perf_counter() - self._stream_init_time]
+    #         for n in self.servo_dict.keys():
+    #             col_val.append(self.get_state(n))
+    #         self._AUX_writer.writerow(col_val)
 
     def on_close(self):
         self._port.close()
@@ -244,8 +244,6 @@ class PololuServoCompiler(AbstractCompiler):
         cmd = chr(0x24)
         self.sendCmd(cmd)
 
-    def on_close(self):
-        self.set_state('status', -1)
     #############################################################################################
 
 
@@ -323,10 +321,10 @@ class ArduinoCompiler(AbstractCompiler):
         self.set_state('status', -1)
         self._port.exit()
 
-class OMSCompiler(AbstractCompiler):
+class OMSInterface(AbstractCompiler):
 
     def __init__(self, *args, VID=None, PID=None, timeout=10, mw_size=1, **kwargs):
-        super(OMSCompiler, self).__init__(*args, **kwargs)
+        super(OMSInterface, self).__init__(*args, **kwargs)
         if VID is None or PID is None:
             raise ValueError('VID and PID must be set')
         else:

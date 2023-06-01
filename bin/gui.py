@@ -181,14 +181,12 @@ class DataframeTable(qw.QTableView):
         self.filename = None
 
     def dragEnterEvent(self, event):
-        print('SOMETHING HAPPENED!')
         if event.mimeData().hasUrls:
             event.accept()
         else:
             event.ignore()
 
     def dragMoveEvent(self, event):
-        print('SOMETHING HAPPENED!')
         if event.mimeData().hasUrls:
             event.accept()
         else:

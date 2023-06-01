@@ -41,6 +41,7 @@ class TISCameraCompiler(AbstractCompiler):
         self._AUX_writer = None
         self._stream_init_time = None
         self._n_frame_streamed = None
+        self.camera = None
 
         if save_option in ['binary', 'movie']:
             self.save_option = save_option
@@ -59,10 +60,18 @@ class TISCameraCompiler(AbstractCompiler):
 
     def _init_camera(self):
         self.info("Searching camera...")
+
         while self._params['CameraName'] is None:
             self._params['CameraName'] = self.get_state('CameraName')
+            if self.status() == -1:
+                return None
+
+
         while self._params['VideoFormat'] is None:
             self._params['VideoFormat'] = self.get_state('VideoFormat')
+            if self.status() == -1:
+                return None
+
         self.info(f"Camera {self._params['CameraName']} found")
         self.camera = tis.TIS_CAM()
         self.camera.DevName = self._params['CameraName']
@@ -203,9 +212,10 @@ class TISCameraCompiler(AbstractCompiler):
                         'Trigger': 0, 'FrameCount': 0, 'FrameTime': 0}
 
     def on_close(self):
-        if self.camera.IsDevValid():
-            self.disconnect_camera()
-            self.camera = None
+        if self.camera is not None:
+            if self.camera.IsDevValid():
+                self.disconnect_camera()
+                self.camera = None
 
 
 class PCOCameraCompiler(AbstractCompiler):
