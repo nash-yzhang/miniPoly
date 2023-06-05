@@ -9,10 +9,10 @@ import serial
 import usb.core
 import usb.util
 
-from bin.compiler.prototypes import AbstractCompiler
+from bin.compiler.prototypes import AbstractCompiler, IOCompiler
 
 
-class PololuServoInterface(AbstractCompiler):
+class PololuServoInterface(IOCompiler):
     AUXile_Postfix = "Pololu_AUX"
 
     def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
@@ -32,7 +32,8 @@ class PololuServoInterface(AbstractCompiler):
         self._watching_state = {}
         for n, v in self.servo_dict.items():
             try:
-                self.create_state(n, self.getPosition(v))
+                # self.create_state(n, self.getPosition(v))
+                self.create_streaming_state(n, self.getPosition(v), use_buffer=True, dtype=float)
             except:
                 print(traceback.format_exc())
         # self.create_state('StreamToDisk', False)
@@ -46,6 +47,8 @@ class PololuServoInterface(AbstractCompiler):
             state = self.get_state(n)
             if self.watch_state(n, state) and state is not None:
                 self.setTarget(v, int(state))
+
+        super().on_time(t)
                 # print(f"Set {n}-{v} to {state}")
     #     self._data_streaming()
     #
@@ -321,7 +324,7 @@ class ArduinoCompiler(AbstractCompiler):
         self.set_state('status', -1)
         self._port.exit()
 
-class OMSInterface(AbstractCompiler):
+class OMSInterface(IOCompiler):
 
     def __init__(self, *args, VID=None, PID=None, timeout=10, mw_size=1, **kwargs):
         super(OMSInterface, self).__init__(*args, **kwargs)
@@ -342,8 +345,10 @@ class OMSInterface(AbstractCompiler):
         self._mw_size = mw_size
         self._pos_buffer = np.zeros((self._mw_size, 2))
 
-        self.create_state('xPos', 0)
-        self.create_state('yPos', 0)
+        self.create_streaming_state('xPos',0)
+        self.create_streaming_state('yPos',0)
+        # self.create_state('xPos', 0)
+        # self.create_state('yPos', 0)
 
     def on_time(self, t):
         try:
@@ -358,6 +363,8 @@ class OMSInterface(AbstractCompiler):
                 self.set_state('yPos', yPos)
         except:
             print(traceback.format_exc())
+
+        super().on_time(t)
 
     def _read_device(self):
         try:

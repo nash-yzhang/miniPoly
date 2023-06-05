@@ -187,6 +187,13 @@ class BaseMinion:
         else:
             self.log(logging.ERROR, f"SharedBuffer '{name}' already exist")
 
+    def remove_shared_buffer(self,state_name: str):
+        if state_name in self._shared_buffer.keys():
+            self._shared_buffer[state_name].close()
+            del self._shared_buffer[state_name]
+        else:
+            self.log(logging.ERROR, f"State '{state_name}' cannot be deleted because it does not exist")
+
     def link_minion(self, minion_name):
         if minion_name not in self._linked_minion.keys():
             try:
@@ -308,7 +315,7 @@ class BaseMinion:
             state_val = dict(self._shared_dict)
             for i_state_name, i_state_val in state_val.items():
                 if type(i_state_val) == str:
-                    if i_state_val.startwith('b*'):
+                    if i_state_val.startswith('b*'):
                         state_val[i_state_name] = self._read_buffer_as_state(i_state_val, asis)
         else:
             self.error(f"Unknown state: '{state_name}'")
@@ -985,6 +992,8 @@ class AbstractMinionMixin:
     def create_shared_buffer(self, buffer_name, buffer_val):
         self._processHandler.create_shared_buffer(buffer_name, buffer_val)
 
+    def remove_shared_buffer(self, buffer_name):
+        self._processHandler.remove_shared_buffer(buffer_name)
     def has_foreign_state(self, minion_name, buffer_name):
         return self._processHandler.has_foreign_state(minion_name,buffer_name)
 
