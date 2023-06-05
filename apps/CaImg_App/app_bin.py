@@ -109,7 +109,7 @@ class MainGUI(QtCompiler):
 
         # Stimulation GUI
         self.add_timer('protocol_timer', self.on_protocol)
-        self.create_state('is_running', False)
+        self.create_state('is_running', False, use_buffer=True)
 
         self._timer_started = False
         self.timer_switcher = qw.QPushButton('Start')
@@ -448,21 +448,20 @@ class MainGUI(QtCompiler):
         timestamp = self.get_state_from(self._scanlistener_minion, 'timestamp')
         ca_frame_num = self.get_state_from(self._scanlistener_minion, 'ca_frame_num')
 
-        if type(ca_frame_num) == int and type(timestamp) == int:
-            timestamp /= 1000  # convert to seconds
+        timestamp /= 1000  # convert to seconds
 
-            if self._ca_frame_num - ca_frame_num > 0:  # When the ca_frame_num is reset, add 1 to the ca_session_num
-                self.ca_session_num += 1
+        if self._ca_frame_num - ca_frame_num > 0:  # When the ca_frame_num is reset, add 1 to the ca_session_num
+            self.ca_session_num += 1
 
-            if self.ca_session_num > 0:  # for the second session and afterwards, preserve the last ca_frame_num in the previous session
-                if ca_frame_num > 0:
-                    self.label_ca_frame.setText(
-                        f"Ca session num: {ca_frame_num} [{self.ca_session_num}] ")  # To preserve the last ca_frame_num
-            else:
-                self.label_ca_frame.setText(f"Ca session num: {ca_frame_num} [0]")
+        if self.ca_session_num > 0:  # for the second session and afterwards, preserve the last ca_frame_num in the previous session
+            if ca_frame_num > 0:
+                self.label_ca_frame.setText(
+                    f"Ca session num: {ca_frame_num} [{self.ca_session_num}] ")  # To preserve the last ca_frame_num
+        else:
+            self.label_ca_frame.setText(f"Ca session num: {ca_frame_num} [0]")
 
-            self.label_timestamp.setText(f"Arduino time: {(timestamp):.2f} s")
-            self._ca_frame_num = ca_frame_num
+        self.label_timestamp.setText(f"Arduino time: {(timestamp):.2f} s")
+        self._ca_frame_num = ca_frame_num
 
     def update_plot_arr(self, t):
         self._time_arr[:-1] = self._time_arr[1:]
@@ -562,48 +561,61 @@ class ScanListener(AbstractCompiler):
         self.input_pin_dict = {}
         self.output_pin_dict = {}
 
-        self._port = Serial(self._port_name, baudrate=115200, timeout=1)
+        self._port = Serial(self._port_name, baudrate=115200, timeout=0.001)
 
-        self._buffer_data = np.zeros([5000, 3], dtype=np.int64)
         self._last_frame_num = 0
+        self._last_time = 0
+        self._serial_buffer = b''
+        # self._buffer_data = np.zeros([5000, 3], dtype=np.int64)
+        #
+        # self.create_shared_buffer('mirPos', self._buffer_data)
+        self.create_state('timestamp', 0, use_buffer=True)
+        self.create_state('ca_frame_num', 0, use_buffer=True)
 
-        self.create_shared_buffer('mirPos', self._buffer_data)
-        self.create_state('timestamp', 0)
-        self.create_state('ca_frame_num', 0)
-        self.create_state('freeze', 0)
 
-    def detect_frame(self):
-        baseline_thre = 100
-        reset_grad_thre = -150
-        try:
-            getData = self._port.readline()
-            data = getData.decode('utf-8')
-            if "---" in data and "+++" in data:
-                data = data.split('---')[1].split('+++')[0]
-                data = data.split(',')
-
-                timestamp = int(data[0])
-                cur_frame_num = int(data[2])
-
-                self.set_state('timestamp', timestamp)  # broadcast arduino time
-
-                frame_changed = cur_frame_num - self._last_frame_num  # omit report if frame number is not changed
-                self._last_frame_num = cur_frame_num
-
-                if frame_changed != 0:  # if frame number is changed, report frame number
-                    self.set_state('ca_frame_num', cur_frame_num)
-
-                ##### For debugging purpose ####
-                # self._buffer_data[:-1, :] = self._buffer_data[1:, :]
-                # self._buffer_data[-1, :] = [int(data[0]), int(data[1]), 500*(frame_changed>0)]
-                # self.set_state('mirPos', self._buffer_data)
-
-        except Exception as e:
-            self.debug(e)
 
     def on_time(self, t):
-        if not self.get_state('freeze'):
-            self.detect_frame()
+        t = time.perf_counter_ns()
+        # read the last complete line started with "---" and ended with "+++" from serial port
+        getData = self._serial_buffer+self._port.read(self._port.inWaiting())
+        data = b''
+        if b'\n' in getData:
+            data = getData.split(b'\n')
+            data = [i for i in data if i != b'']
+            self._serial_buffer = data[-1]
+            data = data[-2]
+        else:
+            self._serial_buffer = data
+
+        if b"---" in data and b"+++" in data:
+            try:
+                data = data.decode('utf8')
+            except:
+                print('decode error[1], data: %s' % data)
+                return
+            data = data.split('---')[1].split('+++')[0]
+            data = data.split(',')
+            if len(data) == 3:
+                if data[1].isdigit() and data[2].isdigit():
+                    timestamp = int(data[0])
+                    cur_frame_num = int(data[2])
+                    #
+                    self.set_state('timestamp', timestamp)  # broadcast arduino time
+                    #
+                    frame_changed = cur_frame_num - self._last_frame_num  # omit report if frame number is not changed
+                    if frame_changed != 0:  # if frame number is changed, report frame number
+                        self.set_state('ca_frame_num', cur_frame_num)
+                        self._last_frame_num = cur_frame_num
+            else:
+                print('data error[3], data: %s' % data)
+
+            # self._port.reset_input_buffer()
+
+        #     ##### For debugging purpose ####
+        #     self._buffer_data[:-1, :] = self._buffer_data[1:, :]
+        #     self._buffer_data[-1, :] = [int(data[0]), int(data[1]), 500*(frame_changed>0)]
+        #     self.set_state('mirPos', self._buffer_data)
+        self._last_time = t
 
     def on_close(self):
         super().on_close()

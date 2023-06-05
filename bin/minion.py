@@ -295,26 +295,33 @@ class BaseMinion:
 
         return state_val
 
-    def get_state(self, state_name: str):
+    def get_state(self, state_name: str,  asis=False):
+        # param asis: if true, then keep the format of the state (e.g. state is an integer stored in a ndarray buffer,
+        # asis == True, the state will be return as a numpy array
         state_val = None  # Return None if exception to avoid error
         if state_name in self._shared_dict.keys():
             state_val = self._shared_dict.get(state_name)
             if type(state_val) == str:
                 if state_val.startswith('b*'):
-                    state_val = self._shared_buffer[state_val].read()
+                    state_val = self._read_buffer_as_state(state_val,asis)
         elif state_name == 'ALL':
             state_val = dict(self._shared_dict)
+            for i_state_name, i_state_val in state_val.items():
+                if type(i_state_val) == str:
+                    if i_state_val.startwith('b*'):
+                        state_val[i_state_name] = self._read_buffer_as_state(i_state_val, asis)
         else:
             self.error(f"Unknown state: '{state_name}'")
         return state_val
 
-    def get_foreign_state(self, minion_name, state_name):
+    def get_foreign_state(self, minion_name, state_name, asis=False):
+        # param asis: if true, then keep the format of the state (e.g. state is an integer stored in a ndarray buffer,
+        # asis == True, the state will be return as a numpy array
         state_val = None
         err_code = 0
         if self.is_minion_alive(minion_name):
             if state_name in self._linked_minion[minion_name]:
-                with SharedNdarray(f"{minion_name}_{state_name}", lock=self.lock, create=False) as shm:
-                    state_val = shm.read()
+                state_val = self._read_foreign_buffer_as_state(minion_name, state_name, asis)
             else:
                 with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as shared_dict:
                     if state_name in shared_dict.keys():
@@ -322,10 +329,13 @@ class BaseMinion:
                         if type(state_val) == str:
                             if state_val.startswith('b*'):
                                 self._linked_minion[minion_name].append(state_name)
-                                with SharedNdarray(f"{minion_name}_{state_name}", lock=self.lock, create=False) as shm:
-                                    state_val = shm.read()
+                                state_val = self._read_foreign_buffer_as_state(minion_name, state_name, asis)
                     elif state_name == 'ALL':
                         state_val = dict(shared_dict)
+                        for i_state_name, i_state_val in state_val.items():
+                            if type(i_state_val) == str:
+                                if i_state_val.startswith('b*'):
+                                    state_val[i_state_name] = self._read_foreign_buffer_as_state(minion_name, i_state_name, asis)
                     else:
                         err_code = 1
         else:
@@ -338,6 +348,18 @@ class BaseMinion:
 
         return state_val
 
+    def _read_foreign_buffer_as_state(self, minion_name, state_name, asis):
+        with SharedNdarray(f"{minion_name}_{state_name}", lock=self.lock, create=False) as shm:
+            state_val = shm.read()
+            if state_val.size == 1 and not asis:
+                state_val = state_val[0]
+            return state_val
+
+    def _read_buffer_as_state(self, state_name, asis):
+        state_val = self._shared_buffer[state_name].read()
+        if state_val.size == 1 and not asis:
+            state_val = state_val[0]
+        return state_val
 
     def set_state_to(self, minion_name: str, state_name: str, val):
         """

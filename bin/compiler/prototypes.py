@@ -48,9 +48,13 @@ class IOStreamingCompiler(AbstractCompiler):
     def __init__(self, *args, ts_minion_name=None, state_dict={}, buffer_dict={}, buffer_saving_opt={}, trigger=None, **kwargs):
         '''
         A compiler for the IOHandler class that receives and save all data from its connected minions.
-        :param state_dict: a dictionary whose keys will be the names of the minions and the values will be lists of parameters to save in a csv file.
-        :param buffer_dict: a dictionary whose keys will be the names of the minions and the values will be lists of buffers to save.
-        :param buffer_saving_opt: a dictionary whose keys will be the names of the minions and the values will be option dictionaries. The key of the option dictionary is the name of the buffer and the value is the saving options.
+        :param state_dict: a dictionary whose keys will be the names of the minions and the values will be lists of
+                            parameters to save in a csv file.
+        :param buffer_dict: a dictionary whose keys will be the names of the minions and the values will be lists of
+                            buffers to save.
+        :param buffer_saving_opt: a dictionary whose keys will be the names of the minions and the values will be option
+                            dictionaries. The key of the option dictionary is the name of the buffer and the value is
+                            the saving options.
         :param trigger: the name of a foreign state whose change will trigger the saving of all data.
         '''
         super().__init__(*args, **kwargs)
