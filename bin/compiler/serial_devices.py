@@ -326,7 +326,7 @@ class ArduinoCompiler(AbstractCompiler):
 
 class OMSInterface(IOCompiler):
 
-    def __init__(self, *args, VID=None, PID=None, timeout=10, mw_size=1, **kwargs):
+    def __init__(self, *args, VID=None, PID=None, timeout=1, mw_size=1, **kwargs):
         super(OMSInterface, self).__init__(*args, **kwargs)
         if VID is None or PID is None:
             raise ValueError('VID and PID must be set')
@@ -345,8 +345,8 @@ class OMSInterface(IOCompiler):
         self._mw_size = mw_size
         self._pos_buffer = np.zeros((self._mw_size, 2))
 
-        self.create_streaming_state('xPos',0)
-        self.create_streaming_state('yPos',0)
+        self.create_streaming_state('xPos',0, shared=True)
+        self.create_streaming_state('yPos',0, shared=True)
         # self.create_state('xPos', 0)
         # self.create_state('yPos', 0)
 
@@ -359,8 +359,8 @@ class OMSInterface(IOCompiler):
                 self._pos_buffer[-1, 1] = y
                 xPos,yPos = np.nanmean(self._pos_buffer, axis=0)
 
-                self.set_state('xPos', xPos)
-                self.set_state('yPos', yPos)
+                self.set_streaming_state('xPos', xPos)
+                self.set_streaming_state('yPos', yPos)
         except:
             print(traceback.format_exc())
 

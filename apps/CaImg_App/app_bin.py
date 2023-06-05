@@ -558,8 +558,8 @@ class ScanListener(IOCompiler):
         # self._buffer_data = np.zeros([5000, 3], dtype=np.int64)
         #
         # self.create_shared_buffer('mirPos', self._buffer_data)
-        self.create_streaming_state('timestamp', 0)
-        self.create_streaming_state('ca_frame_num', 0)
+        self.create_streaming_state('timestamp', 0, shared=True)
+        self.create_streaming_state('ca_frame_num', 0, shared=True)
         # self.create_state('timestamp', 0, use_buffer=True)
         # self.create_state('ca_frame_num', 0, use_buffer=True)
 
@@ -591,12 +591,13 @@ class ScanListener(IOCompiler):
                     timestamp = int(data[0])
                     cur_frame_num = int(data[2])
                     #
-                    self.set_state('timestamp', timestamp)  # broadcast arduino time
+                    # self.set_state('timestamp', timestamp)  # broadcast arduino time
+                    self.set_streaming_state('timestamp', timestamp)  # broadcast arduino time
                     #
                     frame_changed = cur_frame_num - self._last_frame_num  # omit report if frame number is not changed
                     if frame_changed != 0:  # if frame number is changed, report frame number
                         print(f"Time: {timestamp}, Frame: {cur_frame_num}")
-                        self.set_state('ca_frame_num', cur_frame_num)
+                        self.set_streaming_state('ca_frame_num', cur_frame_num)
                         self._last_frame_num = cur_frame_num
             else:
                 print('data error[3], data: %s' % data)
@@ -608,6 +609,7 @@ class ScanListener(IOCompiler):
         #     self._buffer_data[-1, :] = [int(data[0]), int(data[1]), 500*(frame_changed>0)]
         #     self.set_state('mirPos', self._buffer_data)
         self._last_time = t
+        super().on_time(t)
 
     def on_close(self):
         super().on_close()

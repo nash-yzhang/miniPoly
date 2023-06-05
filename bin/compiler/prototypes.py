@@ -42,6 +42,7 @@ class AbstractCompiler(TimerMinionMixin):
     def on_close(self):
         pass
 
+
 class IOCompiler(AbstractCompiler):
 
     def __init__(self, *args, timer_minion=None, trigger_minion=None, **kwargs):
@@ -65,8 +66,10 @@ class IOCompiler(AbstractCompiler):
         self._streaming_start_time = 0
         self.streaming = False
 
-        self._streaming_states = []
+        self._streaming_states = {}
         self._streaming_buffers = {}
+        self._shared_states = []
+        self._shared_buffers = []
 
         # Initializing saving parameters and create the corresponding shared state to receive GUI control
         self.saving_param = {'StreamToDisk': False,
@@ -76,40 +79,88 @@ class IOCompiler(AbstractCompiler):
         # for k, v in self.saving_param.items():
         #     self.create_state(k, v)
 
-    def create_streaming_state(self, state_name, val, use_buffer=False, dtype=None):
+    def create_streaming_state(self, state_name, val, shared=False, use_buffer=False, dtype=None):
         if state_name in self._streaming_states:
             self.error('{} is already in the streaming state list'.format(state_name))
         else:
-            self._streaming_states.append(state_name)
-            self.create_state(state_name, val, use_buffer=use_buffer, dtype=dtype)
-            self.info('Created streaming state [{}]'.format(state_name))
+            self._streaming_states[state_name] = val
+            if shared:
+                self.create_state(state_name, val, use_buffer=use_buffer, dtype=dtype)
+                self._shared_states.append(state_name)
+                self.info('Created shared streaming state [{}]'.format(state_name))
+            else:
+                self.info('Created local streaming state [{}]'.format(state_name))
 
     def remove_streaming_state(self, mi_name, state_name):
         if state_name in self._streaming_states:
-            self._streaming_states.remove(state_name)
-            self.remove_state(state_name)
+            del self._streaming_states[state_name]
+            if state_name in self._shared_states:
+                self._shared_states.remove(state_name)
+                self.remove_state(state_name)
             self.info('Removed {} from the streaming state list of {}'.format(state_name, mi_name))
         else:
             self.error('{} is not registered for streaming'.format(mi_name))
 
-    def create_streaming_buffer(self, buffer_name, buffer_val, saving_opt=None):
+    def create_streaming_buffer(self, buffer_name, buffer_val, saving_opt=None, shared=False):
         if buffer_name in self._streaming_buffers:
             self.error('{} is already in the streaming buffer list'.format(buffer_name))
         else:
-            self._streaming_buffers[buffer_name] = saving_opt
-            self.create_shared_buffer(buffer_name, buffer_val)
-            self.info('Created streaming buffer [{}]'.format(buffer_name))
+            self._streaming_buffers[buffer_name] = (buffer_val, saving_opt)
+            if shared:
+                self._shared_buffers.append(buffer_name)
+                self.create_shared_buffer(buffer_name, buffer_val)
+                self.info('Created shared streaming buffer [{}]'.format(buffer_name))
+            else:
+                self.info('Created local streaming buffer [{}]'.format(buffer_name))
+
     def remove_streaming_buffer(self, buffer_name):
         if buffer_name in self._streaming_buffers.keys():
-            self._streaming_buffers.pop(buffer_name)
-            self.remove_shared_buffer(buffer_name)
+            del self._streaming_buffers[buffer_name]
+            if buffer_name in self._shared_buffers:
+                self.remove_shared_buffer(buffer_name)
+                self._shared_buffers.remove(buffer_name)
             self.info('Removed {} from the streaming buffer list'.format(buffer_name))
         else:
             self.error('Cannot remove {} as it is not registered for streaming'.format(buffer_name))
 
+    def get_streaming_state(self, state_name):
+        if state_name in self._streaming_states.keys():
+            if state_name in self._shared_states:
+                self._streaming_states[state_name] = self.get_state(state_name)
+            return self._streaming_states[state_name]
+        else:
+            self.error('{} is not registered for streaming'.format(state_name))
+            return None
+
+    def set_streaming_state(self, state_name, val):
+        if state_name in self._streaming_states.keys():
+            if state_name in self._shared_states:
+                self.set_state(state_name, val)
+            else:
+                self._streaming_states[state_name] = val
+        else:
+            self.error('{} is not registered for streaming'.format(state_name))
+
+    def get_streaming_buffer(self, buffer_name):
+        if buffer_name in self._streaming_buffers.keys():
+            if buffer_name in self._shared_buffers:
+                self._streaming_buffers[buffer_name][1] = self.get_state(buffer_name)
+            return self._streaming_buffers[buffer_name]
+        else:
+            self.error('{} is not registered for streaming'.format(buffer_name))
+            return None
+
+    def set_streaming_buffer(self, buffer_name, val):
+        if buffer_name in self._streaming_buffers.keys():
+            if buffer_name in self._shared_buffers:
+                self.set_state(buffer_name, val)
+            else:
+                self._streaming_buffers[buffer_name][1] = val
+        else:
+            self.error('{} is not registered for streaming'.format(buffer_name))
 
     def _streaming_setup(self):
-        if_streaming = self.get_state_from(self._trigger_minion,'StreamToDisk')
+        if_streaming = self.get_state_from(self._trigger_minion, 'StreamToDisk')
         if self.watch_state('StreamToDisk', if_streaming):  # Triggered at the onset and the end of streaming
             if if_streaming:
                 err = self._prepare_streaming()
@@ -123,8 +174,8 @@ class IOCompiler(AbstractCompiler):
         stateStreamHandlerFn = None
         bufferHandlerParam = {}
 
-        save_dir = self.get_state_from(self._trigger_minion,'SaveDir')
-        file_name = self.get_state_from(self._trigger_minion,'SaveName')+"_"+self.name
+        save_dir = self.get_state_from(self._trigger_minion, 'SaveDir')
+        file_name = self.get_state_from(self._trigger_minion, 'SaveName') + "_" + self.name
         missing_saving_param = [i for i in [save_dir, file_name] if i is None]
         if len(missing_saving_param) > 0:
             err = True
@@ -162,7 +213,9 @@ class IOCompiler(AbstractCompiler):
                     else:
                         bufferHandlerParam[buf_name]['type'] = 'disabled'
                         bufferHandlerParam[buf_name]['fn'] = None
-                        self.warning("Unknown streaming format: [{}];  Streaming of {} from {} is disabled".format(v[1], buf_name, self.name))
+                        self.warning("Unknown streaming format: [{}];  Streaming of {} from {} is disabled".format(v[1],
+                                                                                                                   buf_name,
+                                                                                                                   self.name))
 
                 if len(errFnList) > 0:
                     self.error("Streaming could not start because the following buffer files already exist: {}".format(
@@ -195,9 +248,9 @@ class IOCompiler(AbstractCompiler):
                 self._buffer_streaming_handle[buf_name] = (open(fn, 'wb'), v[1])
             elif v[1] == 'movie':
                 self._buffer_streaming_handle[buf_name] = (cv2.VideoWriter(fn, cv2.VideoWriter_fourcc(*'MJPG'),
-                                                                               int(1000/self.refresh_interval),
-                                                                               fshape),
-                                                               'movie')
+                                                                           int(1000 / self.refresh_interval),
+                                                                           fshape),
+                                                           'movie')
             else:
                 self._buffer_streaming_handle[buf_name] = (None, None)
 
@@ -234,28 +287,30 @@ class IOCompiler(AbstractCompiler):
             #     if trigger_state is not None:
             #         trigger = self.watch_state('Trigger', trigger_state)
             # if trigger:
-            tt = time.perf_counter()
             t = self.get_timestamp() - self._streaming_start_time
             val_row = [t]
+            tt = time.perf_counter()
+            n = 0
             for state_name in self._streaming_states:
-                val_row.append(self.get_state(state_name))
+                val_row.append(self.get_streaming_state(state_name))
+                n += 1
             self._state_stream_writer.writerow(val_row)
-            print(f"Elapsed: {(time.perf_counter()-tt)*1000} ms")
+            print(f"Elapsed: {(time.perf_counter() - tt) * 1000} ms for {n} states")
 
             for buf_name, v in self._streaming_buffers.items():
                 if v[1] is None or v[1] == 'binary':
-                    self._buffer_streaming_handle[buf_name].write(bytearray(self.get_state(buf_name)))
+                    self._buffer_streaming_handle[buf_name].write(bytearray(self.get_streaming_buffer(buf_name)))
                 elif v[1] == 'movie':
-                    self._buffer_streaming_handle[buf_name].write(self.get_state(buf_name))
+                    self._buffer_streaming_handle[buf_name].write(self.get_streaming_buffer(buf_name))
                 else:
                     pass
 
     def get_timestamp(self):
         if self._timer_minion is not None:
             if self._timer_minion != self.name:
-                return self.get_state_from(self._timer_minion, 'timestamp')/1000
+                return self.get_state_from(self._timer_minion, 'timestamp') / 1000
             else:
-                return self.get_state('timestamp')/1000
+                return self.get_streaming_state('timestamp') / 1000
         else:
             return time.perf_counter()
 
@@ -263,9 +318,11 @@ class IOCompiler(AbstractCompiler):
         self._streaming_setup()
         self._streaming()
 
+
 class IOStreamingCompiler(AbstractCompiler):
 
-    def __init__(self, *args, ts_minion_name=None, state_dict={}, buffer_dict={}, buffer_saving_opt={}, trigger=None, **kwargs):
+    def __init__(self, *args, ts_minion_name=None, state_dict={}, buffer_dict={}, buffer_saving_opt={}, trigger=None,
+                 **kwargs):
         '''
         A compiler for the IOHandler class that receives and save all data from its connected minions.
         :param state_dict: a dictionary whose keys will be the names of the minions and the values will be lists of
@@ -478,7 +535,7 @@ class IOStreamingCompiler(AbstractCompiler):
                     self._buffer_streaming_handle[mi][buf_name] = (open(fn, 'wb'), v[1])
                 elif v[1] == 'movie':
                     self._buffer_streaming_handle[mi][buf_name] = (cv2.VideoWriter(fn, cv2.VideoWriter_fourcc(*'MJPG'),
-                                                                                   int(1000/self.refresh_interval),
+                                                                                   int(1000 / self.refresh_interval),
                                                                                    fshape),
                                                                    'movie')
                 else:
@@ -530,7 +587,8 @@ class IOStreamingCompiler(AbstractCompiler):
                 for mi, i_buf in self._buffer_streaming_handle.items():
                     for buf_name, v in i_buf.items():
                         if v[1] is None or v[1] == 'binary':
-                            self._buffer_streaming_handle[mi][buf_name].write(bytearray(self.get_state_from(mi, buf_name)))
+                            self._buffer_streaming_handle[mi][buf_name].write(
+                                bytearray(self.get_state_from(mi, buf_name)))
                         elif v[1] == 'movie':
                             self._buffer_streaming_handle[mi][buf_name].write(self.get_state_from(mi, buf_name))
                         else:
@@ -538,7 +596,7 @@ class IOStreamingCompiler(AbstractCompiler):
 
     def get_timestamp(self):
         if self._ts_minion_name is not None:
-            return self.get_state_from(self._ts_minion_name, 'timestamp')/1000
+            return self.get_state_from(self._ts_minion_name, 'timestamp') / 1000
         else:
             return time.perf_counter()
 

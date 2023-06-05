@@ -14,17 +14,17 @@ if __name__ == '__main__':
     #                                                         'SERVO': ['yaw', 'radius'],
     #                                                         'SCAN': ['ca_frame_num']}, refresh_interval=1)
     SCAN = ScanListenerApp('SCAN',timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM6')
-    STIM = PololuServoApp('SERVO', timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM4', servo_dict={'yaw': 3, 'radius': 5})
+    # STIM = PololuServoApp('SERVO', timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM4', servo_dict={'yaw': 3, 'radius': 5})
     logger = LoggerMinion('LOGGER')
     logger.set_level('DEBUG')
 
     OMS.connect(SCAN)
-    STIM.connect(SCAN)
+    # STIM.connect(SCAN)
     Cam.connect(SCAN)
 
     SCAN.connect(GUI)
     OMS.connect(GUI)
-    STIM.connect(GUI)
+    # STIM.connect(GUI)
     Cam.connect(GUI)
     #
     # IO.connect(GUI)
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     GUI.attach_logger(logger)
     OMS.attach_logger(logger)
     SCAN.attach_logger(logger)
-    STIM.attach_logger(logger)
+    # STIM.attach_logger(logger)
     # IO.attach_logger(logger)
     #
     logger.run()
@@ -44,5 +44,5 @@ if __name__ == '__main__':
     # IO.run()
     OMS.run()
     SCAN.run()
-    STIM.run()
+    # STIM.run()
     Cam.run()
