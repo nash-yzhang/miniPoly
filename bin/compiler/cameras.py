@@ -37,8 +37,8 @@ class TISCameraCompiler(AbstractCompiler):
                         'StreamToDisk': False, 'InitTime': 0., 'FrameCount': int(0), 'FrameTime': 0.}
         self.streaming = False
         self._BIN_FileHandle = None
-        self._AUX_FileHandle = None
-        self._AUX_writer = None
+        # self._AUX_FileHandle = None
+        # self._AUX_writer = None
         self._stream_init_time = None
         self._n_frame_streamed = None
         self.camera = None
@@ -136,10 +136,10 @@ class TISCameraCompiler(AbstractCompiler):
 
     def _data_streaming(self, frame_time, frame):
         if self.streaming:
-            frame_time = frame_time - self._stream_init_time
+            # frame_time = frame_time - self._stream_init_time
             # Write to AUX file
-            n_frame = self._n_frame_streamed
-            self._AUX_writer.writerow([n_frame, frame_time])
+            # n_frame = self._n_frame_streamed
+            # self._AUX_writer.writerow([n_frame, frame_time])
 
             if self.save_option == 'binary':
                 # Write to BIN file
@@ -186,8 +186,8 @@ class TISCameraCompiler(AbstractCompiler):
                                                                int(self.frame_rate),
                                                                (self.frame_shape[1], self.frame_shape[0]))
 
-                    self._AUX_FileHandle = open(AUX_Fulldir, 'w', newline='')
-                    self._AUX_writer = csv.writer(self._AUX_FileHandle)
+                    # self._AUX_FileHandle = open(AUX_Fulldir, 'w', newline='')
+                    # self._AUX_writer = csv.writer(self._AUX_FileHandle)
                     self._stream_init_time = init_time
                     self._n_frame_streamed = 0
                     self.streaming = True
@@ -198,9 +198,9 @@ class TISCameraCompiler(AbstractCompiler):
                 self._BIN_FileHandle.close()
             elif self.save_option == 'movie':
                 self._BIN_FileHandle.release()
-        if self._AUX_FileHandle is not None:
-            self._AUX_FileHandle.close()
-        self._AUX_writer = None
+        # if self._AUX_FileHandle is not None:
+        #     self._AUX_FileHandle.close()
+        # self._AUX_writer = None
         self._stream_init_time = None
         self._n_frame_streamed = None
         self.streaming = False

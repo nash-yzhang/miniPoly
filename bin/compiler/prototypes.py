@@ -185,8 +185,9 @@ class IOStreamingCompiler(AbstractCompiler):
         if not err:
             save_dir = self.get_state('SaveDir')
             file_name = self.get_state('SaveName')
-            start_time = self.get_state('InitTime')
-            missing_saving_param = [i for i in [save_dir, file_name, start_time] if i is None]
+            # start_time = self.get_state('InitTime')
+            # missing_saving_param = [i for i in [save_dir, file_name, start_time] if i is None]
+            missing_saving_param = [i for i in [save_dir, file_name] if i is None]
             if len(missing_saving_param) > 0:
                 err = True
                 self.error("Streaming could not start because of the following undefined parameter(s): {}".format(
@@ -264,7 +265,7 @@ class IOStreamingCompiler(AbstractCompiler):
                 else:
                     self._buffer_streaming_handle[mi][buf_name] = (None, None)
 
-        start_time = self.get_state('InitTime')
+        start_time = self.get_timestamp()
         self._streaming_start_time = start_time
         self.streaming = True
 
@@ -318,7 +319,7 @@ class IOStreamingCompiler(AbstractCompiler):
 
     def get_timestamp(self):
         if self._ts_minion_name is not None:
-            return self.get_state_from(self._ts_minion_name, 'timestamp')
+            return self.get_state_from(self._ts_minion_name, 'timestamp')/1000
         else:
             return time.perf_counter()
 
