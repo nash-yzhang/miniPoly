@@ -16,7 +16,7 @@ from bin.gui import DataframeTable, DataframeModel
 from bin.compiler.serial_devices import OMSInterface, ArduinoCompiler, PololuServoInterface
 from src.tisgrabber import tisgrabber as tis
 
-from bin.compiler.prototypes import IOCompiler, IOStreamingCompiler
+from bin.compiler.prototypes import StreamingCompiler, IOStreamingCompiler
 from serial import Serial
 
 
@@ -540,7 +540,7 @@ class MainGUI(QtCompiler):
                                         self.set_state_to(m, s, state)
 
 
-class ScanListener(IOCompiler):
+class ScanListener(StreamingCompiler):
 
     def __init__(self, *args, port_name='COM7', **kwargs):
         super(ScanListener, self).__init__(*args, **kwargs)
@@ -558,8 +558,9 @@ class ScanListener(IOCompiler):
         # self._buffer_data = np.zeros([5000, 3], dtype=np.int64)
         #
         # self.create_shared_buffer('mirPos', self._buffer_data)
-        self.create_streaming_state('timestamp', 0, shared=True)
-        self.create_streaming_state('ca_frame_num', 0, shared=True)
+        self.create_state('timestamp', 0)
+        self.create_streaming_state('timestamp', 0)  # local copy of the shared state to reduce the time in accessing the shared buffer
+        self.create_streaming_state('ca_frame_num', 0, shared=True, use_buffer=False)
         # self.create_state('timestamp', 0, use_buffer=True)
         # self.create_state('ca_frame_num', 0, use_buffer=True)
 
@@ -591,7 +592,7 @@ class ScanListener(IOCompiler):
                     timestamp = int(data[0])
                     cur_frame_num = int(data[2])
                     #
-                    # self.set_state('timestamp', timestamp)  # broadcast arduino time
+                    self.set_state('timestamp', timestamp)  # broadcast arduino time
                     self.set_streaming_state('timestamp', timestamp)  # broadcast arduino time
                     #
                     frame_changed = cur_frame_num - self._last_frame_num  # omit report if frame number is not changed
@@ -632,52 +633,62 @@ class ScanListener(IOCompiler):
 #         self._compiler = IOStreamingCompiler(self, **self._param_to_compiler)
 #         self.info("Aux IO initialized.")
 #
-
-class OMSInterfaceApp(AbstractAPP):
-    def __init__(self, *args, timer_minion = None, trigger_minion = None, VID=None, PID=None, mw_size=1, **kwargs):
-        super(OMSInterfaceApp, self).__init__(*args, **kwargs)
-        self.timer_minion = timer_minion
-        self.trigger_minion = trigger_minion
-        self._VID = VID
-        self._PID = PID
-        self._mw_size = mw_size
-
-    def initialize(self):
-        super().initialize()
-        self._compiler = OMSInterface(self,timer_minion=self.timer_minion, trigger_minion=self.trigger_minion,
-                                      VID=self._VID, PID=self._PID, mw_size=self._mw_size)
-        self.info("OMS compiler initialized.")
-
-
-class ScanListenerApp(AbstractAPP):
-    def __init__(self, *args, timer_minion = None, trigger_minion = None, port_name=None, **kwargs):
-        super(ScanListenerApp, self).__init__(*args, **kwargs)
-        self.timer_minion = timer_minion
-        self.trigger_minion = trigger_minion
-        self._param_to_compiler = {'port_name': port_name}
-
-    def initialize(self):
-        super().initialize()
-        self._compiler = ScanListener(self, timer_minion=self.timer_minion, trigger_minion=self.trigger_minion,
-                                      **self._param_to_compiler)
-        self.info("Scan Listener initialized.")
-
-
-class PololuServoApp(AbstractAPP):
-    def __init__(self, *args, timer_minion = None, trigger_minion = None, port_name='COM6', servo_dict={}, **kwargs):
-        super(PololuServoApp, self).__init__(*args, **kwargs)
-        self.timer_minion = timer_minion
-        self.trigger_minion = trigger_minion
-        self._param_to_compiler['port_name'] = port_name
-        self._param_to_compiler['servo_dict'] = servo_dict
-
-    def initialize(self):
-        super().initialize()
-        self._compiler = PololuServoInterface(self, timer_minion=self.timer_minion, trigger_minion=self.trigger_minion,
-                                              **self._param_to_compiler, )
-        self.info("Pololu compiler initialized.")
-
-
+# class CamApp(AbstractAPP):
+#     def __init__(self, *args, camera_name=None, save_option='binary', **kwargs):
+#         super(CamApp, self).__init__(*args, **kwargs)
+#         self._param_to_compiler['camera_name'] = camera_name
+#         self._param_to_compiler['save_option'] = save_option
+#
+#     def initialize(self):
+#         super().initialize()
+#         self._compiler = TISCameraCompiler(self, **self._param_to_compiler, )
+#         self.info("Camera Interface initialized.")
+#
+# class OMSInterfaceApp(AbstractAPP):
+#     def __init__(self, name, compiler, timer_minion = None, trigger_minion = None, VID=None, PID=None, mw_size=1, **kwargs):
+#         super(OMSInterfaceApp, self).__init__(*args, **kwargs)
+#         self.timer_minion = timer_minion
+#         self.trigger_minion = trigger_minion
+#         self._VID = VID
+#         self._PID = PID
+#         self._mw_size = mw_size
+#
+#     def initialize(self):
+#         super().initialize()
+#         self._compiler = OMSInterface(self,timer_minion=self.timer_minion, trigger_minion=self.trigger_minion,
+#                                       VID=self._VID, PID=self._PID, mw_size=self._mw_size)
+#         self.info("OMS compiler initialized.")
+#
+#
+# class ScanListenerApp(AbstractAPP):
+#     def __init__(self, *args, timer_minion = None, trigger_minion = None, port_name=None, **kwargs):
+#         super(ScanListenerApp, self).__init__(*args, **kwargs)
+#         self.timer_minion = timer_minion
+#         self.trigger_minion = trigger_minion
+#         self._param_to_compiler = {'port_name': port_name}
+#
+#     def initialize(self):
+#         super().initialize()
+#         self._compiler = ScanListener(self, timer_minion=self.timer_minion, trigger_minion=self.trigger_minion,
+#                                       **self._param_to_compiler)
+#         self.info("Scan Listener initialized.")
+#
+#
+# class PololuServoApp(AbstractAPP):
+#     def __init__(self, *args, timer_minion = None, trigger_minion = None, port_name='COM6', servo_dict={}, **kwargs):
+#         super(PololuServoApp, self).__init__(*args, **kwargs)
+#         self.timer_minion = timer_minion
+#         self.trigger_minion = trigger_minion
+#         self._param_to_compiler['port_name'] = port_name
+#         self._param_to_compiler['servo_dict'] = servo_dict
+#
+#     def initialize(self):
+#         super().initialize()
+#         self._compiler = PololuServoInterface(self, timer_minion=self.timer_minion, trigger_minion=self.trigger_minion,
+#                                               **self._param_to_compiler, )
+#         self.info("Pololu compiler initialized.")
+#
+#
 class MainGUIApp(AbstractGUIAPP):
     def __init__(self, *args, surveillance_state=None, **kwargs):
         super(MainGUIApp, self).__init__(*args, **kwargs)

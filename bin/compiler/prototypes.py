@@ -43,7 +43,7 @@ class AbstractCompiler(TimerMinionMixin):
         pass
 
 
-class IOCompiler(AbstractCompiler):
+class StreamingCompiler(AbstractCompiler):
 
     def __init__(self, *args, timer_minion=None, trigger_minion=None, **kwargs):
         '''
@@ -279,14 +279,6 @@ class IOCompiler(AbstractCompiler):
 
     def _streaming(self):
         if self.streaming:
-            # Write to state csv file
-            # trigger = True
-            # if self._trigger_state_name:
-            #     mi, st = self._trigger_state_name.split('_')
-            #     trigger_state = self.get_state_from(mi, st)
-            #     if trigger_state is not None:
-            #         trigger = self.watch_state('Trigger', trigger_state)
-            # if trigger:
             t = self.get_timestamp() - self._streaming_start_time
             val_row = [t]
             tt = time.perf_counter()

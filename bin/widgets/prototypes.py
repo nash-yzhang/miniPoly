@@ -9,10 +9,47 @@ from bin.display import GLDisplay
 
 class AbstractAPP(TimerMinion):
     # The same as TimerMinion, just for reference structural clarity
+    def __init__(self, name, compiler, refresh_interval=10, **kwargs):
+        super(AbstractAPP, self).__init__(name, refresh_interval)
+        self._param_to_compiler = kwargs
+        self._compiler = compiler
+
+    def initialize(self):
+        super().initialize()
+        try:
+            self._compiler = self._compiler(self, **self._param_to_compiler)
+        except Exception as e:
+            self.error(f"{self.name} could not be created because of {e}")
+            return None
+        self.info(f"{self.name} initialized")
+
+class GUIAPP(AbstractAPP):
+
     def __init__(self, *args, **kwargs):
-        super(AbstractAPP, self).__init__(*args, **kwargs)
-        self._param_to_compiler = {}
-        self._compiler = None
+        super(GUIAPP, self).__init__(*args, **kwargs)
+        self._win = None
+
+    def initialize(self):
+        super().initialize()
+        self._win = self._compiler
+        self._win.show()
+
+class StreamingAPP(AbstractAPP):
+
+    def __init__(self, *args, timer_minion=None, trigger_minion=None, **kwargs):
+        super(StreamingAPP, self).__init__(*args, **kwargs)
+
+        if timer_minion is None:
+            self.error(f"{self.name} could not be created because the '[timer_minion]' is not set")
+            return None
+
+        if trigger_minion is None:
+            self.error(f"{self.name} could not be created because the '[trigger_minion]' is not set")
+            return None
+
+        self._param_to_compiler['timer_minion'] = timer_minion
+        self._param_to_compiler['trigger_minion'] = trigger_minion
+
 
 
 class AbstractGLAPP(TimerMinion):

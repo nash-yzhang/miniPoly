@@ -9,10 +9,10 @@ import serial
 import usb.core
 import usb.util
 
-from bin.compiler.prototypes import AbstractCompiler, IOCompiler
+from bin.compiler.prototypes import AbstractCompiler, StreamingCompiler
 
 
-class PololuServoInterface(IOCompiler):
+class PololuServoInterface(StreamingCompiler):
     AUXile_Postfix = "Pololu_AUX"
 
     def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
@@ -32,8 +32,7 @@ class PololuServoInterface(IOCompiler):
         self._watching_state = {}
         for n, v in self.servo_dict.items():
             try:
-                # self.create_state(n, self.getPosition(v))
-                self.create_streaming_state(n, self.getPosition(v), use_buffer=True, dtype=float)
+                self.create_streaming_state(n, self.getPosition(v), shared=True)
             except:
                 print(traceback.format_exc())
         # self.create_state('StreamToDisk', False)
@@ -42,7 +41,6 @@ class PololuServoInterface(IOCompiler):
         # self.create_state('InitTime', False)
 
     def on_time(self, t):
-        # self._streaming_setup()
         for n, v in self.servo_dict.items():
             state = self.get_state(n)
             if self.watch_state(n, state) and state is not None:
@@ -324,7 +322,7 @@ class ArduinoCompiler(AbstractCompiler):
         self.set_state('status', -1)
         self._port.exit()
 
-class OMSInterface(IOCompiler):
+class OMSInterface(StreamingCompiler):
 
     def __init__(self, *args, VID=None, PID=None, timeout=1, mw_size=1, **kwargs):
         super(OMSInterface, self).__init__(*args, **kwargs)
@@ -345,8 +343,8 @@ class OMSInterface(IOCompiler):
         self._mw_size = mw_size
         self._pos_buffer = np.zeros((self._mw_size, 2))
 
-        self.create_streaming_state('xPos',0, shared=True)
-        self.create_streaming_state('yPos',0, shared=True)
+        self.create_streaming_state('xPos',0, shared=True, use_buffer=False)
+        self.create_streaming_state('yPos',0, shared=True, use_buffer=False)
         # self.create_state('xPos', 0)
         # self.create_state('yPos', 0)
 
