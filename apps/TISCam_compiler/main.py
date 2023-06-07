@@ -1,6 +1,6 @@
 from apps.CaImg_App.app_bin import *
-from bin.widgets.cameras import TisCamApp
-from bin.minion import LoggerMinion
+from bin.app.cameras import TisCamApp
+from bin.app.prototypes import LoggerMinion
 
 VENDOR_ID = 0X046D
 PRODUCT_ID = 0xC24E

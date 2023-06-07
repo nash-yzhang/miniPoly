@@ -8,7 +8,6 @@ from bin.minion import TimerMinionMixin, TimerMinion
 
 import traceback
 
-
 class AbstractCompiler(TimerMinionMixin):
     _processHandler: TimerMinion
 
@@ -105,7 +104,7 @@ class StreamingCompiler(AbstractCompiler):
         if buffer_name in self._streaming_buffers:
             self.error('{} is already in the streaming buffer list'.format(buffer_name))
         else:
-            self._streaming_buffers[buffer_name] = (buffer_val, saving_opt)
+            self._streaming_buffers[buffer_name] = [buffer_val, saving_opt]
             if shared:
                 self._shared_buffers.append(buffer_name)
                 self.create_shared_buffer(buffer_name, buffer_val)
@@ -144,7 +143,7 @@ class StreamingCompiler(AbstractCompiler):
     def get_streaming_buffer(self, buffer_name):
         if buffer_name in self._streaming_buffers.keys():
             if buffer_name in self._shared_buffers:
-                self._streaming_buffers[buffer_name][1] = self.get_state(buffer_name)
+                self._streaming_buffers[buffer_name][0] = self.get_state(buffer_name)
             return self._streaming_buffers[buffer_name]
         else:
             self.error('{} is not registered for streaming'.format(buffer_name))
@@ -155,7 +154,7 @@ class StreamingCompiler(AbstractCompiler):
             if buffer_name in self._shared_buffers:
                 self.set_state(buffer_name, val)
             else:
-                self._streaming_buffers[buffer_name][1] = val
+                self._streaming_buffers[buffer_name][0] = val
         else:
             self.error('{} is not registered for streaming'.format(buffer_name))
 
@@ -216,6 +215,7 @@ class StreamingCompiler(AbstractCompiler):
                         self.warning("Unknown streaming format: [{}];  Streaming of {} from {} is disabled".format(v[1],
                                                                                                                    buf_name,
                                                                                                                    self.name))
+                    bufferHandlerParam[buf_name]['shape'] = v[0].shape[:-1]
 
                 if len(errFnList) > 0:
                     self.error("Streaming could not start because the following buffer files already exist: {}".format(
@@ -249,8 +249,7 @@ class StreamingCompiler(AbstractCompiler):
             elif v[1] == 'movie':
                 self._buffer_streaming_handle[buf_name] = (cv2.VideoWriter(fn, cv2.VideoWriter_fourcc(*'MJPG'),
                                                                            int(1000 / self.refresh_interval),
-                                                                           fshape),
-                                                           'movie')
+                                                                           (fshape[1], fshape[0])), 'movie')
             else:
                 self._buffer_streaming_handle[buf_name] = (None, None)
 
@@ -261,7 +260,7 @@ class StreamingCompiler(AbstractCompiler):
         if self.streaming:
             self.streaming = False
             self._state_stream_handler.close()
-            for buf_name, v in self._streaming_buffers.items():
+            for buf_name, v in self._buffer_streaming_handle.items():
                 if v[1] is None or v[1] == 'binary':
                     v[0].close()
                 elif v[1] == 'movie':
@@ -287,13 +286,13 @@ class StreamingCompiler(AbstractCompiler):
                 val_row.append(self.get_streaming_state(state_name))
                 n += 1
             self._state_stream_writer.writerow(val_row)
-            print(f"Elapsed: {(time.perf_counter() - tt) * 1000} ms for {n} states")
+            # print(f"Elapsed: {(time.perf_counter() - tt) * 1000} ms for {n} states")
 
             for buf_name, v in self._streaming_buffers.items():
                 if v[1] is None or v[1] == 'binary':
-                    self._buffer_streaming_handle[buf_name].write(bytearray(self.get_streaming_buffer(buf_name)))
+                    self._buffer_streaming_handle[buf_name][0].write(bytearray(v[0]))
                 elif v[1] == 'movie':
-                    self._buffer_streaming_handle[buf_name].write(self.get_streaming_buffer(buf_name))
+                    self._buffer_streaming_handle[buf_name][0].write(v[0].repeat(3,axis=2))
                 else:
                     pass
 

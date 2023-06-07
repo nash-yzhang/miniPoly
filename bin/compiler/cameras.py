@@ -98,10 +98,8 @@ class TISCameraCompiler(StreamingCompiler):
         self.frame_shape = frame.shape
         if self.has_state(buffer_name):
             self.set_streaming_buffer(buffer_name, frame)
-            # self.set_state(buffer_name, frame)
         else:
-            self.create_streaming_buffer(buffer_name, frame, shared=True)
-            # self.create_state(buffer_name, frame, use_buffer=True)
+            self.create_streaming_buffer(buffer_name, frame, saving_opt=self.save_option, shared=True)
         self._buffer_name = buffer_name
 
 
@@ -133,12 +131,12 @@ class TISCameraCompiler(StreamingCompiler):
     def process_frame(self):
         self._streaming_setup()
         self.camera.SnapImage()
-        # frame_time = perf_counter()
         frame = self.camera.GetImage()
-        # self.set_state(self._buffer_name, frame)
-        # self._data_streaming(frame_time, frame)
-        # TODO: Check why frame buffer is not streamed to disk
         self.set_streaming_buffer(self._buffer_name, frame)
+        if self.streaming:
+            self.set_streaming_state('FrameCount', self.get_streaming_state('FrameCount') + 1)
+        else:
+            self.set_streaming_state('FrameCount', 0)
 
     # def _data_streaming(self, frame_time, frame):
     #     if self.streaming:

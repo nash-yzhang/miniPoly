@@ -2,9 +2,8 @@ import time
 
 import numpy as np
 
-from bin.widgets.prototypes import AbstractGUIAPP
+from bin.app.prototypes import AbstractGUIAPP, LoggerMinion
 from bin.compiler.graphics import QtCompiler
-from bin.minion import LoggerMinion
 
 from vispy import scene
 from vispy.io import load_data_file, read_png

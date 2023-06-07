@@ -1,4 +1,4 @@
-from bin.widgets.prototypes import AbstractAPP
+from bin.app.prototypes import AbstractAPP
 from bin.compiler import TISCameraCompiler
 
 

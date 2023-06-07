@@ -1,5 +1,5 @@
 from bin.compiler.serial_devices import PololuServoInterface, SerialCommandCompiler
-from bin.minion import LoggerMinion
+from bin.app.prototypes import LoggerMinion
 from apps.servo_compiler.app_bin import ServoCompilerGUI
 
 if __name__ == '__main__':

@@ -3,24 +3,19 @@ import os
 import numpy as np
 import pandas as pd
 
-from bin.widgets.prototypes import AbstractGUIAPP, AbstractAPP
 import time
 import traceback
 
 import PyQt5.QtWidgets as qw
-import PyQt5.QtGui as qg
 import pyqtgraph as pg
 
 from bin.compiler.graphics import QtCompiler
 from bin.gui import DataframeTable, DataframeModel
-from bin.compiler.serial_devices import OMSInterface, ArduinoCompiler, PololuServoInterface
 from src.tisgrabber import tisgrabber as tis
 
-from bin.compiler.prototypes import StreamingCompiler, IOStreamingCompiler
+from bin.compiler.prototypes import StreamingCompiler
 from serial import Serial
 
-
-# import pyfirmata2 as fmt
 
 
 class MainGUI(QtCompiler):
@@ -550,20 +545,19 @@ class ScanListener(StreamingCompiler):
         self.input_pin_dict = {}
         self.output_pin_dict = {}
 
-        self._port = Serial(self._port_name, baudrate=115200, timeout=0.001)
+        try:
+            self._port = Serial(self._port_name, baudrate=115200, timeout=0.001)
+        except Exception as e:
+            self.error(e)
+            self.set_state('status', -1)
 
         self._last_frame_num = 0
         self._last_time = 0
         self._serial_buffer = b''
-        # self._buffer_data = np.zeros([5000, 3], dtype=np.int64)
-        #
-        # self.create_shared_buffer('mirPos', self._buffer_data)
+
         self.create_state('timestamp', 0)
         self.create_streaming_state('timestamp', 0)  # local copy of the shared state to reduce the time in accessing the shared buffer
         self.create_streaming_state('ca_frame_num', 0, shared=True, use_buffer=False)
-        # self.create_state('timestamp', 0, use_buffer=True)
-        # self.create_state('ca_frame_num', 0, use_buffer=True)
-
 
 
     def on_time(self, t):
@@ -574,8 +568,9 @@ class ScanListener(StreamingCompiler):
         if b'\n' in getData:
             data = getData.split(b'\n')
             data = [i for i in data if i != b'']
-            self._serial_buffer = data[-1]
-            data = data[-2]
+            if len(data) > 1:
+                self._serial_buffer = data[-1]
+                data = data[-2]
         else:
             self._serial_buffer = data
 
@@ -583,7 +578,7 @@ class ScanListener(StreamingCompiler):
             try:
                 data = data.decode('utf8')
             except:
-                print('decode error[1], data: %s' % data)
+                self.error('serial data decode error; data: %s' % data)
                 return
             data = data.split('---')[1].split('+++')[0]
             data = data.split(',')
@@ -597,11 +592,11 @@ class ScanListener(StreamingCompiler):
                     #
                     frame_changed = cur_frame_num - self._last_frame_num  # omit report if frame number is not changed
                     if frame_changed != 0:  # if frame number is changed, report frame number
-                        print(f"Time: {timestamp}, Frame: {cur_frame_num}")
+                        # print(f"Time: {timestamp}, Frame: {cur_frame_num}")
                         self.set_streaming_state('ca_frame_num', cur_frame_num)
                         self._last_frame_num = cur_frame_num
             else:
-                print('data error[3], data: %s' % data)
+                self.error('serial data error;  data: %s' % data)
 
             # self._port.reset_input_buffer()
 
@@ -689,13 +684,4 @@ class ScanListener(StreamingCompiler):
 #         self.info("Pololu compiler initialized.")
 #
 #
-class MainGUIApp(AbstractGUIAPP):
-    def __init__(self, *args, surveillance_state=None, **kwargs):
-        super(MainGUIApp, self).__init__(*args, **kwargs)
-        self._surveillance_state = surveillance_state
 
-    def initialize(self):
-        super().initialize()
-        self._win = MainGUI(self, surveillance_state=self._surveillance_state)
-        self.info("Main GUI initialized.")
-        self._win.show()

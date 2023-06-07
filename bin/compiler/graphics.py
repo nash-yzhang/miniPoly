@@ -35,7 +35,7 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
     def __init__(self, processHandler, *args, protocol_commander: BaseMinion = None,
                  VS=None, FS=None, refresh_interval=10, **kwargs):
         super().__init__(*args, **kwargs)
-        # widgets.Canvas.__init__(self, *args, **kwargs)
+        # app.Canvas.__init__(self, *args, **kwargs)
         self._processHandler = processHandler
         self.timers = {'default': app.Timer(refresh_interval / 1000, self._on_timer, start=True),
                        'protocol': app.Timer(refresh_interval / 1000, self._on_protocol, start=False)}
