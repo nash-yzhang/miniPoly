@@ -20,7 +20,7 @@ if __name__ == '__main__':
     # Set up functional minion
     Cam = StreamingAPP('Cam1', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
     OMS = StreamingAPP('OMS', OMSInterface, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, VID=VENDOR_ID, PID=PRODUCT_ID, mw_size=5)
-    STIM = StreamingAPP('SERVO', PololuServoInterface, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM4', servo_dict={'yaw': 3, 'radius': 5})
+    STIM = StreamingAPP('SERVO', PololuServoInterface, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM4', servo_dict={'yaw': (0, 464, 2336), 'radius': (1, 576, 2560)})
 
 
     Cam.connect(SCAN)

@@ -1,7 +1,4 @@
-# import csv
-# import os
 import traceback
-# from time import perf_counter
 
 import numpy as np
 import pyfirmata2 as fmt
@@ -13,26 +10,47 @@ from bin.compiler.prototypes import AbstractCompiler, StreamingCompiler
 
 
 class PololuServoInterface(StreamingCompiler):
-    AUXile_Postfix = "Pololu_AUX"
+    MOUSE_SERVO_DISTANCE = 190 # distance between the mouse and the servo in mm
+    ARM1_LENGTH = 90 # length of the first arm in mm
+    ARM2_LENGTH = 40 # length of the second arm in mm
+    EXTENDED_LENGTH = 103
+
+    POLOLU_POS_SCALE = 4
+
+    @staticmethod
+    def servo_angle_solver(target_azi, target_r):
+        target_azi = np.radians(target_azi)
+        azi_angle = np.arccos((np.sqrt((PololuServoInterface.MOUSE_SERVO_DISTANCE - (target_r*np.cos(target_azi)))**2 +
+                                       (target_r*np.sin(target_azi))**2) -
+                               np.sqrt(PololuServoInterface.ARM2_LENGTH**2 + (PololuServoInterface.ARM1_LENGTH * np.sin(target_azi))**2)
+                               - PololuServoInterface.EXTENDED_LENGTH) /PololuServoInterface.ARM1_LENGTH)
+        radius_angle = np.arctan2((target_r*np.sin(target_azi)),  PololuServoInterface.MOUSE_SERVO_DISTANCE - (target_r*np.cos(target_azi)))
+        return np.max([np.degrees(azi_angle)/180,0]), np.max([np.degrees(radius_angle)/180+.5,0])
 
     def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
         super(PololuServoInterface, self).__init__(*args, **kwargs)
         self._port = None
         self._port_name = port_name
         self.servo_dict = servo_dict
+        self.servo_param = {}
 
         self.streaming = False
         self._AUX_FileHandle = None
         self._AUX_writer = None
         self._stream_init_time = None
 
+        self.target_azi = None
+        self.target_r = None
+
         self.init_pololu()
-        for i in range(24):
-            self.setRange(i, 2500, 10000)
+        # for i in range(24):
+        #     self.setRange(i, 2500, 10000)
         self._watching_state = {}
         for n, v in self.servo_dict.items():
             try:
-                self.create_streaming_state(n, self.getPosition(v), shared=True)
+                self.create_streaming_state(n, -1, shared=True)
+                self.servo_param[n] = [v[1]*self.POLOLU_POS_SCALE, v[2]*self.POLOLU_POS_SCALE]
+                self.servo_dict[n] = v[0]
             except:
                 print(traceback.format_exc())
         # self.create_state('StreamToDisk', False)
@@ -44,7 +62,23 @@ class PololuServoInterface(StreamingCompiler):
         for n, v in self.servo_dict.items():
             state = self.get_state(n)
             if self.watch_state(n, state) and state is not None:
-                self.setTarget(v, int(state))
+                if n == 'yaw' and state > -1:
+                    self.target_azi = state
+                elif n == 'radius' and state > -1:
+                    self.target_r = state
+                else:
+                    iter_min, iter_max = self.servo_param[n][0], self.servo_param[n][1]
+                    new_pos = int(state*(iter_max-iter_min) + iter_min)
+                    self.setTarget(v, new_pos)
+
+        if self.target_azi is not None and self.target_r is not None:
+            azi, radius = self.servo_angle_solver(self.target_azi, self.target_r)
+            yaw_min, yaw_max = self.servo_param['yaw'][0], self.servo_param['yaw'][1]
+            radius_min, radius_max = self.servo_param['radius'][0], self.servo_param['radius'][1]
+            new_yaw = int(yaw_min + azi*(yaw_max-yaw_min))
+            new_radius = int(radius_min + radius*(radius_max-radius_min))
+            self.setTarget(self.servo_dict['yaw'], new_yaw)
+            self.setTarget(self.servo_dict['radius'], new_radius)
 
         super().on_time(t)
                 # print(f"Set {n}-{v} to {state}")
