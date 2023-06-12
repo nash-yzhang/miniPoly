@@ -10,22 +10,19 @@ from bin.compiler.prototypes import AbstractCompiler, StreamingCompiler
 
 
 class PololuServoInterface(StreamingCompiler):
-    MOUSE_SERVO_DISTANCE = 190 # distance between the mouse and the servo in mm
-    ARM1_LENGTH = 90 # length of the first arm in mm
-    ARM2_LENGTH = 40 # length of the second arm in mm
-    EXTENDED_LENGTH = 103
+    MOUSE_SERVO_DISTANCE = 150 # distance between the mouse and the servo in mm
+    ARM0_LENGTH = 40 # length of the first arm in mm
+    ARM1_LENGTH = 90 # length of the second arm in mm
+    EXTENDED_LENGTH = 100
 
-    POLOLU_POS_SCALE = 4
 
     @staticmethod
     def servo_angle_solver(target_azi, target_r):
-        target_azi = np.radians(target_azi)
-        azi_angle = np.arccos((np.sqrt((PololuServoInterface.MOUSE_SERVO_DISTANCE - (target_r*np.cos(target_azi)))**2 +
-                                       (target_r*np.sin(target_azi))**2) -
-                               np.sqrt(PololuServoInterface.ARM2_LENGTH**2 + (PololuServoInterface.ARM1_LENGTH * np.sin(target_azi))**2)
-                               - PololuServoInterface.EXTENDED_LENGTH) /PololuServoInterface.ARM1_LENGTH)
-        radius_angle = np.arctan2((target_r*np.sin(target_azi)),  PololuServoInterface.MOUSE_SERVO_DISTANCE - (target_r*np.cos(target_azi)))
-        return np.max([np.degrees(azi_angle)/180,0]), np.max([np.degrees(radius_angle)/180+.5,0])
+        target_azi *= np.pi / 180
+        servo_azi = np.pi/2 - np.arctan(np.cos(target_azi) / (PololuServoInterface.MOUSE_SERVO_DISTANCE / target_r + np.sin(target_azi)))
+        total_length = (PololuServoInterface.MOUSE_SERVO_DISTANCE + target_r * np.sin(target_azi)) / np.sin(servo_azi) - PololuServoInterface.EXTENDED_LENGTH
+        servo_r = np.arccos((PololuServoInterface.ARM0_LENGTH ** 2 + total_length ** 2 - PololuServoInterface.ARM1_LENGTH ** 2) / (2 * PololuServoInterface.ARM0_LENGTH * total_length)) - np.pi/2
+        return servo_azi, servo_r
 
     def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
         super(PololuServoInterface, self).__init__(*args, **kwargs)
@@ -42,6 +39,9 @@ class PololuServoInterface(StreamingCompiler):
         self.target_azi = None
         self.target_r = None
 
+        self._azi = 0.5
+        self._r = 0.5
+
         self.init_pololu()
         # for i in range(24):
         #     self.setRange(i, 2500, 10000)
@@ -49,7 +49,7 @@ class PololuServoInterface(StreamingCompiler):
         for n, v in self.servo_dict.items():
             try:
                 self.create_streaming_state(n, -1, shared=True)
-                self.servo_param[n] = [v[1]*self.POLOLU_POS_SCALE, v[2]*self.POLOLU_POS_SCALE]
+                self.servo_param[n] = [v[1], v[2]]
                 self.servo_dict[n] = v[0]
             except:
                 print(traceback.format_exc())
@@ -59,26 +59,38 @@ class PololuServoInterface(StreamingCompiler):
         # self.create_state('InitTime', False)
 
     def on_time(self, t):
+        # yaw = self.getPosition(self.servo_dict['yaw'])
+        # radius = self.getPosition(self.servo_dict['radius'])
+        # print(f"Yaw: {yaw}, Radius: {radius}")
+        should_update = False
         for n, v in self.servo_dict.items():
             state = self.get_state(n)
             if self.watch_state(n, state) and state is not None:
-                if n == 'yaw' and state > -1:
+                if n == 'yaw':
                     self.target_azi = state
-                elif n == 'radius' and state > -1:
+                    if self.target_r is not None:
+                        should_update = True
+                elif n == 'radius':
                     self.target_r = state
+                    if self.target_azi is not None:
+                        should_update = True
                 else:
                     iter_min, iter_max = self.servo_param[n][0], self.servo_param[n][1]
                     new_pos = int(state*(iter_max-iter_min) + iter_min)
                     self.setTarget(v, new_pos)
 
-        if self.target_azi is not None and self.target_r is not None:
+        if should_update:
             azi, radius = self.servo_angle_solver(self.target_azi, self.target_r)
+            azi = azi/np.pi
+            radius = .5+radius/np.pi
+            print(f'Azimuth: {azi}, radius: {radius}')
+            # azi, radius = self.target_azi, self.target_r
             yaw_min, yaw_max = self.servo_param['yaw'][0], self.servo_param['yaw'][1]
             radius_min, radius_max = self.servo_param['radius'][0], self.servo_param['radius'][1]
-            new_yaw = int(yaw_min + azi*(yaw_max-yaw_min))
-            new_radius = int(radius_min + radius*(radius_max-radius_min))
-            self.setTarget(self.servo_dict['yaw'], new_yaw)
-            self.setTarget(self.servo_dict['radius'], new_radius)
+            self._azi = int(yaw_min + azi*(yaw_max-yaw_min))
+            self._r = int(radius_min + radius*(radius_max-radius_min))
+        self.setTarget(self.servo_dict['yaw'], self._azi)
+        self.setTarget(self.servo_dict['radius'], self._r)
 
         super().on_time(t)
                 # print(f"Set {n}-{v} to {state}")
