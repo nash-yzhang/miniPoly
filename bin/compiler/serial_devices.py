@@ -1,13 +1,13 @@
 import traceback
 
 import numpy as np
+import pandas as pd
 import pyfirmata2 as fmt
 import serial
 import usb.core
 import usb.util
 
 from bin.compiler.prototypes import AbstractCompiler, StreamingCompiler
-
 
 class PololuServoInterface(StreamingCompiler):
     MOUSE_SERVO_DISTANCE = 150 # distance between the mouse and the servo in mm
@@ -93,55 +93,6 @@ class PololuServoInterface(StreamingCompiler):
         self.setTarget(self.servo_dict['radius'], self._r)
 
         super().on_time(t)
-                # print(f"Set {n}-{v} to {state}")
-    #     self._data_streaming()
-    #
-    # def _streaming_setup(self):
-    #     if_streaming = self.get_state('StreamToDisk')
-    #     if self.watch_state('StreamToDisk', if_streaming):
-    #         if if_streaming:
-    #             self._start_streaming()
-    #         else:
-    #             self._stop_streaming()
-    #
-    # def _start_streaming(self):
-    #     save_dir = self.get_state('SaveDir')
-    #     file_name = self.get_state('SaveName')
-    #     init_time = self.get_state('InitTime')
-    #     if save_dir is None or file_name is None or init_time is None:
-    #         self.error("Please set the save directory, file name and initial time before streaming.")
-    #     else:
-    #         if os.path.isdir(save_dir):
-    #             AUX_Fn = f"{self.name}_{file_name}_{self.AUXile_Postfix}.csv"
-    #             AUX_Fulldir = os.path.join(save_dir, AUX_Fn)
-    #             if os.path.isfile(AUX_Fulldir):
-    #                 self.error(f"File {AUX_Fn} already exists in the folder {save_dir}. Please change "
-    #                            f"the save_name.")
-    #             else:
-    #                 self._AUX_FileHandle = open(AUX_Fulldir, 'w')
-    #                 self._AUX_writer = csv.writer(self._AUX_FileHandle)
-    #                 col_name = ['Time']
-    #                 for n in self.servo_dict.keys():
-    #                     col_name.append(n)
-    #                 self._AUX_writer.writerow(col_name)
-    #                 self._stream_init_time = init_time
-    #                 self.streaming = True
-    #
-    # def _stop_streaming(self):
-    #     if self._AUX_FileHandle is not None:
-    #         self._AUX_FileHandle.close()
-    #     self._AUX_writer = None
-    #     self._stream_init_time = None
-    #     self._n_frame_streamed = None
-    #     self.streaming = False
-
-    # def _data_streaming(self):
-    #     if self.streaming:
-    #         # Write to AUX file
-    #         col_val = [perf_counter() - self._stream_init_time]
-    #         for n in self.servo_dict.keys():
-    #             col_val.append(self.get_state(n))
-    #         self._AUX_writer.writerow(col_val)
 
     def on_close(self):
         self._port.close()
@@ -294,7 +245,7 @@ class PololuServoInterface(StreamingCompiler):
     #############################################################################################
 
 
-class SerialCommandCompiler(AbstractCompiler):
+class SerialCommandCompiler(StreamingCompiler):
 
     def __init__(self, *args, port_name='COM7', baud=9600, timeout=0.001, **kwargs):
         super(SerialCommandCompiler, self).__init__(*args, **kwargs)
@@ -304,22 +255,107 @@ class SerialCommandCompiler(AbstractCompiler):
         self._port = None
 
         self._port = serial.Serial(self._port_name, self._baud, timeout=self._timeout)
-        self.create_state('serial', 0)
 
     def on_time(self, t):
-        try:
-            state = self.get_state('serial')
-            if self.watch_state('serial', state) and state is not None:
-                if state == 0:
-                    self._port.write(b'2')
-                elif state == 1:
-                    self._port.write(b'1')
-        except:
-            print(traceback.format_exc())
+        super().on_time(t)
 
-    def on_close(self):
-        self.set_state('status', -1)
-        self._port.close()
+class MotorShieldCompiler(SerialCommandCompiler):
+    STEPPER_180 = 242  # number of steps for 180 degrees
+
+    def __init__(self, processHandler, motor_dict={}, **kwargs):
+        super(MotorShieldCompiler, self).__init__(processHandler, **kwargs)
+        self._motor_dict = motor_dict
+        for k in self._motor_dict.keys():
+            self.create_streaming_state(k, 0, shared=False,use_buffer=False)
+
+        self.watch_state('runSignal', False)
+        self._running_protocol = False
+
+        self.create_streaming_state('protocolFn', '', shared=True, use_buffer=False)
+        self.watch_state('protocolFn', '')
+
+        self.watch_state('cmd_idx',-1)
+        self._protocolFn = ''
+        self._protocol = None
+        self._protocol_start_time = None
+        self._time_index_col = None
+        self._cmd_idx_lookup_table = None
+        self._running_time = 0
+
+        self._buffered_stepper_pos = 0
+
+    def on_time(self,t):
+        self.get_protocol_fn()
+        running = self.get_run_signal()
+        if running:
+            self._running_time = self.get_timestamp() - self._protocol_start_time
+            cmd_idx = sum(self._running_time >= self._time_index_col) - 1
+            if self.watch_state('cmd_idx', cmd_idx):
+                for k,v in self._cmd_idx_lookup_table.items():
+                    if 'servo' in k:
+                        # write serial command to set servo position
+                        target_pos = int(self._protocol.iloc[cmd_idx,v[1]])
+                        self._port.write(f's{v[0]}{target_pos}\n')
+                        self.set_streaming_state(k, target_pos)
+                    elif 'stepper' in k:
+                        target_pos = self._protocol.iloc[cmd_idx,v[1]]
+                        if target_pos > 180 or target_pos < 0:
+                            self.error('Stepper position must be between 0 and 180 degrees')
+                        else:
+                            delta_pos = target_pos - self._buffered_stepper_pos
+                            self._buffered_stepper_pos = target_pos
+                            delta_steps = int(delta_pos / 180 * self.STEPPER_180)
+                            if delta_steps > 0:
+                                self._port.write(f'f{v[0]}{delta_pos}\n')
+                            else:
+                                self._port.write(f'b{v[0]}{delta_pos}\n')
+                            self.set_streaming_state(k, target_pos)
+                    elif 'pin' in k:
+                        pin_num = k[3:]
+                        pin_val = self._protocol.iloc[cmd_idx,v[1]]
+                        if pin_num < 10:
+                            self._port.write(f'p0{pin_num}{pin_val}\n')
+                        else:
+                            self._port.write(f'p{pin_num}{pin_val}\n')
+                        self.set_streaming_state(k, pin_val)
+                self.set_state_to(self._trigger_minion, 'cmd_idx', cmd_idx)
+                if cmd_idx == len(self._time_index_col)-1:
+                    self._end_protocol()
+        else:
+            self._end_protocol()
+
+        super().on_time(t)
+
+    def get_protocol_fn(self):
+        if self._protocol_start_time is None:  # Only execute if protocol is not running
+            protocolFn = self.get_state_from(self._trigger_minion,'protocolFn')
+            if self.watch_state('protocolFn', protocolFn):
+                self._protocol = pd.read_excel(protocolFn)
+                self._protocolFn = protocolFn
+                self._time_index_col = self._protocol['time'].to_numpy()
+                self._cmd_idx_lookup_table = {k: [self._motor_dict[k],i] for i, k in enumerate(self._protocol.columns) if k in self._motor_dict.keys()}
+
+    def get_run_signal(self):
+        if self._protocol_start_time is not None:  # Only execute if protocol is loaded
+            runSignal = self.get_state_from(self._trigger_minion,'runSignal')
+            if self.watch_state('runSignal', runSignal):
+                self._running_protocol = runSignal
+                if self._running_protocol:
+                    self._start_protocol()
+                    return True
+                else:  # if self._running_protocol has been switched off, return False to stop protocal running and reset related params
+                    self._end_protocol()
+                    return False
+
+    def _start_protocol(self):
+        self.set_streaming_state('protocolFn', self._protocolFn)
+        self._protocol_start_time = self.get_timestamp()
+        self.set_state_to(self._trigger_minion, 'cmd_idx', 0)
+
+    def _end_protocol(self):
+        self._protocol_start_time = None
+        self.set_state_to(self._trigger_minion, 'cmd_idx', -1)
+        self._running_time = 0
 
 
 class ArduinoCompiler(AbstractCompiler):
