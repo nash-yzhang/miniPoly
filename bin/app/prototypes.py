@@ -8,8 +8,9 @@ from time import time
 from vispy import app
 import vispy
 import PyQt5.QtWidgets as qw
-from bin.gui import BaseGUI
-from bin.display import GLDisplay
+from qt_material import apply_stylesheet
+# from bin.gui import BaseGUI
+# from bin.display import GLDisplay
 
 class AbstractAPP(TimerMinion):
     # The same as TimerMinion, just for reference structural clarity
@@ -75,6 +76,7 @@ class AbstractGUIAPP(TimerMinion):
 
     def initialize(self):
         self._app = qw.QApplication(sys.argv)
+        apply_stylesheet(self._app, theme='dark_red.xml')
         super().initialize()
         self._compiler = self._compiler(self, **self._param_to_compiler)
         self.info(f"GUI '{self.name}' initialized")

@@ -1,6 +1,8 @@
+import time
+
 from apps.CaImg_App.app_bin import *
 from bin.app.prototypes import AbstractGUIAPP, StreamingAPP, LoggerMinion
-from bin.compiler import TISCameraCompiler, OMSInterface, PololuServoInterface
+from bin.compiler import TISCameraCompiler, OMSInterface, MotorShieldCompiler
 
 VENDOR_ID = 0X046D
 PRODUCT_ID = 0xC24E
@@ -20,7 +22,8 @@ if __name__ == '__main__':
     # Set up functional minion
     Cam = StreamingAPP('Cam1', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
     OMS = StreamingAPP('OMS', OMSInterface, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, VID=VENDOR_ID, PID=PRODUCT_ID, mw_size=5)
-    STIM = StreamingAPP('SERVO', PololuServoInterface, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM4', servo_dict={'yaw': (0, 2800, 7516), 'radius': (1, 2240, 10240)})
+    # STIM = StreamingAPP('SERVO', PololuServoInterface, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM4', servo_dict={'yaw': (0, 2800, 7516), 'radius': (1, 2240, 10240)})
+    STIM = StreamingAPP('SERVO', MotorShieldCompiler, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM16', motor_dict={'radius_servo': 1, 'flag_servo':2, 'azimuth_stepper': 1, 'light_pin':8})
 
 
     Cam.connect(SCAN)

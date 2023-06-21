@@ -19,9 +19,9 @@ def servo_angle_solver(target_azi, target_r):
     return servo_azi, servo_r
 
 #%%
-total_length = 180
-m_r = 40
-s_arm2 = 103
+total_length = 190
+m_r = 30
+s_arm2 = 95
 s_arm0 = 40
 s_arm1 = 90
 
@@ -30,14 +30,14 @@ m_ori = np.array([[0., total_length]]).T
 mid_pos = []
 end_pos = []
 tar_pos = []
-for target_azi in np.linspace(0, np.pi, 20):
+for target_azi in np.linspace(np.pi, np.pi*2, 20):
     m_pos = m_ori + m_r*np.vstack([np.cos(target_azi), np.sin(target_azi)])
     s_azi = np.pi/2-np.arctan(np.cos(target_azi)/(total_length/m_r+np.sin(target_azi)))
     s_r = (total_length + m_r * np.sin(target_azi))/np.sin(s_azi)
     s_arm_l = s_r - s_arm2
     s_r_ang = np.arccos((s_arm0 ** 2 + s_arm_l ** 2 - s_arm1 ** 2) / (2 * s_arm0 * s_arm_l))-np.pi/2
     s_r1_ang = np.arcsin(s_arm0*np.sin(np.pi/2-s_r_ang)/s_arm1)-np.pi/2
-    print(f"Azi: {s_azi/np.pi*8000}; r_angle: {s_r_ang/np.pi*8000};")
+    print(f"Azi: {s_azi/np.pi*180}; r_angle: {s_r_ang/np.pi*180};")
     # s_r_ang = -np.pi/2+s_r_ang
     # s_r1_ang = -np.pi/2+s_r1_ang
     s_r_series = s_ori.repeat(4,axis=1).T

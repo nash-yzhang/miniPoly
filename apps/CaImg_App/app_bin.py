@@ -54,6 +54,11 @@ class MainGUI(QtCompiler):
         self._time_arr = np.zeros(2000, dtype=np.float64)
         self._update_surveillance_state_list()
 
+        # Create stimulus related states
+        self.create_state('runSignal', False, use_buffer=True)
+        self.create_state('protocolFn', '', use_buffer=False)
+        self.create_state('cmd_idx', 0, use_buffer=True)
+
         # create streaming related states
         self.create_state('SaveDir', '')
         self.create_state('SaveName', '')
@@ -107,9 +112,6 @@ class MainGUI(QtCompiler):
 
         # Stimulation GUI
         self.add_timer('protocol_timer', self.on_protocol)
-        self.create_state('runSignal', False, use_buffer=True)
-        self.create_state('protocolFn', '', use_buffer=False)
-        self.create_state('cmd_idx', 0, use_buffer=True)
 
         self._timer_started = False
         self.timer_switcher = qw.QPushButton('Start')
@@ -130,7 +132,7 @@ class MainGUI(QtCompiler):
         self.layout_state_monitor = qw.QVBoxLayout()
         self.layout_state_monitor.heightForWidth(50)
         self.qtPlotWidget = pg.PlotWidget()
-        self.qtPlotWidget.setBackground('w')
+        # self.qtPlotWidget.setBackground('w')
         self.layout_state_monitor.addWidget(self.qtPlotWidget, 5)
         for k, v_list in self.surveillance_state.items():
             for v in v_list:
@@ -481,6 +483,9 @@ class MainGUI(QtCompiler):
         file_name = qw.QFileDialog.getOpenFileName(self, 'Open file', os.getcwd(), "Excel table (*.xlsx *.xls)",
                                                    options=qw.QFileDialog.DontUseNativeDialog)
         self.tables[name].setModel(DataframeModel(data=pd.read_excel(file_name[0])))
+        self.set_state('protocolFn', '')
+        time.sleep(0.5)
+        self.set_state('protocolFn', file_name[0])
 
     def switch_timer(self):
         if self._timer_started:

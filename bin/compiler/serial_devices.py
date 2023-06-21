@@ -18,6 +18,7 @@ class PololuServoInterface(StreamingCompiler):
 
     @staticmethod
     def servo_angle_solver(target_azi, target_r):
+        # the inputs and outputs are both in degrees
         target_azi *= np.pi / 180
         servo_azi = np.pi/2 - np.arctan(np.cos(target_azi) / (PololuServoInterface.MOUSE_SERVO_DISTANCE / target_r + np.sin(target_azi)))
         total_length = (PololuServoInterface.MOUSE_SERVO_DISTANCE + target_r * np.sin(target_azi)) / np.sin(servo_azi) - PololuServoInterface.EXTENDED_LENGTH
@@ -260,7 +261,22 @@ class SerialCommandCompiler(StreamingCompiler):
         super().on_time(t)
 
 class MotorShieldCompiler(SerialCommandCompiler):
-    STEPPER_180 = 242  # number of steps for 180 degrees
+    STEPPER_180 = 244  # number of steps for 180 degrees
+    MOUSE_SERVO_DISTANCE = 190 # distance between the mouse and the servo in mm
+    ARM0_LENGTH = 40 # length of the first arm in mm
+    ARM1_LENGTH = 90 # length of the second arm in mm
+    EXTENDED_LENGTH = 95
+
+    @staticmethod
+    def servo_angle_solver(target_azi, target_r):
+        target_azi = target_azi * np.pi / 180 - np.pi/2
+        servo_azi = np.arctan2((target_r * np.sin(target_azi)),
+                           MotorShieldCompiler.MOUSE_SERVO_DISTANCE - (target_r * np.cos(target_azi)))
+        total_length = (MotorShieldCompiler.MOUSE_SERVO_DISTANCE - target_r * np.cos(target_azi)) / np.cos(servo_azi) - MotorShieldCompiler.EXTENDED_LENGTH
+        servo_r = np.arccos((MotorShieldCompiler.ARM0_LENGTH ** 2 + total_length ** 2 - MotorShieldCompiler.ARM1_LENGTH ** 2) / (2 * MotorShieldCompiler.ARM0_LENGTH * total_length)) - np.pi/2
+        servo_azi = servo_azi * 180 / np.pi + 90
+        servo_r = 90 - servo_r * 180 / np.pi
+        return servo_azi, servo_r
 
     def __init__(self, processHandler, motor_dict={}, **kwargs):
         super(MotorShieldCompiler, self).__init__(processHandler, **kwargs)
@@ -291,52 +307,63 @@ class MotorShieldCompiler(SerialCommandCompiler):
             self._running_time = self.get_timestamp() - self._protocol_start_time
             cmd_idx = sum(self._running_time >= self._time_index_col) - 1
             if self.watch_state('cmd_idx', cmd_idx):
+                radius_motor_name, radius_motor_vals, radius = None, None, None
+                azi_motor_name, azi_motor_vals, azi = None, None, None
                 for k,v in self._cmd_idx_lookup_table.items():
                     if 'servo' in k:
                         # write serial command to set servo position
-                        target_pos = int(self._protocol.iloc[cmd_idx,v[1]])
-                        self._port.write(f's{v[0]}{target_pos}\n')
-                        self.set_streaming_state(k, target_pos)
-                    elif 'stepper' in k:
-                        target_pos = self._protocol.iloc[cmd_idx,v[1]]
-                        if target_pos > 180 or target_pos < 0:
-                            self.error('Stepper position must be between 0 and 180 degrees')
+                        if 'radius' in k:
+                            radius_motor_name = k
+                            radius_motor_vals = v
+                            radius = self._protocol.iloc[cmd_idx,v[1]]
                         else:
-                            delta_pos = target_pos - self._buffered_stepper_pos
-                            self._buffered_stepper_pos = target_pos
-                            delta_steps = int(delta_pos / 180 * self.STEPPER_180)
-                            if delta_steps > 0:
-                                self._port.write(f'f{v[0]}{delta_pos}\n')
-                            else:
-                                self._port.write(f'b{v[0]}{delta_pos}\n')
-                            self.set_streaming_state(k, target_pos)
+                            target_pos = int(self._protocol.iloc[cmd_idx,v[1]])
+                            self._set_servo_motor_pos(k,v,target_pos)
+                    elif 'stepper' in k:
+                        if "azi" in k:
+                            azi_motor_name = k
+                            azi_motor_vals = v
+                            azi = self._protocol.iloc[cmd_idx,v[1]]
+                        else:
+                            target_pos = self._protocol.iloc[cmd_idx,v[1]]
+                            self._set_stepper_motor_pos(k,v,target_pos)
                     elif 'pin' in k:
-                        pin_num = k[3:]
+                        pin_num = v[0]
                         pin_val = self._protocol.iloc[cmd_idx,v[1]]
                         if pin_num < 10:
-                            self._port.write(f'p0{pin_num}{pin_val}\n')
+                            self._port.write(f'pin0{pin_num}{pin_val}\n'.encode())
                         else:
-                            self._port.write(f'p{pin_num}{pin_val}\n')
+                            self._port.write(f'pin{pin_num}{pin_val}\n'.encode())
                         self.set_streaming_state(k, pin_val)
+
+                if not any([i is None for i in [azi_motor_name, azi_motor_vals, azi, radius_motor_name, radius_motor_vals, radius]]):
+                    target_azi,target_radius = self.servo_angle_solver(azi, radius)
+                    self.info(f"target azi: {target_azi}, target radius: {target_radius}")
+                    self._set_stepper_motor_pos(azi_motor_name, azi_motor_vals, target_azi)
+                    self._set_servo_motor_pos(radius_motor_name, radius_motor_vals, target_radius)
+
+
                 self.set_state_to(self._trigger_minion, 'cmd_idx', cmd_idx)
-                if cmd_idx == len(self._time_index_col)-1:
+                if cmd_idx >= len(self._time_index_col)-1:
                     self._end_protocol()
         else:
-            self._end_protocol()
+            if self._protocol_start_time is not None:
+                self._end_protocol()
 
         super().on_time(t)
 
     def get_protocol_fn(self):
         if self._protocol_start_time is None:  # Only execute if protocol is not running
             protocolFn = self.get_state_from(self._trigger_minion,'protocolFn')
-            if self.watch_state('protocolFn', protocolFn):
+            if self.watch_state('protocolFn', protocolFn) and protocolFn not in ['', None]:
+                self.info(f"Loading protocol from {protocolFn}")
                 self._protocol = pd.read_excel(protocolFn)
                 self._protocolFn = protocolFn
                 self._time_index_col = self._protocol['time'].to_numpy()
                 self._cmd_idx_lookup_table = {k: [self._motor_dict[k],i] for i, k in enumerate(self._protocol.columns) if k in self._motor_dict.keys()}
 
     def get_run_signal(self):
-        if self._protocol_start_time is not None:  # Only execute if protocol is loaded
+        if self._protocolFn is not None:  # Only execute if protocol is loaded
             runSignal = self.get_state_from(self._trigger_minion,'runSignal')
             if self.watch_state('runSignal', runSignal):
                 self._running_protocol = runSignal
@@ -346,16 +373,58 @@ class MotorShieldCompiler(SerialCommandCompiler):
                 else:  # if self._running_protocol has been switched off, return False to stop protocal running and reset related params
                     self._end_protocol()
                     return False
+            else:
+                return self._running_protocol
+        else:
+            return False
 
     def _start_protocol(self):
+        self.info('Starting protocol')
         self.set_streaming_state('protocolFn', self._protocolFn)
         self._protocol_start_time = self.get_timestamp()
         self.set_state_to(self._trigger_minion, 'cmd_idx', 0)
 
     def _end_protocol(self):
+        if self._cmd_idx_lookup_table is not None:
+            for k, v in self._cmd_idx_lookup_table.items():
+                if 'servo' in k:
+                    # write serial command to set servo position
+                    if 'flag' in k:
+                        self._set_servo_motor_pos(k, v, 180)
+                    else:
+                        self._set_servo_motor_pos(k, v, 0)
+                elif 'stepper' in k:
+                    self._set_stepper_motor_pos(k, v, 0)
+                elif 'pin' in k:
+                    pin_num = v[0]
+                    if pin_num < 10:
+                        self._port.write(f'pin0{pin_num}0\n'.encode())
+                    else:
+                        self._port.write(f'pin{pin_num}0\n'.encode())
+                    self.set_streaming_state(k, 0)
+
         self._protocol_start_time = None
         self.set_state_to(self._trigger_minion, 'cmd_idx', -1)
+        self.set_state_to(self._trigger_minion, 'runSignal', False)
         self._running_time = 0
+        self.info('Protocol ended')
+
+    def _set_servo_motor_pos(self, servo_name, servo_vals, target_pos):
+        self._port.write(f's{servo_vals[0]}{target_pos}\n'.encode())
+        self.set_streaming_state(servo_name, target_pos)
+
+    def _set_stepper_motor_pos(self, stepper_name, stepper_vals, target_pos):
+        if target_pos > 180 or target_pos < 0:
+            self.error('Stepper position must be between 0 and 180 degrees')
+        else:
+            delta_pos = target_pos - self._buffered_stepper_pos
+            self._buffered_stepper_pos = target_pos
+            delta_steps = int(delta_pos / 180 * self.STEPPER_180)
+            if delta_steps > 0:
+                self._port.write(f'f{stepper_vals[0]}{delta_steps}\n'.encode())
+            elif delta_steps < 0:
+                self._port.write(f'b{stepper_vals[0]}{-delta_steps}\n'.encode())
+            self.set_streaming_state(stepper_name, target_pos)
 
 
 class ArduinoCompiler(AbstractCompiler):

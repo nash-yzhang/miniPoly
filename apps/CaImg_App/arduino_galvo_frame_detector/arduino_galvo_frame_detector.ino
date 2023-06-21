@@ -1,93 +1,74 @@
-#include <Wire.h>
-#include <Adafruit_MotorShield.h>
-#include <utility/Adafruit_MS_PWMServoDriver.h>
-#include <Servo.h>
+/*
+   Created by ArduinoGetStarted.com
 
-Adafruit_MotorShield AFMS = Adafruit_MotorShield(); // Create an instance of the Adafruit Motor Shield library
-Adafruit_StepperMotor *stepper1 = AFMS.getStepper(200, 2); // 200 steps per revolution, motor port number 2
-Servo flagServoMotor;
-Servo radiusServoMotor;
+   This example code is in the public domain
+
+   Tutorial page: https://arduinogetstarted.com/tutorials/arduino-serial-plotter
+*/
+
+const int MIR_RESET_THRE = -50;
+const int BASELINE_THRE = 100;
+
+int frame_ttl;
+int frame_num;
+int prev_grad;
+int prev_val;
+int cur_val;
+int baseline_count;
 
 
-const int ledPin = 8;
-int flag;
-int lightOn;
-
-void setup() {
-  Serial.begin(9600);
-  AFMS.begin(); // Initialize the Adafruit Motor Shield
-  stepper1->setSpeed(100); // Set the motor speed (RPM)
-  flagServoMotor.attach(9); // Attach servo to pin 9
-  radiusServoMotor.attach(10); // Attach servo to pin 10
-  flag = 0;
-  lightOn = 0;
-  pinMode(ledPin, OUTPUT); // Set LED pin as output
+void setup(){
+  frame_ttl = 0;
+  frame_num = 0;
+  baseline_count = 0;
+  
+  cur_val = analogRead(A0);
+  prev_val = cur_val;
+  prev_grad = -1;
+  digitalWrite(13,0);
+  Serial.begin(115200);
 }
 
 void loop() {
-  if (Serial.available()) {
-    String receivedString = Serial.readStringUntil('\n');
-    if (receivedString.length() > 0) {
-      if (receivedString.startsWith("s1")) {
-        int angle = receivedString.substring(2).toInt();
-        executeRadiusServoCommand(angle);
-      } else if (receivedString.startsWith("s2")) {
-        int angle = receivedString.substring(2).toInt();
-        executeFlagServoCommand(angle);
-      } else if (receivedString.startsWith("pin")) {
-        executePinCommand(receivedString);
-      } else {
-        executeStepperCommand(receivedString);
-      }
-    }
-  }
-}
+  int cur_val = analogRead(A0);
+  int cur_grad = cur_val - prev_val;
 
-void executeStepperCommand(String commandString) {
-  char command = commandString.charAt(0);
-  char motorIdx = commandString.charAt(1);
-  int steps = commandString.substring(2).toInt();
-  if (motorIdx == '1'){
-    if (command == 'f') {
-    stepper1->step(steps, FORWARD, DOUBLE); // Rotate motor forward by the specified number of steps
-    } else if (command == 'b') {
-      stepper1->step(steps, BACKWARD, DOUBLE); // Rotate motor backward by the specified number of steps
-    }
-  }
-}
-
-void executeRadiusServoCommand(int angle) {
-  radiusServoMotor.write(angle); // Set the servo motor to the specified angle
-}
-
-void executeFlagServoCommand(int angle) {
-  flagServoMotor.write(angle); // Set the servo motor to the specified angle
-}
-
-void executePinCommand(String commandString) {
-  int pin_num = commandString.substring(3,5).toInt();
-  float pin_val = commandString.substring(5).toFloat();
-  Serial.println(pin_num);
-  Serial.println(pin_val);
-  digitalWrite(pin_num, pin_val);
-}
-
-void toggleFlagServoCommand() {
-  if (flag == 0){
-      flagServoMotor.write(90); // Set the servo motor to the specified angle
-      flag = 1;
+  if (cur_grad > MIR_RESET_THRE && prev_grad < MIR_RESET_THRE && prev_grad != -1) {
+    frame_ttl = 500;
+    frame_num ++;
   } else {
-      flagServoMotor.write(0); // Set the servo motor to the specified angle
-      flag = 0;
+    frame_ttl = 0;
   }
-}
+  prev_grad = cur_grad;
+  prev_val = cur_val;
 
-void toggleLightCommand() {
-  if (lightOn == 0){
-      digitalWrite(ledPin, 1); // Set the servo motor to the specified angle
-      lightOn = 1;
+  if (cur_val < 100) {
+    baseline_count++;
   } else {
-      digitalWrite(ledPin, 0); // Set the servo motor to the specified angle
-      lightOn = 0;
+    baseline_count = 0;
   }
+
+  if (baseline_count > 20) {
+    frame_num = 0;
+  }
+
+//////////// DEBUGGING CODE //////////////
+//  Serial.print("---");
+//  Serial.print(millis());
+//  Serial.print(",");
+//  Serial.print(cur_val);
+//  Serial.print(",");
+//  Serial.print(frame_ttl);
+//  Serial.println("+++");
+/////////////////////////////////////////
+
+//  if (frame_num > 0 && frame_ttl > 0) {
+    Serial.print("---");
+    Serial.print(millis());
+    Serial.print(",");
+    Serial.print(cur_val);
+    Serial.print(",");
+    Serial.print(frame_num);
+    Serial.println("+++");
+//  }
 }
