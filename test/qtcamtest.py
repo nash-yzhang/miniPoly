@@ -3,10 +3,10 @@ import traceback
 import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
 
-from bin.widgets.prototypes import AbstractGUIAPP
+from bin.app.prototypes import AbstractGUIAPP, LoggerMinion
 from bin.compiler.graphics import QtCompiler
 from src.tisgrabber import tisgrabber as tis
-from bin.minion import TimerMinion, LoggerMinion
+from bin.minion import TimerMinion
 
 
 class TISCamera(TimerMinion):

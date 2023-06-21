@@ -1,6 +1,6 @@
 import os
 
-from bin.widgets.prototypes import AbstractGUIAPP, AbstractAPP
+from bin.app.prototypes import AbstractGUIAPP, AbstractAPP
 import time
 import traceback
 

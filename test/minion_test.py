@@ -1,3 +1,4 @@
+import bin.app.prototypes
 from bin import minion as mi
 from time import sleep, time
 from multiprocessing import Lock
@@ -36,7 +37,7 @@ if __name__ == '__main__':
     v1 = Victim('Victim 1',lock)
     v2 = Victim('Victim 2',lock)
     k1 = Killer('Killer 1',lock)
-    lm = mi.LoggerMinion('MAIN LOGGER',lock)
+    lm = bin.app.prototypes.LoggerMinion('MAIN LOGGER', lock)
     v1.attach_logger(lm)
     v2.attach_logger(lm)
     k1.attach_logger(lm)

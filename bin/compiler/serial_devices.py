@@ -1,38 +1,57 @@
-# import csv
-# import os
 import traceback
-# from time import perf_counter
 
 import numpy as np
+import pandas as pd
 import pyfirmata2 as fmt
 import serial
 import usb.core
 import usb.util
 
-from bin.compiler.prototypes import AbstractCompiler
+from bin.compiler.prototypes import AbstractCompiler, StreamingCompiler
+
+class PololuServoInterface(StreamingCompiler):
+    MOUSE_SERVO_DISTANCE = 150 # distance between the mouse and the servo in mm
+    ARM0_LENGTH = 40 # length of the first arm in mm
+    ARM1_LENGTH = 90 # length of the second arm in mm
+    EXTENDED_LENGTH = 100
 
 
-class PololuServoInterface(AbstractCompiler):
-    AUXile_Postfix = "Pololu_AUX"
+    @staticmethod
+    def servo_angle_solver(target_azi, target_r):
+        # the inputs and outputs are both in degrees
+        target_azi *= np.pi / 180
+        servo_azi = np.pi/2 - np.arctan(np.cos(target_azi) / (PololuServoInterface.MOUSE_SERVO_DISTANCE / target_r + np.sin(target_azi)))
+        total_length = (PololuServoInterface.MOUSE_SERVO_DISTANCE + target_r * np.sin(target_azi)) / np.sin(servo_azi) - PololuServoInterface.EXTENDED_LENGTH
+        servo_r = np.arccos((PololuServoInterface.ARM0_LENGTH ** 2 + total_length ** 2 - PololuServoInterface.ARM1_LENGTH ** 2) / (2 * PololuServoInterface.ARM0_LENGTH * total_length)) - np.pi/2
+        return servo_azi, servo_r
 
     def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
         super(PololuServoInterface, self).__init__(*args, **kwargs)
         self._port = None
         self._port_name = port_name
         self.servo_dict = servo_dict
+        self.servo_param = {}
 
         self.streaming = False
         self._AUX_FileHandle = None
         self._AUX_writer = None
         self._stream_init_time = None
 
+        self.target_azi = None
+        self.target_r = None
+
+        self._azi = 0.5
+        self._r = 0.5
+
         self.init_pololu()
-        for i in range(24):
-            self.setRange(i, 2500, 10000)
+        # for i in range(24):
+        #     self.setRange(i, 2500, 10000)
         self._watching_state = {}
         for n, v in self.servo_dict.items():
             try:
-                self.create_state(n, self.getPosition(v))
+                self.create_streaming_state(n, -1, shared=True)
+                self.servo_param[n] = [v[1], v[2]]
+                self.servo_dict[n] = v[0]
             except:
                 print(traceback.format_exc())
         # self.create_state('StreamToDisk', False)
@@ -41,60 +60,40 @@ class PololuServoInterface(AbstractCompiler):
         # self.create_state('InitTime', False)
 
     def on_time(self, t):
-        # self._streaming_setup()
+        # yaw = self.getPosition(self.servo_dict['yaw'])
+        # radius = self.getPosition(self.servo_dict['radius'])
+        # print(f"Yaw: {yaw}, Radius: {radius}")
+        should_update = False
         for n, v in self.servo_dict.items():
             state = self.get_state(n)
             if self.watch_state(n, state) and state is not None:
-                self.setTarget(v, int(state))
-                # print(f"Set {n}-{v} to {state}")
-    #     self._data_streaming()
-    #
-    # def _streaming_setup(self):
-    #     if_streaming = self.get_state('StreamToDisk')
-    #     if self.watch_state('StreamToDisk', if_streaming):
-    #         if if_streaming:
-    #             self._start_streaming()
-    #         else:
-    #             self._stop_streaming()
-    #
-    # def _start_streaming(self):
-    #     save_dir = self.get_state('SaveDir')
-    #     file_name = self.get_state('SaveName')
-    #     init_time = self.get_state('InitTime')
-    #     if save_dir is None or file_name is None or init_time is None:
-    #         self.error("Please set the save directory, file name and initial time before streaming.")
-    #     else:
-    #         if os.path.isdir(save_dir):
-    #             AUX_Fn = f"{self.name}_{file_name}_{self.AUXile_Postfix}.csv"
-    #             AUX_Fulldir = os.path.join(save_dir, AUX_Fn)
-    #             if os.path.isfile(AUX_Fulldir):
-    #                 self.error(f"File {AUX_Fn} already exists in the folder {save_dir}. Please change "
-    #                            f"the save_name.")
-    #             else:
-    #                 self._AUX_FileHandle = open(AUX_Fulldir, 'w')
-    #                 self._AUX_writer = csv.writer(self._AUX_FileHandle)
-    #                 col_name = ['Time']
-    #                 for n in self.servo_dict.keys():
-    #                     col_name.append(n)
-    #                 self._AUX_writer.writerow(col_name)
-    #                 self._stream_init_time = init_time
-    #                 self.streaming = True
-    #
-    # def _stop_streaming(self):
-    #     if self._AUX_FileHandle is not None:
-    #         self._AUX_FileHandle.close()
-    #     self._AUX_writer = None
-    #     self._stream_init_time = None
-    #     self._n_frame_streamed = None
-    #     self.streaming = False
+                if n == 'yaw':
+                    self.target_azi = state
+                    if self.target_r is not None:
+                        should_update = True
+                elif n == 'radius':
+                    self.target_r = state
+                    if self.target_azi is not None:
+                        should_update = True
+                else:
+                    iter_min, iter_max = self.servo_param[n][0], self.servo_param[n][1]
+                    new_pos = int(state*(iter_max-iter_min) + iter_min)
+                    self.setTarget(v, new_pos)
 
-    # def _data_streaming(self):
-    #     if self.streaming:
-    #         # Write to AUX file
-    #         col_val = [perf_counter() - self._stream_init_time]
-    #         for n in self.servo_dict.keys():
-    #             col_val.append(self.get_state(n))
-    #         self._AUX_writer.writerow(col_val)
+        if should_update:
+            azi, radius = self.servo_angle_solver(self.target_azi, self.target_r)
+            azi = azi/np.pi
+            radius = .5+radius/np.pi
+            print(f'Azimuth: {azi}, radius: {radius}')
+            # azi, radius = self.target_azi, self.target_r
+            yaw_min, yaw_max = self.servo_param['yaw'][0], self.servo_param['yaw'][1]
+            radius_min, radius_max = self.servo_param['radius'][0], self.servo_param['radius'][1]
+            self._azi = int(yaw_min + azi*(yaw_max-yaw_min))
+            self._r = int(radius_min + radius*(radius_max-radius_min))
+        self.setTarget(self.servo_dict['yaw'], self._azi)
+        self.setTarget(self.servo_dict['radius'], self._r)
+
+        super().on_time(t)
 
     def on_close(self):
         self._port.close()
@@ -247,7 +246,7 @@ class PololuServoInterface(AbstractCompiler):
     #############################################################################################
 
 
-class SerialCommandCompiler(AbstractCompiler):
+class SerialCommandCompiler(StreamingCompiler):
 
     def __init__(self, *args, port_name='COM7', baud=9600, timeout=0.001, **kwargs):
         super(SerialCommandCompiler, self).__init__(*args, **kwargs)
@@ -257,22 +256,175 @@ class SerialCommandCompiler(AbstractCompiler):
         self._port = None
 
         self._port = serial.Serial(self._port_name, self._baud, timeout=self._timeout)
-        self.create_state('serial', 0)
 
     def on_time(self, t):
-        try:
-            state = self.get_state('serial')
-            if self.watch_state('serial', state) and state is not None:
-                if state == 0:
-                    self._port.write(b'2')
-                elif state == 1:
-                    self._port.write(b'1')
-        except:
-            print(traceback.format_exc())
+        super().on_time(t)
 
-    def on_close(self):
-        self.set_state('status', -1)
-        self._port.close()
+class MotorShieldCompiler(SerialCommandCompiler):
+    STEPPER_180 = 244  # number of steps for 180 degrees
+    MOUSE_SERVO_DISTANCE = 190 # distance between the mouse and the servo in mm
+    ARM0_LENGTH = 40 # length of the first arm in mm
+    ARM1_LENGTH = 90 # length of the second arm in mm
+    EXTENDED_LENGTH = 95
+
+    @staticmethod
+    def servo_angle_solver(target_azi, target_r):
+        target_azi = target_azi * np.pi / 180 - np.pi/2
+        servo_azi = np.arctan2((target_r * np.sin(target_azi)),
+                           MotorShieldCompiler.MOUSE_SERVO_DISTANCE - (target_r * np.cos(target_azi)))
+        total_length = (MotorShieldCompiler.MOUSE_SERVO_DISTANCE - target_r * np.cos(target_azi)) / np.cos(servo_azi) - MotorShieldCompiler.EXTENDED_LENGTH
+        servo_r = np.arccos((MotorShieldCompiler.ARM0_LENGTH ** 2 + total_length ** 2 - MotorShieldCompiler.ARM1_LENGTH ** 2) / (2 * MotorShieldCompiler.ARM0_LENGTH * total_length)) - np.pi/2
+        servo_azi = servo_azi * 180 / np.pi + 90
+        servo_r = 90 - servo_r * 180 / np.pi
+        return servo_azi, servo_r
+
+    def __init__(self, processHandler, motor_dict={}, **kwargs):
+        super(MotorShieldCompiler, self).__init__(processHandler, **kwargs)
+        self._motor_dict = motor_dict
+        for k in self._motor_dict.keys():
+            self.create_streaming_state(k, 0, shared=False,use_buffer=False)
+
+        self.watch_state('runSignal', False)
+        self._running_protocol = False
+
+        self.create_streaming_state('protocolFn', '', shared=True, use_buffer=False)
+        self.watch_state('protocolFn', '')
+
+        self.watch_state('cmd_idx',-1)
+        self._protocolFn = ''
+        self._protocol = None
+        self._protocol_start_time = None
+        self._time_index_col = None
+        self._cmd_idx_lookup_table = None
+        self._running_time = 0
+
+        self._buffered_stepper_pos = 0
+
+    def on_time(self,t):
+        self.get_protocol_fn()
+        running = self.get_run_signal()
+        if running:
+            self._running_time = self.get_timestamp() - self._protocol_start_time
+            cmd_idx = sum(self._running_time >= self._time_index_col) - 1
+            if self.watch_state('cmd_idx', cmd_idx):
+                radius_motor_name, radius_motor_vals, radius = None, None, None
+                azi_motor_name, azi_motor_vals, azi = None, None, None
+                for k,v in self._cmd_idx_lookup_table.items():
+                    if 'servo' in k:
+                        # write serial command to set servo position
+                        if 'radius' in k:
+                            radius_motor_name = k
+                            radius_motor_vals = v
+                            radius = self._protocol.iloc[cmd_idx,v[1]]
+                        else:
+                            target_pos = int(self._protocol.iloc[cmd_idx,v[1]])
+                            self._set_servo_motor_pos(k,v,target_pos)
+                    elif 'stepper' in k:
+                        if "azi" in k:
+                            azi_motor_name = k
+                            azi_motor_vals = v
+                            azi = self._protocol.iloc[cmd_idx,v[1]]
+                        else:
+                            target_pos = self._protocol.iloc[cmd_idx,v[1]]
+                            self._set_stepper_motor_pos(k,v,target_pos)
+                    elif 'pin' in k:
+                        pin_num = v[0]
+                        pin_val = self._protocol.iloc[cmd_idx,v[1]]
+                        if pin_num < 10:
+                            self._port.write(f'pin0{pin_num}{pin_val}\n'.encode())
+                        else:
+                            self._port.write(f'pin{pin_num}{pin_val}\n'.encode())
+                        self.set_streaming_state(k, pin_val)
+
+                if not any([i is None for i in [azi_motor_name, azi_motor_vals, azi, radius_motor_name, radius_motor_vals, radius]]):
+                    target_azi,target_radius = self.servo_angle_solver(azi, radius)
+                    self.info(f"target azi: {target_azi}, target radius: {target_radius}")
+                    self._set_stepper_motor_pos(azi_motor_name, azi_motor_vals, target_azi)
+                    self._set_servo_motor_pos(radius_motor_name, radius_motor_vals, target_radius)
+
+
+                self.set_state_to(self._trigger_minion, 'cmd_idx', cmd_idx)
+                if cmd_idx >= len(self._time_index_col)-1:
+                    self._end_protocol()
+        else:
+            if self._protocol_start_time is not None:
+                self._end_protocol()
+
+        super().on_time(t)
+
+    def get_protocol_fn(self):
+        if self._protocol_start_time is None:  # Only execute if protocol is not running
+            protocolFn = self.get_state_from(self._trigger_minion,'protocolFn')
+            if self.watch_state('protocolFn', protocolFn) and protocolFn not in ['', None]:
+                self.info(f"Loading protocol from {protocolFn}")
+                self._protocol = pd.read_excel(protocolFn)
+                self._protocolFn = protocolFn
+                self._time_index_col = self._protocol['time'].to_numpy()
+                self._cmd_idx_lookup_table = {k: [self._motor_dict[k],i] for i, k in enumerate(self._protocol.columns) if k in self._motor_dict.keys()}
+
+    def get_run_signal(self):
+        if self._protocolFn is not None:  # Only execute if protocol is loaded
+            runSignal = self.get_state_from(self._trigger_minion,'runSignal')
+            if self.watch_state('runSignal', runSignal):
+                self._running_protocol = runSignal
+                if self._running_protocol:
+                    self._start_protocol()
+                    return True
+                else:  # if self._running_protocol has been switched off, return False to stop protocal running and reset related params
+                    self._end_protocol()
+                    return False
+            else:
+                return self._running_protocol
+        else:
+            return False
+
+    def _start_protocol(self):
+        self.info('Starting protocol')
+        self.set_streaming_state('protocolFn', self._protocolFn)
+        self._protocol_start_time = self.get_timestamp()
+        self.set_state_to(self._trigger_minion, 'cmd_idx', 0)
+
+    def _end_protocol(self):
+        if self._cmd_idx_lookup_table is not None:
+            for k, v in self._cmd_idx_lookup_table.items():
+                if 'servo' in k:
+                    # write serial command to set servo position
+                    if 'flag' in k:
+                        self._set_servo_motor_pos(k, v, 180)
+                    else:
+                        self._set_servo_motor_pos(k, v, 0)
+                elif 'stepper' in k:
+                    self._set_stepper_motor_pos(k, v, 0)
+                elif 'pin' in k:
+                    pin_num = v[0]
+                    if pin_num < 10:
+                        self._port.write(f'pin0{pin_num}0\n'.encode())
+                    else:
+                        self._port.write(f'pin{pin_num}0\n'.encode())
+                    self.set_streaming_state(k, 0)
+
+        self._protocol_start_time = None
+        self.set_state_to(self._trigger_minion, 'cmd_idx', -1)
+        self.set_state_to(self._trigger_minion, 'runSignal', False)
+        self._running_time = 0
+        self.info('Protocol ended')
+
+    def _set_servo_motor_pos(self, servo_name, servo_vals, target_pos):
+        self._port.write(f's{servo_vals[0]}{target_pos}\n'.encode())
+        self.set_streaming_state(servo_name, target_pos)
+
+    def _set_stepper_motor_pos(self, stepper_name, stepper_vals, target_pos):
+        if target_pos > 180 or target_pos < 0:
+            self.error('Stepper position must be between 0 and 180 degrees')
+        else:
+            delta_pos = target_pos - self._buffered_stepper_pos
+            self._buffered_stepper_pos = target_pos
+            delta_steps = int(delta_pos / 180 * self.STEPPER_180)
+            if delta_steps > 0:
+                self._port.write(f'f{stepper_vals[0]}{delta_steps}\n'.encode())
+            elif delta_steps < 0:
+                self._port.write(f'b{stepper_vals[0]}{-delta_steps}\n'.encode())
+            self.set_streaming_state(stepper_name, target_pos)
 
 
 class ArduinoCompiler(AbstractCompiler):
@@ -321,9 +473,9 @@ class ArduinoCompiler(AbstractCompiler):
         self.set_state('status', -1)
         self._port.exit()
 
-class OMSInterface(AbstractCompiler):
+class OMSInterface(StreamingCompiler):
 
-    def __init__(self, *args, VID=None, PID=None, timeout=10, mw_size=1, **kwargs):
+    def __init__(self, *args, VID=None, PID=None, timeout=1, mw_size=1, **kwargs):
         super(OMSInterface, self).__init__(*args, **kwargs)
         if VID is None or PID is None:
             raise ValueError('VID and PID must be set')
@@ -342,8 +494,10 @@ class OMSInterface(AbstractCompiler):
         self._mw_size = mw_size
         self._pos_buffer = np.zeros((self._mw_size, 2))
 
-        self.create_state('xPos', 0)
-        self.create_state('yPos', 0)
+        self.create_streaming_state('xPos',0, shared=True, use_buffer=False)
+        self.create_streaming_state('yPos',0, shared=True, use_buffer=False)
+        # self.create_state('xPos', 0)
+        # self.create_state('yPos', 0)
 
     def on_time(self, t):
         try:
@@ -354,10 +508,12 @@ class OMSInterface(AbstractCompiler):
                 self._pos_buffer[-1, 1] = y
                 xPos,yPos = np.nanmean(self._pos_buffer, axis=0)
 
-                self.set_state('xPos', xPos)
-                self.set_state('yPos', yPos)
+                self.set_streaming_state('xPos', xPos)
+                self.set_streaming_state('yPos', yPos)
         except:
             print(traceback.format_exc())
+
+        super().on_time(t)
 
     def _read_device(self):
         try:

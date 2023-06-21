@@ -3,29 +3,22 @@ import os
 import numpy as np
 import pandas as pd
 
-from bin.widgets.prototypes import AbstractGUIAPP, AbstractAPP
 import time
 import traceback
 
 import PyQt5.QtWidgets as qw
-import PyQt5.QtGui as qg
 import pyqtgraph as pg
 
 from bin.compiler.graphics import QtCompiler
 from bin.gui import DataframeTable, DataframeModel
-from bin.compiler.serial_devices import OMSInterface, ArduinoCompiler, PololuServoInterface
 from src.tisgrabber import tisgrabber as tis
 
-from bin.compiler.prototypes import AbstractCompiler, IOStreamingCompiler
+from bin.compiler.prototypes import StreamingCompiler
 from serial import Serial
 
 
-# import pyfirmata2 as fmt
-
 
 class MainGUI(QtCompiler):
-    _SERVO_MIN = 2400
-    _SERVO_MAX = 9000
 
     def __init__(self, *args, surveillance_state={}, **kwargs):
         super(MainGUI, self).__init__(*args, **kwargs)
@@ -60,6 +53,16 @@ class MainGUI(QtCompiler):
         self._plots_arr = {}
         self._time_arr = np.zeros(2000, dtype=np.float64)
         self._update_surveillance_state_list()
+
+        # Create stimulus related states
+        self.create_state('runSignal', False, use_buffer=True)
+        self.create_state('protocolFn', '', use_buffer=False)
+        self.create_state('cmd_idx', 0, use_buffer=True)
+
+        # create streaming related states
+        self.create_state('SaveDir', '')
+        self.create_state('SaveName', '')
+        self.create_state('StreamToDisk', False, use_buffer=True)
 
         self._init_main_window()
         self._init_menu()
@@ -109,7 +112,6 @@ class MainGUI(QtCompiler):
 
         # Stimulation GUI
         self.add_timer('protocol_timer', self.on_protocol)
-        self.create_state('is_running', False, use_buffer=True)
 
         self._timer_started = False
         self.timer_switcher = qw.QPushButton('Start')
@@ -130,7 +132,7 @@ class MainGUI(QtCompiler):
         self.layout_state_monitor = qw.QVBoxLayout()
         self.layout_state_monitor.heightForWidth(50)
         self.qtPlotWidget = pg.PlotWidget()
-        self.qtPlotWidget.setBackground('w')
+        # self.qtPlotWidget.setBackground('w')
         self.layout_state_monitor.addWidget(self.qtPlotWidget, 5)
         for k, v_list in self.surveillance_state.items():
             for v in v_list:
@@ -176,11 +178,11 @@ class MainGUI(QtCompiler):
         if self.btn_freeze_frame.text() == 'Freeze Frame!':
             self.btn_freeze_frame.setStyleSheet('background-color: #dcf3ff')
             self.btn_freeze_frame.setText('Unfreeze Frame!')
-            self.set_state_to('SCAN', 'freeze', 1)
+            # self.set_state_to('SCAN', 'freeze', 1)
         else:
             self.btn_freeze_frame.setStyleSheet('background-color: light gray')
             self.btn_freeze_frame.setText('Freeze')
-            self.set_state_to('SCAN', 'freeze', 0)
+            # self.set_state_to('SCAN', 'freeze', 0)
 
     def _browse_root_folder(self):
         self._root_folder = str(qw.QFileDialog.getExistingDirectory(self, 'Open Folder', '.',
@@ -192,7 +194,6 @@ class MainGUI(QtCompiler):
         if self._save_btn.text() == 'Start Recording':
             self._save_btn.setText('Stop Recording')
             self._save_btn.setStyleSheet('background-color: yellow')
-            self._save_init_time = time.perf_counter()
             self._save_filename = time.strftime('%Y%m%d_%H%M%S')
             if self._root_folder is None:
                 self._root_folder = os.getcwd()
@@ -205,33 +206,18 @@ class MainGUI(QtCompiler):
                 if v[-1].isChecked():
                     self._save_camera_list.append(k)
 
-            for cam in self._save_camera_list:
-                mi_name = self._connected_camera_minions[cam]
-                self.set_state_to(mi_name, 'SaveDir', self._save_dir)
-                self.set_state_to(mi_name, 'SaveName', self._save_filename)
-                self.set_state_to(mi_name, 'InitTime', self._save_init_time)
-                self.set_state_to(mi_name, 'StreamToDisk', True)
-
-            # for servoM in self._servo_minion:
-            #     self.set_state_to(servoM, 'SaveDir', self._save_dir)
-            #     self.set_state_to(servoM, 'SaveName', self._save_filename)
-            #     self.set_state_to(servoM, 'InitTime', self._save_init_time)
-            #     self.set_state_to(servoM, 'StreamToDisk', True)
-
-            self.set_state_to(self._IO_minion, 'SaveDir', self._save_dir)
-            self.set_state_to(self._IO_minion, 'SaveName', self._save_filename)
-            self.set_state_to(self._IO_minion, 'InitTime', self._save_init_time)
-            self.set_state_to(self._IO_minion, 'StreamToDisk', True)
+            self.set_state('SaveDir', self._save_dir)
+            self.set_state('SaveName', self._save_filename)
+            self.set_state('StreamToDisk', True)
 
         else:
             self._save_btn.setText('Start Recording')
             self._save_btn.setStyleSheet('background-color: white')
-            for cam in self._save_camera_list:
-                mi_name = self._connected_camera_minions[cam]
-                self.set_state_to(mi_name, 'StreamToDisk', False)
+            # for cam in self._save_camera_list:
+            #     mi_name = self._connected_camera_minions[cam]
+            self.set_state('StreamToDisk', False)
             # for servoM in self._servo_minion:
             #     self.set_state_to(servoM, 'StreamToDisk', False)
-            self.set_state_to(self._IO_minion, 'StreamToDisk', False)
 
     def _init_menu(self):
         self._menubar = self.menuBar()
@@ -497,6 +483,9 @@ class MainGUI(QtCompiler):
         file_name = qw.QFileDialog.getOpenFileName(self, 'Open file', os.getcwd(), "Excel table (*.xlsx *.xls)",
                                                    options=qw.QFileDialog.DontUseNativeDialog)
         self.tables[name].setModel(DataframeModel(data=pd.read_excel(file_name[0])))
+        self.set_state('protocolFn', '')
+        time.sleep(0.5)
+        self.set_state('protocolFn', file_name[0])
 
     def switch_timer(self):
         if self._timer_started:
@@ -511,7 +500,7 @@ class MainGUI(QtCompiler):
         self.timer_switcher.setText('Stop')
 
     def startTimer(self):
-        self.set_state('is_running', True)
+        self.set_state('runSignal', True)
 
     def _stopTimer(self):
         self.stopTimer()
@@ -520,38 +509,18 @@ class MainGUI(QtCompiler):
         self.timer_switcher.setText('Start')
 
     def stopTimer(self):
-        self.set_state('is_running', False)
+        self.set_state('runSignal', False)
 
     def on_protocol(self, t):
-        cur_time = t
         if self.tables['Protocol'].model():
-            data = self.tables['Protocol'].model()._data
-            time_col = data['time']
-            if cur_time <= (time_col.max() + self.timerInterval()):
-                row_idx = None
-                for i, v in enumerate(time_col):
-                    if v >= cur_time:
-                        row_idx = i - 1
-                        break
-                if row_idx is None:
+            cmd_idx = self.get_state('cmd_idx')
+            if self.watch_state('visual_row', cmd_idx):
+                self.tables['Protocol'].selectRow(cmd_idx)
+                if cmd_idx == -1:
                     self._stopTimer()
-                else:
-                    if self.watch_state('visual_row', row_idx):
-                        self.tables['Protocol'].selectRow(row_idx)
-                        for k in data.keys():
-                            if ":" in k:
-                                m, s = k.split(':')
-                                if m in self.get_linked_minion_names():
-                                    if s in self.get_shared_state_names(m):
-                                        if 'servo' in m.lower():
-                                            state = float(data[k][row_idx] * (
-                                                    self._SERVO_MAX - self._SERVO_MIN) + self._SERVO_MIN)
-                                        else:
-                                            state = float(data[k][row_idx])
-                                        self.set_state_to(m, s, state)
 
 
-class ScanListener(AbstractCompiler):
+class ScanListener(StreamingCompiler):
 
     def __init__(self, *args, port_name='COM7', **kwargs):
         super(ScanListener, self).__init__(*args, **kwargs)
@@ -561,17 +530,19 @@ class ScanListener(AbstractCompiler):
         self.input_pin_dict = {}
         self.output_pin_dict = {}
 
-        self._port = Serial(self._port_name, baudrate=115200, timeout=0.001)
+        try:
+            self._port = Serial(self._port_name, baudrate=115200, timeout=0.001)
+        except Exception as e:
+            self.error(e)
+            self.set_state('status', -1)
 
         self._last_frame_num = 0
         self._last_time = 0
         self._serial_buffer = b''
-        # self._buffer_data = np.zeros([5000, 3], dtype=np.int64)
-        #
-        # self.create_shared_buffer('mirPos', self._buffer_data)
-        self.create_state('timestamp', 0, use_buffer=True)
-        self.create_state('ca_frame_num', 0, use_buffer=True)
 
+        self.create_state('timestamp', 0)
+        self.create_streaming_state('timestamp', 0)  # local copy of the shared state to reduce the time in accessing the shared buffer
+        self.create_streaming_state('ca_frame_num', 0, shared=True, use_buffer=False)
 
 
     def on_time(self, t):
@@ -582,8 +553,9 @@ class ScanListener(AbstractCompiler):
         if b'\n' in getData:
             data = getData.split(b'\n')
             data = [i for i in data if i != b'']
-            self._serial_buffer = data[-1]
-            data = data[-2]
+            if len(data) > 1:
+                self._serial_buffer = data[-1]
+                data = data[-2]
         else:
             self._serial_buffer = data
 
@@ -591,7 +563,7 @@ class ScanListener(AbstractCompiler):
             try:
                 data = data.decode('utf8')
             except:
-                print('decode error[1], data: %s' % data)
+                self.error('serial data decode error; data: %s' % data)
                 return
             data = data.split('---')[1].split('+++')[0]
             data = data.split(',')
@@ -601,13 +573,15 @@ class ScanListener(AbstractCompiler):
                     cur_frame_num = int(data[2])
                     #
                     self.set_state('timestamp', timestamp)  # broadcast arduino time
+                    self.set_streaming_state('timestamp', timestamp)  # broadcast arduino time
                     #
                     frame_changed = cur_frame_num - self._last_frame_num  # omit report if frame number is not changed
                     if frame_changed != 0:  # if frame number is changed, report frame number
-                        self.set_state('ca_frame_num', cur_frame_num)
+                        # print(f"Time: {timestamp}, Frame: {cur_frame_num}")
+                        self.set_streaming_state('ca_frame_num', cur_frame_num)
                         self._last_frame_num = cur_frame_num
             else:
-                print('data error[3], data: %s' % data)
+                self.error('serial data error;  data: %s' % data)
 
             # self._port.reset_input_buffer()
 
@@ -616,72 +590,83 @@ class ScanListener(AbstractCompiler):
         #     self._buffer_data[-1, :] = [int(data[0]), int(data[1]), 500*(frame_changed>0)]
         #     self.set_state('mirPos', self._buffer_data)
         self._last_time = t
+        super().on_time(t)
 
     def on_close(self):
         super().on_close()
 
 
 
-class DataIOApp(AbstractAPP):
-    def __init__(self, *args, ts_minion_name=None, state_dict={}, buffer_dict={}, buffer_saving_opt={}, trigger=None, **kwargs):
-        super(DataIOApp, self).__init__(*args, **kwargs)
-        self._param_to_compiler = {
-            "state_dict": state_dict,
-            "buffer_dict": buffer_dict,
-            "buffer_saving_opt": buffer_saving_opt,
-            "trigger": trigger,
-            "ts_minion_name": ts_minion_name
-        }
+# class DataIOApp(AbstractAPP):
+#     def __init__(self, *args, timer_minion=None, state_dict={}, buffer_dict={}, buffer_saving_opt={}, trigger=None, **kwargs):
+#         super(DataIOApp, self).__init__(*args, **kwargs)
+#         self._param_to_compiler = {
+#             "state_dict": state_dict,
+#             "buffer_dict": buffer_dict,
+#             "buffer_saving_opt": buffer_saving_opt,
+#             "trigger": trigger,
+#             "ts_minion_name": timer_minion
+#         }
+#
+#     def initialize(self):
+#         super().initialize()
+#         self._compiler = IOStreamingCompiler(self, **self._param_to_compiler)
+#         self.info("Aux IO initialized.")
+#
+# class CamApp(AbstractAPP):
+#     def __init__(self, *args, camera_name=None, save_option='binary', **kwargs):
+#         super(CamApp, self).__init__(*args, **kwargs)
+#         self._param_to_compiler['camera_name'] = camera_name
+#         self._param_to_compiler['save_option'] = save_option
+#
+#     def initialize(self):
+#         super().initialize()
+#         self._compiler = TISCameraCompiler(self, **self._param_to_compiler, )
+#         self.info("Camera Interface initialized.")
+#
+# class OMSInterfaceApp(AbstractAPP):
+#     def __init__(self, name, compiler, timer_minion = None, trigger_minion = None, VID=None, PID=None, mw_size=1, **kwargs):
+#         super(OMSInterfaceApp, self).__init__(*args, **kwargs)
+#         self.timer_minion = timer_minion
+#         self.trigger_minion = trigger_minion
+#         self._VID = VID
+#         self._PID = PID
+#         self._mw_size = mw_size
+#
+#     def initialize(self):
+#         super().initialize()
+#         self._compiler = OMSInterface(self,timer_minion=self.timer_minion, trigger_minion=self.trigger_minion,
+#                                       VID=self._VID, PID=self._PID, mw_size=self._mw_size)
+#         self.info("OMS compiler initialized.")
+#
+#
+# class ScanListenerApp(AbstractAPP):
+#     def __init__(self, *args, timer_minion = None, trigger_minion = None, port_name=None, **kwargs):
+#         super(ScanListenerApp, self).__init__(*args, **kwargs)
+#         self.timer_minion = timer_minion
+#         self.trigger_minion = trigger_minion
+#         self._param_to_compiler = {'port_name': port_name}
+#
+#     def initialize(self):
+#         super().initialize()
+#         self._compiler = ScanListener(self, timer_minion=self.timer_minion, trigger_minion=self.trigger_minion,
+#                                       **self._param_to_compiler)
+#         self.info("Scan Listener initialized.")
+#
+#
+# class PololuServoApp(AbstractAPP):
+#     def __init__(self, *args, timer_minion = None, trigger_minion = None, port_name='COM6', servo_dict={}, **kwargs):
+#         super(PololuServoApp, self).__init__(*args, **kwargs)
+#         self.timer_minion = timer_minion
+#         self.trigger_minion = trigger_minion
+#         self._param_to_compiler['port_name'] = port_name
+#         self._param_to_compiler['servo_dict'] = servo_dict
+#
+#     def initialize(self):
+#         super().initialize()
+#         self._compiler = PololuServoInterface(self, timer_minion=self.timer_minion, trigger_minion=self.trigger_minion,
+#                                               **self._param_to_compiler, )
+#         self.info("Pololu compiler initialized.")
+#
+#
 
-    def initialize(self):
-        super().initialize()
-        self._compiler = IOStreamingCompiler(self, **self._param_to_compiler)
-        self.info("Aux IO initialized.")
-
-
-class OMSInterfaceApp(AbstractAPP):
-    def __init__(self, *args, VID=None, PID=None, mw_size=1, **kwargs):
-        super(OMSInterfaceApp, self).__init__(*args, **kwargs)
-        self._VID = VID
-        self._PID = PID
-        self._mw_size = mw_size
-
-    def initialize(self):
-        super().initialize()
-        self._compiler = OMSInterface(self, VID=self._VID, PID=self._PID, mw_size=self._mw_size)
-        self.info("OMS compiler initialized.")
-
-
-class ScanListenerApp(AbstractAPP):
-    def __init__(self, *args, port_name=None, **kwargs):
-        super(ScanListenerApp, self).__init__(*args, **kwargs)
-        self._param_to_compiler = {'port_name': port_name}
-
-    def initialize(self):
-        super().initialize()
-        self._compiler = ScanListener(self, **self._param_to_compiler)
-        self.info("Scan Listener initialized.")
-
-
-class PololuServoApp(AbstractAPP):
-    def __init__(self, *args, port_name='COM6', servo_dict={}, **kwargs):
-        super(PololuServoApp, self).__init__(*args, **kwargs)
-        self._param_to_compiler['port_name'] = port_name
-        self._param_to_compiler['servo_dict'] = servo_dict
-
-    def initialize(self):
-        super().initialize()
-        self._compiler = PololuServoInterface(self, **self._param_to_compiler, )
-        self.info("Pololu compiler initialized.")
-
-
-class MainGUIApp(AbstractGUIAPP):
-    def __init__(self, *args, surveillance_state=None, **kwargs):
-        super(MainGUIApp, self).__init__(*args, **kwargs)
-        self._surveillance_state = surveillance_state
-
-    def initialize(self):
-        super().initialize()
-        self._win = MainGUI(self, surveillance_state=self._surveillance_state)
-        self.info("Main GUI initialized.")
-        self._win.show()

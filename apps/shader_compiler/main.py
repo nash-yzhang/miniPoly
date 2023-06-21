@@ -1,5 +1,5 @@
 from app import ShaderCompilerGUI, ShaderCompilerCanvas
-from bin.minion import LoggerMinion
+from bin.app.prototypes import LoggerMinion
 
 if __name__ == '__main__':
     GUI = ShaderCompilerGUI('GUI',refresh_interval=1)
