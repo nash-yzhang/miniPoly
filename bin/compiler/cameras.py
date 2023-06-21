@@ -39,8 +39,8 @@ class TISCameraCompiler(StreamingCompiler):
         #                 'StreamToDisk': False, 'InitTime': 0., 'FrameCount': int(0), 'FrameTime': 0.}
         self.streaming = False
         self._BIN_FileHandle = None
-        self._AUX_FileHandle = None
-        self._AUX_writer = None
+        # self._AUX_FileHandle = None
+        # self._AUX_writer = None
         self._stream_init_time = None
         self._n_frame_streamed = None
         self.camera = None
