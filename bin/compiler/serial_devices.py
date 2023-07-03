@@ -287,7 +287,7 @@ class MotorShieldCompiler(SerialCommandCompiler):
         self.watch_state('runSignal', False)
         self._running_protocol = False
 
-        self.create_streaming_state('protocolFn', '', shared=True, use_buffer=False)
+        self.create_streaming_state('protocolFn', '', shared=False, use_buffer=False)
         self.watch_state('protocolFn', '')
 
         self.watch_state('cmd_idx',-1)
@@ -386,22 +386,41 @@ class MotorShieldCompiler(SerialCommandCompiler):
 
     def _end_protocol(self):
         if self._cmd_idx_lookup_table is not None:
+            pin_param = []
+            flag_param = []
+            servo_param = []
+            stepper_param = []
             for k, v in self._cmd_idx_lookup_table.items():
                 if 'servo' in k:
                     # write serial command to set servo position
                     if 'flag' in k:
-                        self._set_servo_motor_pos(k, v, 180)
+                        flag_param = [k,v,180]
                     else:
-                        self._set_servo_motor_pos(k, v, 0)
+                        servo_param.append([k,v,0])
+                        # self._set_servo_motor_pos(k, v, 0)
                 elif 'stepper' in k:
-                    self._set_stepper_motor_pos(k, v, 0)
+                    stepper_param.append([k,v,0])
+                    # self._set_stepper_motor_pos(k, v, 0)
                 elif 'pin' in k:
                     pin_num = v[0]
                     if pin_num < 10:
-                        self._port.write(f'pin0{pin_num}0\n'.encode())
+                        pin_param.append([k,f'pin0{pin_num}0\n'.encode()])
+                        # self._port.write(f'pin0{pin_num}0\n'.encode())
                     else:
-                        self._port.write(f'pin{pin_num}0\n'.encode())
-                    self.set_streaming_state(k, 0)
+                        pin_param.append([k,f'pin{pin_num}0\n'.encode()])
+                        # self._port.write(f'pin{pin_num}0\n'.encode())
+            if pin_param != []:
+                for i in pin_param:
+                    self._port.write(i[1])
+                    self.set_streaming_state(i[0], 0)
+            if flag_param != []:
+                self._set_servo_motor_pos(*flag_param)
+            if servo_param != []:
+                for i in servo_param:
+                    self._set_servo_motor_pos(*i)
+            if stepper_param != []:
+                for i in stepper_param:
+                    self._set_stepper_motor_pos(*i)
 
         self._protocol_start_time = None
         self.set_state_to(self._trigger_minion, 'cmd_idx', -1)
