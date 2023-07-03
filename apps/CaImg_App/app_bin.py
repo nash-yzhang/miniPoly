@@ -7,6 +7,7 @@ import time
 import traceback
 
 import PyQt5.QtWidgets as qw
+import PyQt5.QtCore as qc
 import pyqtgraph as pg
 
 from bin.compiler.graphics import QtCompiler
@@ -84,7 +85,8 @@ class MainGUI(QtCompiler):
                         f'The type of the state {k}.{v} ({val_type}) is not supported for plotting')
 
     def _init_main_window(self):
-        self.layout_main = qw.QGridLayout()
+        # self.layout_main = qw.QGridLayout()
+        self.layout_main = qw.QVBoxLayout()
         self.layout_CamView = qw.QHBoxLayout()
 
         self.layout_SavePanel = qw.QVBoxLayout()
@@ -160,15 +162,34 @@ class MainGUI(QtCompiler):
         self.layout_state_monitor_controller.addWidget(self.btn_freeze_frame, 1)
         self.layout_state_monitor.addLayout(self.layout_state_monitor_controller, 1)
 
-        self.layout_main.addLayout(self.layout_CamView, 0, 0, 2, 3)
-        self.layout_main.addLayout(self.layout_SavePanel, 0, 3, 1, 2)
-        self.layout_main.addLayout(self.layout_stimGUI, 1, 3, 1, 2)
-        self.layout_main.addLayout(self.layout_state_monitor, 2, 0, 1, 5)
+        top_hori_splitter = qw.QSplitter()
+        self.widget_CamView = qw.QWidget()
+        self.widget_CamView.setLayout(self.layout_CamView)
+        self.widget_right_top_panel = qw.QWidget()
+        self.layout_right_top_panel = qw.QVBoxLayout()
+        self.widget_SavePanel = qw.QWidget()
+        self.widget_SavePanel.setLayout(self.layout_SavePanel)
+        self.widget_stimGUI = qw.QWidget()
+        self.widget_stimGUI.setLayout(self.layout_stimGUI)
+        self.layout_right_top_panel.addWidget(self.widget_SavePanel)
+        self.layout_right_top_panel.addWidget(self.widget_stimGUI)
+        self.widget_right_top_panel.setLayout(self.layout_right_top_panel)
+        top_hori_splitter.addWidget(self.widget_CamView)
+        top_hori_splitter.addWidget(self.widget_right_top_panel)
+        self.widget_state_monitor = qw.QWidget()
+        self.widget_state_monitor.setLayout(self.layout_state_monitor)
+        main_vert_splitter = qw.QSplitter(qc.Qt.Vertical)
+        main_vert_splitter.addWidget(top_hori_splitter)
+        main_vert_splitter.addWidget(self.widget_state_monitor)
+        self.layout_main.addWidget(main_vert_splitter)
+        # self.layout_main.addLayout(self.layout_CamView, 0, 0, 2, 3)
+        # self.layout_main.addLayout(self.layout_SavePanel, 0, 3, 1, 2)
+        # self.layout_main.addLayout(self.layout_state_monitor)
 
-        self.layout_main.setColumnStretch(0, 3)
-        self.layout_main.setColumnStretch(3, 2)
-        self.layout_main.setRowStretch(1, 2)
-        self.layout_main.setRowStretch(2, 1)
+        # self.layout_main.setColumnStretch(0, 3)
+        # self.layout_main.setColumnStretch(3, 2)
+        # self.layout_main.setRowStretch(1, 2)
+        # self.layout_main.setRowStretch(2, 1)
 
         self.main_widget = qw.QWidget()
         self.main_widget.setLayout(self.layout_main)
