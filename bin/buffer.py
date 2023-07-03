@@ -10,13 +10,13 @@ class SharedBuffer:
     _CLASS_NAME = 'SharedBuffer'
     _MAX_BUFFER_SIZE = 2 ** 24  # Maximum shared memory: 16 MB
     _READ_OFFSET = len(_CLASS_NAME) + 1  # The first 30 bytes represents the valid size of the shared buffer
-    _LOCK_OFFSET = 1
+    _LOCK_OFFSET = 1  # The next byte represents the lock status of the shared buffer
 
     def __init__(self, name, lock, use_RWLock = False, data=None, size=None, create=True):
         self._size = None
         self._name = name
         self._lock = lock
-        self.use_RWLock = use_RWLock
+        self._use_RWLock = use_RWLock
 
         byte_data = None
 
@@ -131,7 +131,7 @@ class SharedBuffer:
         return self._size
 
     def write(self, data):
-        if not self.use_RWLock:
+        if not self._use_RWLock:
             lock_acquired = self._lock.acquire(timeout=0.1)
         else:
             lock_acquired = self.aquire_RWlock('w', timeout=1000)
@@ -142,7 +142,7 @@ class SharedBuffer:
                 byte_data = json.dumps(data).encode('utf-8')
                 self._shared_memory.buf[(self._READ_OFFSET + self._LOCK_OFFSET):(self._READ_OFFSET + self._LOCK_OFFSET + len(byte_data))] = byte_data
 
-            if not self.use_RWLock:
+            if not self._use_RWLock:
                 self._lock.release()
             else:
                 self.release_RWlock()
@@ -152,7 +152,7 @@ class SharedBuffer:
 
     def read(self):
         data = None
-        if not self.use_RWLock:
+        if not self._use_RWLock:
             lock_acquired = self._lock.acquire(timeout=0.1)
         else:
             lock_acquired = self.aquire_RWlock('r', timeout=1000)
@@ -169,7 +169,7 @@ class SharedBuffer:
             except Exception:
                 warnings.warn(f'[{self._CLASS_NAME} - {self._name}] Failed to read data from shared memory')
 
-            if not self.use_RWLock:
+            if not self._use_RWLock:
                 self._lock.release()
             else:
                 self.release_RWlock()
@@ -203,11 +203,14 @@ class SharedNdarray:
     _CLASS_NAME = 'SharedNdarray'
     _MAX_BUFFER_SIZE = 2 ** 32  # Maximum shared memory: 4 GB
     _READ_OFFSET = 512  # The first 512 bytes represents the valid size of the shared buffer
+    _LOCK_OFFSET = 1  # The next byte represents the lock status of the shared buffer
 
-    def __init__(self, name, lock: Lock, data=None, create=True):
+    def __init__(self, name, lock: Lock, data=None, create=True, use_RWLock=True):
 
         self._name = name
         self._lock = lock
+        self._use_RWLock = use_RWLock
+
         self._shared_memory = None
         self._dtype = None
         self._data = None
@@ -220,10 +223,10 @@ class SharedNdarray:
             self._dtype = data.dtype.str
             try:
                 self._shared_memory = shared_memory.SharedMemory(create=True, name=self._name,
-                                                                 size=data.nbytes + self._READ_OFFSET)
+                                                                 size=data.nbytes + self._READ_OFFSET + self._LOCK_OFFSET)
                 self._write_header()
                 self._data = np.ndarray(shape=self._shape, dtype=self._dtype, buffer=self._shared_memory.buf,
-                                        offset=self._READ_OFFSET)
+                                        offset=self._READ_OFFSET + self._LOCK_OFFSET)
                 self.write(data)
             except Exception:
                 if self._shared_memory is not None:
@@ -240,7 +243,7 @@ class SharedNdarray:
                 raise TypeError(f'[{self._CLASS_NAME} - {self._name}] Unsupported type of shared memory')
 
             self._data = np.ndarray(shape=self._shape, dtype=self._dtype, buffer=self._shared_memory.buf,
-                                    offset=self._READ_OFFSET)
+                                    offset=self._READ_OFFSET + self._LOCK_OFFSET)
             if data is not None:
                 try:
                     self.write(data)
@@ -267,16 +270,75 @@ class SharedNdarray:
     def size(self):
         return self._size
 
+    def _read_lockbyte(self):
+        byte_data = bytes(self._shared_memory.buf[self._READ_OFFSET:(self._READ_OFFSET + self._LOCK_OFFSET)])
+        lock_status = byte_data.decode('utf-8')  # 'w' or 'r' or ' ' or '\x00'
+        return lock_status
+
+    def _write_lockbyte(self, lock_status):
+        byte_data = lock_status.encode('utf-8')
+        self._shared_memory.buf[self._READ_OFFSET:(self._READ_OFFSET + self._LOCK_OFFSET)] = byte_data
+
+    def aquire_RWlock(self, operation, timeout=1000):
+        if operation not in ['w', 'r']:
+            raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Invalid lock status')
+        spin_count = 0
+        lock_acquired = False
+        while not lock_acquired and spin_count < timeout:
+            lock_status = self._read_lockbyte()
+            if lock_status in [' ', '\x00']:
+                self._write_lockbyte(operation)
+                lock_acquired = True
+            elif lock_status == 'w':
+                lock_acquired = False
+            elif lock_status == 'r':
+                if operation == 'w':
+                    lock_acquired = False
+                elif operation == 'r':
+                    self._write_lockbyte(operation)
+                    lock_acquired = True
+            spin_count += 1
+        if spin_count >= timeout:
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] TIMEOUT ERROR; Failed to acquire lock')
+        return lock_acquired
+
+    def release_RWlock(self):
+        self._write_lockbyte(' ')
+
     def read(self):
-        self._lock.acquire()
-        data = self._data.copy()
-        self._lock.release()
+        if self._use_RWLock:
+            lock_acquired = self.aquire_RWlock('r')
+        else:
+            lock_acquired = self._lock.acquire()
+
+        if not lock_acquired:
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] TIMEOUT ERROR; Failed to read data from shared memory')
+            return None
+        else:
+            data = self._data.copy()
+
+            if self._use_RWLock:
+                self.release_RWlock()
+            else:
+                self._lock.release()
         return data
 
     def write(self, data):
-        self._lock.acquire()
-        self._data[:] = data
-        self._lock.release()
+        if self._use_RWLock:
+            lock_acquired = self.aquire_RWlock('r')
+        else:
+            lock_acquired = self._lock.acquire()
+
+        if not lock_acquired:
+            warnings.warn(f'[{self._CLASS_NAME} - {self._name}] TIMEOUT ERROR; Failed to read data from shared memory')
+            return None
+        else:
+            self._data[:] = data
+
+            if self._use_RWLock:
+                self.release_RWlock()
+            else:
+                self._lock.release()
 
     def _write_header(self):
         header = json.dumps(f'{self._CLASS_NAME}~{self._shape}~{self._dtype}').encode('utf-8')
