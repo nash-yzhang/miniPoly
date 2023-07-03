@@ -349,6 +349,7 @@ class BaseMinion:
                       if type(state_val) == str:
                           if state_val.startswith('b*'):
                               self._linked_minion[minion_name].append(state_name)
+                              self._registered_buffer_handle[minion_name][state_name] = SharedNdarray(f"{minion_name}_{state_name}", lock=self.lock, create=False)
                               state_val = self._read_foreign_buffer_as_state(minion_name, state_name, asis)
                   elif state_name == 'ALL':
                       state_val = dict(shared_dict)
