@@ -333,7 +333,7 @@ class BaseMinion:
             self.error(f"Unknown state: '{state_name}'")
         return state_val
 
-    def get_foreign_state(self, minion_name, state_name, asis=False):
+    def get_foreign_state(self, minion_name, state_name, asis=False, timeout=3000):
         # param asis: if true, then keep the format of the state (e.g. state is an integer stored in a ndarray buffer,
         # asis == True, the state will be return as a numpy array
         state_val = None
@@ -343,21 +343,28 @@ class BaseMinion:
                 state_val = self._read_foreign_buffer_as_state(minion_name, state_name, asis)
             else:
                 shared_dict = self._registered_buffer_handle[minion_name]['shared_dict']
-                if state_name in shared_dict.keys():
-                    state_val = shared_dict[state_name]
-                    if type(state_val) == str:
-                        if state_val.startswith('b*'):
-                            self._linked_minion[minion_name].append(state_name)
-                            state_val = self._read_foreign_buffer_as_state(minion_name, state_name, asis)
-                elif state_name == 'ALL':
-                    state_val = dict(shared_dict)
-                    for i_state_name, i_state_val in state_val.items():
-                        if type(i_state_val) == str:
-                            if i_state_val.startswith('b*'):
-                                state_val[i_state_name] = self._read_foreign_buffer_as_state(minion_name, i_state_name,
-                                                                                             asis)
-                else:
-                    err_code = 1
+                for i in range(int(timeout/10)):
+                  if state_name in shared_dict.keys():
+                      state_val = shared_dict[state_name]
+                      if type(state_val) == str:
+                          if state_val.startswith('b*'):
+                              self._linked_minion[minion_name].append(state_name)
+                              state_val = self._read_foreign_buffer_as_state(minion_name, state_name, asis)
+                  elif state_name == 'ALL':
+                      state_val = dict(shared_dict)
+                      for i_state_name, i_state_val in state_val.items():
+                          if type(i_state_val) == str:
+                              if i_state_val.startswith('b*'):
+                                  state_val[i_state_name] = self._read_foreign_buffer_as_state(minion_name, i_state_name,
+                                                                                               asis)
+                  else:
+                      err_code = 1
+                  
+                  if err_code == 0:
+                      break
+                  else:
+                      sleep(0.01)
+
         else:
             err_code = 2
 
