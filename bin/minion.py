@@ -38,6 +38,7 @@ COMM_WAITING_TIME = 1e-3
 
 SHAREDLOCK = Lock()
 
+
 class BaseMinion:
     @staticmethod
     def innerLoop(hook: 'BaseMinion'):
@@ -98,6 +99,7 @@ class BaseMinion:
         # called _shared_buffer_index_dict, whose content will be updated into the _shared_buffer.
         self._shared_buffer = {}
         self._linked_minion = {}
+        self._registered_buffer_handle = {}
         self.minion_to_link = []
 
     ############# Logging module #############
@@ -143,7 +145,8 @@ class BaseMinion:
     def prepare_shared_buffer(self):
         self._shared_dict = SharedDict(f'{self.name}_shared_dict', lock=self.lock, create=True, name=self.name,
                                        size=self._INDEX_SHARED_BUFFER_SIZE)
-        self.create_state('status', 1, use_buffer=True)  # create a shared state for the minion status which will be stored in an independent shared buffer
+        self.create_state('status', 1,
+                          use_buffer=True)  # create a shared state for the minion status which will be stored in an independent shared buffer
         self._shared_dict['name'] = self.name
 
     def build_init_conn(self, timeout=1000):
@@ -168,7 +171,7 @@ class BaseMinion:
         if type(data) in [list, tuple]:
             data = np.array(data)
         elif type(data) in [int, float, bool]:
-            data = np.array([data], dtype = type(data))
+            data = np.array([data], dtype=type(data))
         elif type(data) == np.ndarray:
             pass
         else:
@@ -179,14 +182,16 @@ class BaseMinion:
         if name not in self._shared_dict.keys():
             shared_buffer_name = f"{self.name}_{name}"
             try:
-                self._shared_buffer[f"b*{shared_buffer_name}"] = SharedNdarray(shared_buffer_name, self.lock, data)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
+                self._shared_buffer[f"b*{shared_buffer_name}"] = SharedNdarray(shared_buffer_name, self.lock,
+                                                                               data)  # The list '_shared_buffer" host all local buffer for other minion to access, it also serves as a handle hub for later closing these buffers
             except Exception:
                 self.log(logging.ERROR, f"Error in creating buffer '{name}'.\n{traceback.format_exc()}")
-            self._shared_dict[name] = f"b*{shared_buffer_name}"  # e.g. 'status': 'b*{self.name}_status' -> 'b*{self.name}_status': '{self.name}_status'
+            self._shared_dict[
+                name] = f"b*{shared_buffer_name}"  # e.g. 'status': 'b*{self.name}_status' -> 'b*{self.name}_status': '{self.name}_status'
         else:
             self.log(logging.ERROR, f"SharedBuffer '{name}' already exist")
 
-    def remove_shared_buffer(self,state_name: str):
+    def remove_shared_buffer(self, state_name: str):
         if state_name in self._shared_buffer.keys():
             self._shared_buffer[state_name].close()
             del self._shared_buffer[state_name]
@@ -194,6 +199,7 @@ class BaseMinion:
             self.log(logging.ERROR, f"State '{state_name}' cannot be deleted because it does not exist")
 
     def link_minion(self, minion_name):
+        err = 0
         if minion_name not in self._linked_minion.keys():
             try:
                 shared_buffer_name = f"{minion_name}_shared_dict"
@@ -204,28 +210,38 @@ class BaseMinion:
                         dict_name = 'N/A'
                     if dict_name == minion_name:
                         self.log(logging.INFO, f"Successfully connected to '{minion_name}.")
-                        self._linked_minion[minion_name] = ['shared_dict']  # The name of the shared buffer from this minion
+                        self._linked_minion[minion_name] = [
+                            'shared_dict']  # The name of the shared buffer from this minion
 
                         # To register all shared buffer from the linked minion
                         # A default shared buffer is 'status'
-                        for k,v in tmp_dict.items():
+                        for k, v in tmp_dict.items():
                             if type(v) == str:
                                 if v.startswith('b*'):
                                     self._linked_minion[minion_name].append(k)
-                        return 0
                     else:
                         self.log(logging.ERROR,
                                  f'[{self.name}] Pre-execution error: The "name" state of the linked shared buffer {dict_name} is inconsistent with input minion name {minion_name}.')
-                        return 1
+                        err = 1
+
+                if err == 0:
+                    self._registered_buffer_handle[minion_name] = {}
+                    for k in self._linked_minion[minion_name]:
+                        if k != 'shared_dict':
+                            buf = SharedNdarray(f"{minion_name}_{k}", lock=self.lock, create=False)
+                        else:
+                            buf = SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False)
+                        self._registered_buffer_handle[minion_name][k] = buf
+
             except FileNotFoundError:
                 self.log(logging.INFO, f"SharedDict '{minion_name} not found'.")
-                return -1
+                err = -1
             except:
                 self.log(logging.ERROR, f"Error when connecting to '{minion_name}'.\n{traceback.format_exc()}")
-                return 2
+                err = 2
         else:
             self.log(logging.INFO, f"Already linked to minion: {minion_name}")
-            return 0
+        return err
 
     def create_state(self, state_name: str, state_val: object, use_buffer: bool = False, dtype=None):
         if state_name in self._shared_dict.keys():
@@ -237,7 +253,7 @@ class BaseMinion:
                 self._shared_dict[state_name] = state_val
             self.log(logging.INFO, f"Shared state: '{state_name}' created")
 
-    def remove_state(self,state_name: str):
+    def remove_state(self, state_name: str):
         if state_name in self._shared_dict.keys():
             del self._shared_dict[state_name]
             self.log(logging.INFO, f"Shared state: '{state_name}' DELETED")
@@ -257,31 +273,28 @@ class BaseMinion:
                 has_state = True
             else:
                 if self.is_minion_alive(minion_name):
-                    with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as shared_dict:
-                        has_state = state_name in list(shared_dict.keys())
+                    has_state = state_name in list(self._registered_buffer_handle[minion_name]['shared_dict'].keys())
                 else:
                     self.error(f"Dead minion: '{minion_name}'")
         else:
             self.log(logging.ERROR, f"Unknown minion: '{minion_name}'")
             return has_state
 
-    def get_shared_state_names(self,minion_name:str):
-        '''
+    def get_shared_state_names(self, minion_name: str):
+        """
         Get the names of all shared states in the minion's shared dictionary
         Will soon be deprecated
-        '''
+        """
         if minion_name == self.name:
-                return list(self._shared_dict.keys())
+            return list(self._shared_dict.keys())
 
         elif minion_name in self._linked_minion.keys():
             if self.is_minion_alive(minion_name):
-                with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as tmp_dict:
-                    return list(tmp_dict.keys())
+                return list(self._registered_buffer_handle[minion_name]['shared_dict'].keys())
             else:
                 self.log(logging.DEBUG, f"Dead minion '{minion_name}' or errors in connecting to its shared buffer")
         else:
             self.log(logging.DEBUG, f"Unknown minion: '{minion_name}'")
-
 
     def get_state_from(self, minion_name: str, state_name: str):
         """
@@ -301,7 +314,7 @@ class BaseMinion:
 
         return state_val
 
-    def get_state(self, state_name: str,  asis=False):
+    def get_state(self, state_name: str, asis=False):
         # param asis: if true, then keep the format of the state (e.g. state is an integer stored in a ndarray buffer,
         # asis == True, the state will be return as a numpy array
         state_val = None  # Return None if exception to avoid error
@@ -309,7 +322,7 @@ class BaseMinion:
             state_val = self._shared_dict.get(state_name)
             if type(state_val) == str:
                 if state_val.startswith('b*'):
-                    state_val = self._read_buffer_as_state(state_val,asis)
+                    state_val = self._read_buffer_as_state(state_val, asis)
         elif state_name == 'ALL':
             state_val = dict(self._shared_dict)
             for i_state_name, i_state_val in state_val.items():
@@ -329,21 +342,22 @@ class BaseMinion:
             if state_name in self._linked_minion[minion_name]:
                 state_val = self._read_foreign_buffer_as_state(minion_name, state_name, asis)
             else:
-                with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as shared_dict:
-                    if state_name in shared_dict.keys():
-                        state_val = shared_dict[state_name]
-                        if type(state_val) == str:
-                            if state_val.startswith('b*'):
-                                self._linked_minion[minion_name].append(state_name)
-                                state_val = self._read_foreign_buffer_as_state(minion_name, state_name, asis)
-                    elif state_name == 'ALL':
-                        state_val = dict(shared_dict)
-                        for i_state_name, i_state_val in state_val.items():
-                            if type(i_state_val) == str:
-                                if i_state_val.startswith('b*'):
-                                    state_val[i_state_name] = self._read_foreign_buffer_as_state(minion_name, i_state_name, asis)
-                    else:
-                        err_code = 1
+                shared_dict = self._registered_buffer_handle[minion_name]['shared_dict']
+                if state_name in shared_dict.keys():
+                    state_val = shared_dict[state_name]
+                    if type(state_val) == str:
+                        if state_val.startswith('b*'):
+                            self._linked_minion[minion_name].append(state_name)
+                            state_val = self._read_foreign_buffer_as_state(minion_name, state_name, asis)
+                elif state_name == 'ALL':
+                    state_val = dict(shared_dict)
+                    for i_state_name, i_state_val in state_val.items():
+                        if type(i_state_val) == str:
+                            if i_state_val.startswith('b*'):
+                                state_val[i_state_name] = self._read_foreign_buffer_as_state(minion_name, i_state_name,
+                                                                                             asis)
+                else:
+                    err_code = 1
         else:
             err_code = 2
 
@@ -355,11 +369,11 @@ class BaseMinion:
         return state_val
 
     def _read_foreign_buffer_as_state(self, minion_name, state_name, asis):
-        with SharedNdarray(f"{minion_name}_{state_name}", lock=self.lock, create=False) as shm:
-            state_val = shm.read()
-            if state_val.size == 1 and not asis:
-                state_val = state_val[0]
-            return state_val
+        shm = self._registered_buffer_handle[minion_name][state_name]
+        state_val = shm.read()
+        if state_val.size == 1 and not asis:
+            state_val = state_val[0]
+        return state_val
 
     def _read_buffer_as_state(self, state_name, asis):
         state_val = self._shared_buffer[state_name].read()
@@ -401,25 +415,25 @@ class BaseMinion:
         err_code = 0
         if self.is_minion_alive(minion_name):
             if state_name in self._linked_minion[minion_name]:
-                with SharedNdarray(f"{minion_name}_{state_name}", lock=self.lock, create=False) as shm:
-                    shm.write(state_val)
+                self._registered_buffer_handle[minion_name][state_name].write(state_val)
             else:
-                with SharedDict(f"{minion_name}_shared_dict", lock=self.lock, create=False) as shared_dict:
-                    if state_name in shared_dict.keys():
-                        # In case the state has been changed to buffer type, this section will update the linked_minion list
-                        stored_val = shared_dict[state_name]
-                        state_type = 'dict_val'
-                        if type(stored_val) == str:
-                            if stored_val.startswith('b*'):
-                                self._linked_minion[minion_name].append(state_name)
-                                state_type = 'buffer'
-                        if state_type == "dict_val":
-                            shared_dict[state_name] = state_val
-                        else:
-                            with SharedNdarray(f"{minion_name}_{state_name}", lock=self.lock, create=False) as shm:
-                                shm.write(state_val)
+                shared_dict = self._registered_buffer_handle[minion_name]['shared_dict']
+                if state_name in shared_dict.keys():
+                    # In case the state has been changed to buffer type, this section will update the linked_minion list
+                    stored_val = shared_dict[state_name]
+                    state_type = 'dict_val'
+                    if type(stored_val) == str:
+                        if stored_val.startswith('b*'):
+                            self._linked_minion[minion_name].append(state_name)
+                            self._registered_buffer_handle[minion_name][state_name] = SharedNdarray(
+                                f"{minion_name}_{state_name}", lock=self.lock, create=False)
+                            state_type = 'buffer'
+                    if state_type == "dict_val":
+                        shared_dict[state_name] = state_val
                     else:
-                        err_code = 1
+                        self._registered_buffer_handle[minion_name][state_name].write(state_val)
+                else:
+                    err_code = 1
         else:
             err_code = 2
 
@@ -440,10 +454,12 @@ class BaseMinion:
         self.minion_to_link.append(minion.name)
 
     def disconnect(self, minion_name):
-        k = [i for i in self._shared_dict.keys()]
-        for i in k:
-            if f"{minion_name}_" in i:
-                self._shared_dict.pop(i)
+        for i_buf in self._registered_buffer_handle[minion_name].values():
+            try:
+                i_buf.close()
+            except Exception as e:
+                self.log(logging.WARNING, "Error in closing buffer: {}".format(e))
+        self._registered_buffer_handle.pop(minion_name)
         self._linked_minion.pop(minion_name)
         self._queue[minion_name].close()
         self._queue.pop(minion_name, 'None')
@@ -509,12 +525,12 @@ class BaseMinion:
 
         if minion_name in self._linked_minion.keys():
             try:
-                with SharedNdarray(f"{minion_name}_status", lock=self.lock, create=False) as shm:
-                    val = shm.read()
-                    if val <= 0:
-                        val = False
-                    else:
-                        val = True
+                shm = self._registered_buffer_handle[minion_name]['status']
+                val = shm.read()
+                if val <= 0:
+                    val = False
+                else:
+                    val = True
             except FileNotFoundError:
                 val = False
             except Exception:
@@ -525,7 +541,6 @@ class BaseMinion:
             val = None
         return val
 
-
     def is_buffer_alive(self, minion_name, buffer_name):
         """
         Determine the states of connected foreign shared buffer
@@ -535,13 +550,21 @@ class BaseMinion:
             Bool or None: True if alive, False if dead, None if error
         """
         if minion_name in self._linked_minion.keys():
+            # 1. check buffer name in the foreign minion shared dict
+            shared_dict = self._registered_buffer_handle[minion_name]['shared_dict']
+            if buffer_name not in shared_dict.keys():
+                self.error(f"Unknown foreign buffer '{buffer_name}' in minion '{minion_name}'")
+                return None
+            else:
+                # 2. update the registered buffer handle
+                if buffer_name not in self._registered_buffer_handle[minion_name].keys():
+                    self._registered_buffer_handle[minion_name][buffer_name] = SharedNdarray(
+                        f"{minion_name}_{buffer_name}", lock=self.lock, create=False)
             try:
-                with SharedNdarray(f"{minion_name}_{buffer_name}", lock=self.lock, create=False) as tmp_dict:
-                    ISALIVE = tmp_dict.is_alive()
+                ISALIVE = self._registered_buffer_handle[minion_name][buffer_name].is_alive()
                 return ISALIVE
             except FileNotFoundError:
                 self.log(logging.INFO, f"Linked shared buffer '{minion_name}_{buffer_name}' is closed.")
-                self._shared_dict.pop(f"b*{minion_name}_{buffer_name}")
                 return False
             except Exception:
                 self.log(logging.ERROR,
@@ -639,18 +662,18 @@ class TimerMinion(BaseMinion):
 
     def __init__(self, name, refresh_interval=10):
         super(TimerMinion, self).__init__(name)
-        self.timer = {'default': [-1,-1]}  # 1. interval, 2. elapsed time, 3. init_time
+        self.timer = {'default': [-1, -1]}  # 1. interval, 2. elapsed time, 3. init_time
         self.timer_cb_func = {'default': self.on_time}
         self._isrunning = False
         self._interval = refresh_interval / 1000
 
     @property
     def refresh_interval(self):
-        return self._interval*1000
+        return self._interval * 1000
 
     @refresh_interval.setter
     def refresh_interval(self, val):
-        self._interval = val/1000
+        self._interval = val / 1000
 
     def add_timer(self, name, cb_func=None):
         '''
@@ -658,7 +681,7 @@ class TimerMinion(BaseMinion):
         :param name: timer's name
         :return:
         '''
-        self.timer[name] = [-1,-1]
+        self.timer[name] = [-1, -1]
         self.timer_cb_func[name] = cb_func
 
     def add_callback(self, timer_name, cb_func):
@@ -714,10 +737,10 @@ class TimerMinion(BaseMinion):
 
     def exec(self):
         cur_time = perf_counter()
-        for k,v in self.timer.items():
+        for k, v in self.timer.items():
             if v[1] >= 0:
                 elapsed = cur_time - v[1]
-                if elapsed-v[0] > self._interval:
+                if elapsed - v[0] > self._interval:
                     v[0] = elapsed
                     cb_func = self.timer_cb_func.get(k)
                     if cb_func is not None:
@@ -728,9 +751,9 @@ class TimerMinion(BaseMinion):
         if type(timer_name) is str:
             if timer_name == 'all':
                 tmp_times = []
-                for k,v in self.timer.items():
+                for k, v in self.timer.items():
                     elapsed = cur_time - v[1]
-                    if elapsed-v[0] > self._interval:
+                    if elapsed - v[0] > self._interval:
                         v[0] = elapsed
                         # cb_func = self.timer_cb_func.get(k)
                         # if cb_func is not None:
@@ -778,7 +801,7 @@ class TimerMinion(BaseMinion):
     def elapsed(self):
         return self.get_time('default')[1]
 
-    def on_time(self,t):
+    def on_time(self, t):
         pass
 
 
@@ -801,10 +824,10 @@ class AbstractMinionMixin:
         else:
             self._processHandler.debug(f"Logging failed, unknown logging level: {level}")
 
-    def debug(self,msg):
+    def debug(self, msg):
         self._processHandler.debug(msg)
 
-    def info(self,msg):
+    def info(self, msg):
         self._processHandler.info(msg)
 
     def warning(self, msg):
@@ -836,7 +859,7 @@ class AbstractMinionMixin:
     def get_linked_minion_names(self):
         return list(self._processHandler._linked_minion.keys())
 
-    def get_shared_state_names(self,minion_name):
+    def get_shared_state_names(self, minion_name):
         return list(self._processHandler.get_shared_state_names(minion_name))
 
     def create_state(self, state_name, state_val, use_buffer=False, dtype=None):
@@ -862,8 +885,9 @@ class AbstractMinionMixin:
 
     def remove_shared_buffer(self, buffer_name):
         self._processHandler.remove_shared_buffer(buffer_name)
+
     def has_foreign_state(self, minion_name, buffer_name):
-        return self._processHandler.has_foreign_state(minion_name,buffer_name)
+        return self._processHandler.has_foreign_state(minion_name, buffer_name)
 
     def has_state(self, buffer_name):
         return self._processHandler.has_state(buffer_name)
@@ -871,8 +895,8 @@ class AbstractMinionMixin:
     def parse_msg(self, msg_type, msg):
         pass
 
-    def watch_state(self,name,val):
-        return self._processHandler.watch_state('C_'+name,val)  # 'C_' for compiler states
+    def watch_state(self, name, val):
+        return self._processHandler.watch_state('C_' + name, val)  # 'C_' for compiler states
 
     def shutdown(self):
         self._processHandler.shutdown()
@@ -880,30 +904,31 @@ class AbstractMinionMixin:
     def status(self):
         return self._processHandler.status
 
+
 class TimerMinionMixin(AbstractMinionMixin):
 
-    def has_timer(self,name):
+    def has_timer(self, name):
         self._processHandler: TimerMinion
         return name in self._processHandler.timer.keys()
 
-    def add_timer(self,name,cb_func=None):
-        self._processHandler.add_timer(name,cb_func)
+    def add_timer(self, name, cb_func=None):
+        self._processHandler.add_timer(name, cb_func)
 
-    def start_timing(self,timer_name='default'):
+    def start_timing(self, timer_name='default'):
         self._processHandler.start_timing(timer_name)
 
-    def stop_timing(self,timer_name='default'):
+    def stop_timing(self, timer_name='default'):
         self._processHandler.stop_timing(timer_name)
 
-    def get_time(self,timer_name='default'):
+    def get_time(self, timer_name='default'):
         return self._processHandler.get_time(timer_name)
 
     def elapsed(self):
         return self._processHandler.elapsed
 
     def timerInterval(self):
-        self._processHandler:TimerMinion
+        self._processHandler: TimerMinion
         return self._processHandler.refresh_interval
 
-    def setTimerInterval(self,val):
+    def setTimerInterval(self, val):
         self._processHandler.interval = val
