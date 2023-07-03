@@ -1,9 +1,10 @@
-from app import ShaderCompilerGUI, ShaderCompilerCanvas
-from bin.app.prototypes import LoggerMinion
+from compiler import GLProtocolCompiler, GLProtocolCommander
+from bin.app.prototypes import AbstractGUIAPP, AbstractGLAPP, LoggerMinion
 
 if __name__ == '__main__':
-    GUI = ShaderCompilerGUI('GUI',refresh_interval=1)
-    GL_canvas = ShaderCompilerCanvas('OPENGL',refresh_interval=1)
+    GUI = AbstractGUIAPP('GUI',GLProtocolCommander,refresh_interval=1)
+    GL_canvas = AbstractGLAPP('OPENGL',GLProtocolCompiler, VS='./_shader/default.VS',
+                   FS='./_shader/default.FS')
     GL_canvas.connect(GUI)
     logger = LoggerMinion('TestGUI logger')
     GUI.attach_logger(logger)
