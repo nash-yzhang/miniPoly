@@ -10,6 +10,9 @@ Servo radiusServoMotor;
 
 
 const int ledPin = 8;
+const int radiusServoMotionSpeed = 4;
+const int flagServoMotionSpeed = 4;
+int increment;
 int flag;
 int lightOn;
 
@@ -19,6 +22,8 @@ void setup() {
   stepper1->setSpeed(100); // Set the motor speed (RPM)
   flagServoMotor.attach(9); // Attach servo to pin 9
   radiusServoMotor.attach(10); // Attach servo to pin 10
+  flagServoMotor.write(180);
+  radiusServoMotor.write(20);
   flag = 0;
   lightOn = 0;
   pinMode(ledPin, OUTPUT); // Set LED pin as output
@@ -57,11 +62,33 @@ void executeStepperCommand(String commandString) {
 }
 
 void executeRadiusServoCommand(int angle) {
-  radiusServoMotor.write(angle); // Set the servo motor to the specified angle
+  int currentAngle = radiusServoMotor.read();
+  if (currentAngle < angle) {
+     for (int i = currentAngle; i < angle; i++) {
+       radiusServoMotor.write(i);
+       delay(radiusServoMotionSpeed);
+     }
+  } else {
+     for (int i = currentAngle; i > angle; i--) {
+       radiusServoMotor.write(i);
+       delay(radiusServoMotionSpeed);
+     }
+  }
 }
 
 void executeFlagServoCommand(int angle) {
-  flagServoMotor.write(angle); // Set the servo motor to the specified angle
+  int currentAngle = flagServoMotor.read();
+  if (currentAngle < angle) {
+     for (int i = currentAngle; i < angle; i++) {
+       flagServoMotor.write(i);
+       delay(flagServoMotionSpeed);
+     }
+  } else {
+     for (int i = currentAngle; i > angle; i--) {
+       flagServoMotor.write(i);
+       delay(flagServoMotionSpeed);
+     }
+  }
 }
 
 void executePinCommand(String commandString) {

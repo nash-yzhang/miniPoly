@@ -1,5 +1,3 @@
-import time
-
 from apps.CaImg_App.app_bin import *
 from bin.app.prototypes import AbstractGUIAPP, StreamingAPP, LoggerMinion
 from bin.compiler import TISCameraCompiler, OMSInterface, MotorShieldCompiler
@@ -21,13 +19,18 @@ if __name__ == '__main__':
 
     # Set up functional minion
     Cam = StreamingAPP('Cam1', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
+    Cam2 = StreamingAPP('Cam2', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
+    Cam3 = StreamingAPP('Cam3', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
     OMS = StreamingAPP('OMS', OMSInterface, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, VID=VENDOR_ID, PID=PRODUCT_ID, mw_size=5)
-    # STIM = StreamingAPP('SERVO', PololuServoInterface, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM4', servo_dict={'yaw': (0, 2800, 7516), 'radius': (1, 2240, 10240)})
     STIM = StreamingAPP('SERVO', MotorShieldCompiler, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM16', motor_dict={'radius_servo': 1, 'flag_servo':2, 'azimuth_stepper': 1, 'light_pin':8})
 
 
     Cam.connect(SCAN)
     Cam.connect(GUI)
+    Cam2.connect(SCAN)
+    Cam2.connect(GUI)
+    Cam3.connect(SCAN)
+    Cam3.connect(GUI)
 
     OMS.connect(SCAN)
     OMS.connect(GUI)
@@ -44,6 +47,8 @@ if __name__ == '__main__':
     logger.run()
     GUI.run()
     SCAN.run()
-    Cam.run()
     OMS.run()
     STIM.run()
+    Cam.run()
+    Cam2.run()
+    Cam3.run()

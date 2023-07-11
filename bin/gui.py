@@ -10,6 +10,18 @@ import pandas as pd
 
 from bin.minion import BaseMinion, AbstractMinionMixin
 
+class CustomizableCloseEventWidget(qw.QWidget):
+
+    def set_close_event(self, func):
+        self.customCloseEvent = func
+
+    def closeEvent(self, event):
+        result = self.customCloseEvent(event)
+        if result:
+            event.accept()
+        else:
+            event.ignore()
+
 
 class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
     """

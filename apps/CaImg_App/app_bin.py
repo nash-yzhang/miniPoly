@@ -11,7 +11,7 @@ import PyQt5.QtCore as qc
 import pyqtgraph as pg
 
 from bin.compiler.graphics import QtCompiler
-from bin.gui import DataframeTable, DataframeModel
+from bin.gui import DataframeTable, DataframeModel, CustomizableCloseEventWidget
 from src.tisgrabber import tisgrabber as tis
 
 from bin.compiler.prototypes import StreamingCompiler
@@ -40,6 +40,12 @@ class MainGUI(QtCompiler):
 
         self._root_folder = None
         self._save_camera_list = []
+
+        self._debug_sweep_started = False
+        self._debug_sweep_btn = None
+        self._sweep_step = 15
+        self._sweep_timer = qc.QTimer()
+        self._sweep_timer.timeout.connect(self._exec_sweep)
 
         self.surveillance_state = surveillance_state
 
@@ -244,6 +250,17 @@ class MainGUI(QtCompiler):
         self._menubar = self.menuBar()
         self._menu_file = self._menubar.addMenu('File')
 
+        Exit = qw.QAction("Quit", self)
+        Exit.setShortcut("Ctrl+Q")
+        Exit.setStatusTip("Exit program")
+        Exit.triggered.connect(self.close)
+
+        self._menu_file.addAction(Exit)
+
+
+
+        self._menu_camera = self._menubar.addMenu('Camera')
+
         AddCamera = qw.QAction("Add Camera", self)
         AddCamera.setShortcut("Ctrl+O")
         AddCamera.setStatusTip("Add IC Camera")
@@ -254,14 +271,25 @@ class MainGUI(QtCompiler):
         Disconnect.setStatusTip("Remove IC Camera")
         Disconnect.triggered.connect(self.remove_camera)
 
-        Exit = qw.QAction("Quit", self)
-        Exit.setShortcut("Ctrl+Q")
-        Exit.setStatusTip("Exit program")
-        Exit.triggered.connect(self.close)
+        self._menu_camera.addAction(AddCamera)
+        self._menu_camera.addAction(Disconnect)
 
-        self._menu_file.addAction(AddCamera)
-        self._menu_file.addAction(Disconnect)
-        self._menu_file.addAction(Exit)
+
+
+        self._menu_servo = self._menubar.addMenu('Servo')
+
+        DebugServo = qw.QAction("Debug Servo", self)
+        DebugServo.setStatusTip("Debug Servo")
+        DebugServo.triggered.connect(self.debug_servo)
+
+        ServoConsole = qw.QAction("Servo Console", self)
+        ServoConsole.setShortcut("Ctrl+Shift+M")
+        ServoConsole.setStatusTip("Servo Console")
+        ServoConsole.triggered.connect(self.servo_console)
+
+        self._menu_servo.addAction(DebugServo)
+        self._menu_servo.addAction(ServoConsole)
+
 
     def add_camera(self):
 
@@ -431,6 +459,147 @@ class MainGUI(QtCompiler):
             cameraWidget.ui.menuBtn.show()
             cameraWidget.ui.histogram.show()
 
+    def debug_servo(self):
+        '''
+        Init gui with 4 text input and 2 buttons.
+        the 4 text input should be stacked vertically.
+        text input 1: "Mouse_servo_dist"; text input 2: "Extended_arm_length"
+        text input 3: "azimuth"; text input 4 "radius";
+        The 2 buttons should be at the bottom row of the gui.
+        Button 1 is "Go to" and button 2 is "Sweep";
+        '''
+
+        self.debug_servo_window = CustomizableCloseEventWidget()
+        self.debug_servo_window.setWindowTitle('Servo Debugger')
+        self.debug_servo_window.set_close_event(self._close_debug_servo)
+        self.debug_servo_window.resize(300, 200)
+        layout = qw.QVBoxLayout()
+
+        layout_mouse_servo_dist = qw.QHBoxLayout()
+        self.debug_servo_window.label_mouse_servo_dist = qw.QLabel('Mouse_servo_dist')
+        self.debug_servo_window.text_mouse_servo_dist = qw.QSpinBox()
+        self.debug_servo_window.text_mouse_servo_dist.setRange(0,300)
+        self.debug_servo_window.text_mouse_servo_dist.valueChanged.connect(lambda: self._update_debug_param('mouse_servo_dist'))
+        self.debug_servo_window.text_mouse_servo_dist.setValue(220)
+        layout_mouse_servo_dist.addWidget(self.debug_servo_window.label_mouse_servo_dist)
+        layout_mouse_servo_dist.addWidget(self.debug_servo_window.text_mouse_servo_dist)
+
+        layout_extended_arm_length = qw.QHBoxLayout()
+        self.debug_servo_window.label_extended_arm_length = qw.QLabel('extended_arm_length')
+        self.debug_servo_window.text_extended_arm_length = qw.QSpinBox()
+        self.debug_servo_window.text_extended_arm_length.setRange(80,150)
+        self.debug_servo_window.text_extended_arm_length.valueChanged.connect(lambda: self._update_debug_param('extended_arm_length'))
+        self.debug_servo_window.text_extended_arm_length.setValue(95)
+        layout_extended_arm_length.addWidget(self.debug_servo_window.label_extended_arm_length)
+        layout_extended_arm_length.addWidget(self.debug_servo_window.text_extended_arm_length)
+
+        layout_azimuth = qw.QHBoxLayout()
+        self.debug_servo_window.label_azimuth = qw.QLabel('azimuth')
+        self.debug_servo_window.text_azimuth = qw.QSpinBox()
+        self.debug_servo_window.text_azimuth.setRange(-1,180)
+        self.debug_servo_window.text_azimuth.valueChanged.connect(lambda: self._update_debug_param('target_azi'))
+        self.debug_servo_window.text_azimuth.setValue(-1)
+        layout_azimuth.addWidget(self.debug_servo_window.label_azimuth)
+        layout_azimuth.addWidget(self.debug_servo_window.text_azimuth)
+
+        layout_radius = qw.QHBoxLayout()
+        self.debug_servo_window.label_radius = qw.QLabel('radius')
+        self.debug_servo_window.text_radius = qw.QSpinBox()
+        self.debug_servo_window.text_radius.setRange(-1,50)
+        self.debug_servo_window.text_radius.valueChanged.connect(lambda: self._update_debug_param('target_r'))
+        self.debug_servo_window.text_radius.setValue(-1)
+        layout_radius.addWidget(self.debug_servo_window.label_radius)
+        layout_radius.addWidget(self.debug_servo_window.text_radius)
+
+        layout_actions = qw.QHBoxLayout()
+        self.debug_servo_window.button_reset = qw.QPushButton('reset')
+        self.debug_servo_window.button_reset.clicked.connect(self.debug_servo_reset)
+        self.debug_servo_window.button_SWEEP = qw.QPushButton('sweep')
+        self.debug_servo_window.button_SWEEP.clicked.connect(self.sweep_servo)
+        layout_actions.addWidget(self.debug_servo_window.button_SWEEP)
+        layout_actions.addWidget(self.debug_servo_window.button_reset)
+
+        layout.addLayout(layout_mouse_servo_dist)
+        layout.addLayout(layout_extended_arm_length)
+        layout.addLayout(layout_azimuth)
+        layout.addLayout(layout_radius)
+        layout.addLayout(layout_actions)
+
+        self.debug_servo_window.setLayout(layout)
+        self.debug_servo_window.show()
+
+    def debug_servo_reset(self):
+        self.debug_servo_window.text_azimuth.setValue(-1)
+        self.debug_servo_window.text_radius.setValue(-1)
+
+    def sweep_servo(self):
+        if self._debug_sweep_started:
+            self._debug_sweep_started = False
+            self.set_state_to(self._servo_minion[0], 'target_azi', -1)
+            self.set_state_to(self._servo_minion[0], 'target_r', -1)
+            self._sweep_timer.stop()
+            self.debug_servo_window.button_SWEEP.setText('Sweep')
+        else:
+            self._debug_sweep_started = True
+            self.set_state_to(self._servo_minion[0], 'mouse_servo_dist',
+                              float(self.debug_servo_window.text_mouse_servo_dist.text()))
+            self.set_state_to(self._servo_minion[0], 'extended_arm_length',
+                              float(self.debug_servo_window.text_extended_arm_length.text()))
+            self.set_state_to(self._servo_minion[0], 'target_azi', float(self.debug_servo_window.text_azimuth.value()))
+            self.set_state_to(self._servo_minion[0], 'target_r', float(self.debug_servo_window.text_radius.value()))
+            self._sweep_timer.start(500)
+            self.debug_servo_window.button_SWEEP.setText('Stop')
+
+    def _update_debug_param(self, param_name):
+        if param_name == 'mouse_servo_dist':
+            self.set_state_to(self._servo_minion[0], 'mouse_servo_dist',
+                              float(self.debug_servo_window.text_mouse_servo_dist.value()))
+        elif param_name == 'extended_arm_length':
+            self.set_state_to(self._servo_minion[0], 'extended_arm_length',
+                              float(self.debug_servo_window.text_extended_arm_length.value()))
+        elif param_name == "target_azi":
+            self.set_state_to(self._servo_minion[0], 'target_azi', float(self.debug_servo_window.text_azimuth.value()))
+        elif param_name == "target_r":
+            self.set_state_to(self._servo_minion[0], 'target_r', float(self.debug_servo_window.text_radius.value()))
+
+    def _exec_sweep(self):
+        tar_azi = self.debug_servo_window.text_azimuth.value() + self._sweep_step
+        if tar_azi > 180:
+            tar_azi = 180
+            self._sweep_step *= -1
+        elif tar_azi < 0:
+            tar_azi = 0
+            self._sweep_step *= -1
+        self.debug_servo_window.text_azimuth.setValue(tar_azi)
+        self.set_state_to(self._servo_minion[0], 'target_azi', tar_azi)
+        self.set_state_to(self._servo_minion[0], 'target_r', float(self.debug_servo_window.text_radius.value()))
+
+    def _close_debug_servo(self,event):
+        self.debug_servo_reset()
+        return True
+
+    def servo_console(self):
+        self._servo_console = qw.QWidget()
+        self._servo_console.setWindowTitle('Servo Console')
+        self._servo_console.setWindowModality(qc.Qt.ApplicationModal)
+        self._servo_console.setAttribute(qc.Qt.WA_DeleteOnClose)
+
+        layout = qw.QHBoxLayout()
+
+        self._servo_console.label_azi = qw.QLabel('Command: ')
+        self._servo_console.text_azi = qw.QLineEdit()
+        self._servo_console.text_azi.returnPressed.connect(self._send_serial_cmd)
+
+        layout.addWidget(self._servo_console.label_azi)
+        layout.addWidget(self._servo_console.text_azi)
+
+        self._servo_console.setLayout(layout)
+        self._servo_console.show()
+
+    def _send_serial_cmd(self):
+        self.set_state_to(self._servo_minion[0], 'serial_cmd', self._servo_console.text_azi.text())
+        self._servo_console.text_azi.setText('')
+
     def on_time(self, t):
         for camName, mi in self._connected_camera_minions.items():
             try:
@@ -503,10 +672,11 @@ class MainGUI(QtCompiler):
         # open file dialog for browsing data file (start from the current directory)
         file_name = qw.QFileDialog.getOpenFileName(self, 'Open file', os.getcwd(), "Excel table (*.xlsx *.xls)",
                                                    options=qw.QFileDialog.DontUseNativeDialog)
-        self.tables[name].setModel(DataframeModel(data=pd.read_excel(file_name[0])))
-        self.set_state('protocolFn', '')
-        time.sleep(0.5)
-        self.set_state('protocolFn', file_name[0])
+        if file_name[0] != '':
+            self.tables[name].setModel(DataframeModel(data=pd.read_excel(file_name[0])))
+            self.set_state('protocolFn', '')
+            time.sleep(0.5)
+            self.set_state('protocolFn', file_name[0])
 
     def switch_timer(self):
         if self._timer_started:

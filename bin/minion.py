@@ -125,8 +125,8 @@ class BaseMinion:
     def log(self, *args):
         if self.logger is not None:
             self.logger.log(*args)
-        else:
-            warnings.warn("[{}]-[Warning] Logger unattached".format(self.name))
+        # else:
+        #     warnings.warn("[{}]-[Warning] Logger unattached".format(self.name))
 
     def debug(self, msg):
         self.log(logging.DEBUG, msg)

@@ -1,5 +1,6 @@
 import json
 import traceback
+from time import sleep
 import warnings
 from multiprocessing import shared_memory, Lock
 
@@ -366,9 +367,12 @@ class SharedNdarray:
         self._shared_memory.close()
 
     def terminate(self):
-        # self._shared_memory.close()
-        self._shared_memory.unlink()
-        if self.is_alive():
+        timeout = 0
+        while self.is_alive() and timeout < 10:
+            self._shared_memory.close()
+            self._shared_memory.unlink()
+            sleep(0.1)
+        if timeout == 10 and self.is_alive():
             warnings.warn(f"An unknown error occurred that caused the SharedBuffer {self.name} cannot be destroyed.")
 
     def is_alive(self):
