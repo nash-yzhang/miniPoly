@@ -55,8 +55,10 @@ void executeStepperCommand(String commandString) {
   if (motorIdx == '1'){
     if (command == 'f') {
     stepper1->step(steps, FORWARD, DOUBLE); // Rotate motor forward by the specified number of steps
+      Serial.println('Stepping forward');
     } else if (command == 'b') {
       stepper1->step(steps, BACKWARD, DOUBLE); // Rotate motor backward by the specified number of steps
+      Serial.println('Stepping backward');
     }
   }
 }

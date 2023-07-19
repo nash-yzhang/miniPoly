@@ -21,6 +21,7 @@ if __name__ == '__main__':
     Cam = StreamingAPP('Cam1', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
     Cam2 = StreamingAPP('Cam2', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
     Cam3 = StreamingAPP('Cam3', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
+    Cam4 = StreamingAPP('Cam4', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
     OMS = StreamingAPP('OMS', OMSInterface, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, VID=VENDOR_ID, PID=PRODUCT_ID, mw_size=5)
     STIM = StreamingAPP('SERVO', MotorShieldCompiler, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM16', motor_dict={'radius_servo': 1, 'flag_servo':2, 'azimuth_stepper': 1, 'light_pin':8})
 
@@ -31,6 +32,8 @@ if __name__ == '__main__':
     Cam2.connect(GUI)
     Cam3.connect(SCAN)
     Cam3.connect(GUI)
+    Cam4.connect(SCAN)
+    Cam4.connect(GUI)
 
     OMS.connect(SCAN)
     OMS.connect(GUI)
@@ -41,6 +44,9 @@ if __name__ == '__main__':
     GUI.attach_logger(logger)
     SCAN.attach_logger(logger)
     Cam.attach_logger(logger)
+    Cam2.attach_logger(logger)
+    Cam3.attach_logger(logger)
+    Cam4.attach_logger(logger)
     OMS.attach_logger(logger)
     STIM.attach_logger(logger)
 
@@ -52,3 +58,4 @@ if __name__ == '__main__':
     Cam.run()
     Cam2.run()
     Cam3.run()
+    Cam4.run()

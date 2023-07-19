@@ -25,7 +25,8 @@ void setup(){
   cur_val = analogRead(A0);
   prev_val = cur_val;
   prev_grad = -1;
-  digitalWrite(13,0);
+  pinMode(13,OUTPUT);
+  digitalWrite(13,LOW);
   Serial.begin(115200);
 }
 
