@@ -1,5 +1,5 @@
 import os
-
+import getpass
 import numpy as np
 import pandas as pd
 
@@ -8,15 +8,15 @@ import traceback
 
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
+import paramiko
 import pyqtgraph as pg
 
 from bin.compiler.graphics import QtCompiler
 from bin.gui import DataframeTable, DataframeModel, CustomizableCloseEventWidget
 from src.tisgrabber import tisgrabber as tis
 
-from bin.compiler.prototypes import StreamingCompiler
+from bin.compiler.prototypes import StreamingCompiler, AbstractCompiler
 from serial import Serial
-
 
 
 class MainGUI(QtCompiler):
@@ -257,8 +257,6 @@ class MainGUI(QtCompiler):
 
         self._menu_file.addAction(Exit)
 
-
-
         self._menu_camera = self._menubar.addMenu('Camera')
 
         AddCamera = qw.QAction("Add Camera", self)
@@ -274,8 +272,6 @@ class MainGUI(QtCompiler):
         self._menu_camera.addAction(AddCamera)
         self._menu_camera.addAction(Disconnect)
 
-
-
         self._menu_servo = self._menubar.addMenu('Servo')
 
         DebugServo = qw.QAction("Debug Servo", self)
@@ -289,7 +285,6 @@ class MainGUI(QtCompiler):
 
         self._menu_servo.addAction(DebugServo)
         self._menu_servo.addAction(ServoConsole)
-
 
     def add_camera(self):
 
@@ -478,8 +473,9 @@ class MainGUI(QtCompiler):
         layout_mouse_servo_dist = qw.QHBoxLayout()
         self.debug_servo_window.label_mouse_servo_dist = qw.QLabel('Mouse_servo_dist')
         self.debug_servo_window.text_mouse_servo_dist = qw.QSpinBox()
-        self.debug_servo_window.text_mouse_servo_dist.setRange(0,300)
-        self.debug_servo_window.text_mouse_servo_dist.valueChanged.connect(lambda: self._update_debug_param('mouse_servo_dist'))
+        self.debug_servo_window.text_mouse_servo_dist.setRange(0, 300)
+        self.debug_servo_window.text_mouse_servo_dist.valueChanged.connect(
+            lambda: self._update_debug_param('mouse_servo_dist'))
         self.debug_servo_window.text_mouse_servo_dist.setValue(220)
         layout_mouse_servo_dist.addWidget(self.debug_servo_window.label_mouse_servo_dist)
         layout_mouse_servo_dist.addWidget(self.debug_servo_window.text_mouse_servo_dist)
@@ -487,8 +483,9 @@ class MainGUI(QtCompiler):
         layout_extended_arm_length = qw.QHBoxLayout()
         self.debug_servo_window.label_extended_arm_length = qw.QLabel('extended_arm_length')
         self.debug_servo_window.text_extended_arm_length = qw.QSpinBox()
-        self.debug_servo_window.text_extended_arm_length.setRange(80,150)
-        self.debug_servo_window.text_extended_arm_length.valueChanged.connect(lambda: self._update_debug_param('extended_arm_length'))
+        self.debug_servo_window.text_extended_arm_length.setRange(80, 150)
+        self.debug_servo_window.text_extended_arm_length.valueChanged.connect(
+            lambda: self._update_debug_param('extended_arm_length'))
         self.debug_servo_window.text_extended_arm_length.setValue(95)
         layout_extended_arm_length.addWidget(self.debug_servo_window.label_extended_arm_length)
         layout_extended_arm_length.addWidget(self.debug_servo_window.text_extended_arm_length)
@@ -496,7 +493,7 @@ class MainGUI(QtCompiler):
         layout_azimuth = qw.QHBoxLayout()
         self.debug_servo_window.label_azimuth = qw.QLabel('azimuth')
         self.debug_servo_window.text_azimuth = qw.QSpinBox()
-        self.debug_servo_window.text_azimuth.setRange(-1,180)
+        self.debug_servo_window.text_azimuth.setRange(-1, 180)
         self.debug_servo_window.text_azimuth.valueChanged.connect(lambda: self._update_debug_param('target_azi'))
         self.debug_servo_window.text_azimuth.setValue(-1)
         layout_azimuth.addWidget(self.debug_servo_window.label_azimuth)
@@ -505,7 +502,7 @@ class MainGUI(QtCompiler):
         layout_radius = qw.QHBoxLayout()
         self.debug_servo_window.label_radius = qw.QLabel('radius')
         self.debug_servo_window.text_radius = qw.QSpinBox()
-        self.debug_servo_window.text_radius.setRange(-1,50)
+        self.debug_servo_window.text_radius.setRange(-1, 50)
         self.debug_servo_window.text_radius.valueChanged.connect(lambda: self._update_debug_param('target_r'))
         self.debug_servo_window.text_radius.setValue(-1)
         layout_radius.addWidget(self.debug_servo_window.label_radius)
@@ -574,7 +571,7 @@ class MainGUI(QtCompiler):
         self.set_state_to(self._servo_minion[0], 'target_azi', tar_azi)
         self.set_state_to(self._servo_minion[0], 'target_r', float(self.debug_servo_window.text_radius.value()))
 
-    def _close_debug_servo(self,event):
+    def _close_debug_servo(self, event):
         self.debug_servo_reset()
         return True
 
@@ -732,14 +729,14 @@ class ScanListener(StreamingCompiler):
         self._serial_buffer = b''
 
         self.create_state('timestamp', 0)
-        self.create_streaming_state('timestamp', 0)  # local copy of the shared state to reduce the time in accessing the shared buffer
+        self.create_streaming_state('timestamp',
+                                    0)  # local copy of the shared state to reduce the time in accessing the shared buffer
         self.create_streaming_state('ca_frame_num', 0, shared=True, use_buffer=False)
-
 
     def on_time(self, t):
         t = time.perf_counter_ns()
         # read the last complete line started with "---" and ended with "+++" from serial port
-        getData = self._serial_buffer+self._port.read(self._port.inWaiting())
+        getData = self._serial_buffer + self._port.read(self._port.inWaiting())
         data = b''
         if b'\n' in getData:
             data = getData.split(b'\n')
@@ -786,6 +783,39 @@ class ScanListener(StreamingCompiler):
     def on_close(self):
         super().on_close()
 
+
+class DataWrapper(AbstractCompiler):
+
+    def __init__(self, *args, master_minion=None, remote_IP_address=None, netdrive_dir="\\\\nas3\\datastore_bonhoeffer_group$", **kwargs):
+        super(DataWrapper, self).__init__(*args, **kwargs)
+
+        assert master_minion is not None, "master_minion must be specified"
+        assert remote_IP_address is not None, "remote_IP_address must be specified"
+
+        usr = getpass.getuser()
+        pwd = getpass.getpass()
+        self._ssh = paramiko.SSHClient()
+        self._remote_PC = self._ssh.connect(remote_IP_address, username=usr, password=pwd)
+        self._ssh.exec_command(f'net use \"{netdrive_dir}\"')
+
+    def parse_msg(self, msg_type, msg):
+        if msg_type == 'data':
+            local_data_dir = msg[0]
+            remote_data_dir = msg[1]
+            remote_session_num = msg[2]
+            netdrive_dir = msg[3]
+            self._dump_data_to_netdrive(local_data_dir, remote_data_dir, remote_session_num, netdrive_dir)
+            self.info(f"Data saved to {netdrive_dir}")
+
+    def _dump_data_to_netdrive(self, local_data_dir, remote_data_dir, remote_session_num, netdrive_dir):
+        netdrive_session_dir = self._wrap_local_data(local_data_dir)
+        remote_file_list = self._get_remote_file_list(remote_data_dir, remote_session_num)
+        self._ssh.exec_command(f'XCOPY \"{local_data_dir}\" \"{netdrive_session_dir}\" /E /I')
+        for f in remote_file_list:
+            self._ssh.exec_command(f'COPY \"{f}\" \"{netdrive_session_dir}\"')
+
+    def _wrap_local_data(self, local_data_dir):
+        pass
 
 
 # class DataIOApp(AbstractAPP):
@@ -860,4 +890,3 @@ class ScanListener(StreamingCompiler):
 #         self.info("Pololu compiler initialized.")
 #
 #
-
