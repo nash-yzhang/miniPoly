@@ -1,5 +1,7 @@
 import os
 import getpass
+import shutil
+
 import numpy as np
 import pandas as pd
 
@@ -61,6 +63,8 @@ class MainGUI(QtCompiler):
         self._time_arr = np.zeros(2000, dtype=np.float64)
         self._update_surveillance_state_list()
 
+        self._sessionNum = 0
+
         # Create stimulus related states
         self.create_state('runSignal', False, use_buffer=True)
         self.create_state('protocolFn', '', use_buffer=False)
@@ -107,10 +111,14 @@ class MainGUI(QtCompiler):
         self.layout_SaveConfig.addWidget(self._root_folder_browse_btn)
 
         self.layout_SaveTrigger = qw.QHBoxLayout()
+        self._sessionNum_textbox = qw.QLineEdit()
+        self._sessionNum_textbox.textChanged.connect(self._update_session_num)
         self._filename_textbox = qw.QLineEdit()
         self._filename_textbox.setReadOnly(True)
         self._save_btn = qw.QPushButton('Start Recording')
         self._save_btn.clicked.connect(self._save_video)
+        self.layout_SaveTrigger.addWidget(qw.QLabel('Session Num:'))
+        self.layout_SaveTrigger.addWidget(self._sessionNum_textbox)
         self.layout_SaveTrigger.addWidget(qw.QLabel('Filename:'))
         self.layout_SaveTrigger.addWidget(self._filename_textbox)
         self.layout_SaveTrigger.addWidget(self._save_btn)
@@ -159,13 +167,13 @@ class MainGUI(QtCompiler):
                                                                    pen=pg.mkPen(np.random.randint(0, 255, 3), width=2))
         self.label_ca_frame = qw.QLabel('Frame: NaN [0]')
         self.label_timestamp = qw.QLabel('Arduino Time: NaN')
-        self.btn_freeze_frame = qw.QPushButton('Freeze Frame!')
-        self.btn_freeze_frame.setStyleSheet("background-color: light gray")
-        self.btn_freeze_frame.clicked.connect(self._freeze_frame)
+        # self.btn_freeze_frame = qw.QPushButton('Freeze Frame!')
+        # self.btn_freeze_frame.setStyleSheet("background-color: light gray")
+        # self.btn_freeze_frame.clicked.connect(self._freeze_frame)
         self.layout_state_monitor_controller = qw.QHBoxLayout()
         self.layout_state_monitor_controller.addWidget(self.label_ca_frame, 1)
         self.layout_state_monitor_controller.addWidget(self.label_timestamp, 1)
-        self.layout_state_monitor_controller.addWidget(self.btn_freeze_frame, 1)
+        # self.layout_state_monitor_controller.addWidget(self.btn_freeze_frame, 1)
         self.layout_state_monitor.addLayout(self.layout_state_monitor_controller, 1)
 
         top_hori_splitter = qw.QSplitter()
@@ -201,15 +209,17 @@ class MainGUI(QtCompiler):
         self.main_widget.setLayout(self.layout_main)
         self.setCentralWidget(self.main_widget)
 
-    def _freeze_frame(self):
-        if self.btn_freeze_frame.text() == 'Freeze Frame!':
-            self.btn_freeze_frame.setStyleSheet('background-color: #dcf3ff')
-            self.btn_freeze_frame.setText('Unfreeze Frame!')
-            # self.set_state_to('SCAN', 'freeze', 1)
-        else:
-            self.btn_freeze_frame.setStyleSheet('background-color: light gray')
-            self.btn_freeze_frame.setText('Freeze')
-            # self.set_state_to('SCAN', 'freeze', 0)
+    def _update_session_num(self):
+        self._sessionNum = self._sessionNum_textbox.text()
+    # def _freeze_frame(self):
+    #     if self.btn_freeze_frame.text() == 'Freeze Frame!':
+    #         self.btn_freeze_frame.setStyleSheet('background-color: #dcf3ff')
+    #         self.btn_freeze_frame.setText('Unfreeze Frame!')
+    #         # self.set_state_to('SCAN', 'freeze', 1)
+    #     else:
+    #         self.btn_freeze_frame.setStyleSheet('background-color: light gray')
+    #         self.btn_freeze_frame.setText('Freeze')
+    #         # self.set_state_to('SCAN', 'freeze', 0)
 
     def _browse_root_folder(self):
         self._root_folder = str(qw.QFileDialog.getExistingDirectory(self, 'Open Folder', '.',
@@ -243,6 +253,7 @@ class MainGUI(QtCompiler):
             # for cam in self._save_camera_list:
             #     mi_name = self._connected_camera_minions[cam]
             self.set_state('StreamToDisk', False)
+            self.send(self._wrapper_minion, 'data', (self._save_dir, self._sessionNum))
             # for servoM in self._servo_minion:
             #     self.set_state_to(servoM, 'StreamToDisk', False)
 
@@ -786,7 +797,7 @@ class ScanListener(StreamingCompiler):
 
 class DataWrapper(AbstractCompiler):
 
-    def __init__(self, *args, master_minion=None, remote_IP_address=None, netdrive_dir="\\\\nas3\\datastore_bonhoeffer_group$", **kwargs):
+    def __init__(self, *args, master_minion=None, remote_IP_address=None, remote_dir=None, netdrive_dir="\\\\nas3\\datastore_bonhoeffer_group$", **kwargs):
         super(DataWrapper, self).__init__(*args, **kwargs)
 
         assert master_minion is not None, "master_minion must be specified"
@@ -794,29 +805,82 @@ class DataWrapper(AbstractCompiler):
 
         usr = getpass.getuser()
         pwd = getpass.getpass()
+        self._master_minion = master_minion
         self._ssh = paramiko.SSHClient()
         self._remote_PC = self._ssh.connect(remote_IP_address, username=usr, password=pwd)
-        self._ssh.exec_command(f'net use \"{netdrive_dir}\"')
+        self._remote_dir = remote_dir
+        netdrive_root = netdrive_dir.split('$')[0]+'$'
+        self._netdrive_dir = netdrive_dir
+        self._ssh.exec_command(f'net use \"{netdrive_root}\"')
+
+    def on_time(self, t):
+        self.get(self._master_minion)
+        time.sleep(0.1)
+
 
     def parse_msg(self, msg_type, msg):
         if msg_type == 'data':
             local_data_dir = msg[0]
-            remote_data_dir = msg[1]
             remote_session_num = msg[2]
-            netdrive_dir = msg[3]
-            self._dump_data_to_netdrive(local_data_dir, remote_data_dir, remote_session_num, netdrive_dir)
-            self.info(f"Data saved to {netdrive_dir}")
+            err_code = self._dump_data_to_netdrive(local_data_dir, remote_session_num)
+            if err_code == 0:
+                self.info(f"Data saved to {self._netdrive_dir}")
+            else:
+                self.error(f"Data save failed")
+        else:
+            self.error(f"Unknown msg_type: {msg_type}")
 
-    def _dump_data_to_netdrive(self, local_data_dir, remote_data_dir, remote_session_num, netdrive_dir):
-        netdrive_session_dir = self._wrap_local_data(local_data_dir)
-        remote_file_list = self._get_remote_file_list(remote_data_dir, remote_session_num)
-        self._ssh.exec_command(f'XCOPY \"{local_data_dir}\" \"{netdrive_session_dir}\" /E /I')
-        for f in remote_file_list:
-            self._ssh.exec_command(f'COPY \"{f}\" \"{netdrive_session_dir}\"')
+    def _dump_data_to_netdrive(self, local_data_dir, remote_session_num):
+        netdrive_session_dir, err_code = self._dump_local_data(local_data_dir, self._netdrive_dir)
+        if err_code == 0:
+            remote_file_list,err_code = self._get_remote_file_list(self._remote_dir, remote_session_num)
+        if err_code == 0:
+            self._ssh.exec_command(f'XCOPY \"{local_data_dir}\" \"{netdrive_session_dir}\" /E /I')
+            for f in remote_file_list:
+                self._ssh.exec_command(f'COPY \"{self._remote_dir}\\{f}\" \"{netdrive_session_dir}\"')
+        return err_code
 
-    def _wrap_local_data(self, local_data_dir):
-        pass
+    def _dump_local_data(self, local_data_dir, netdrive_dir):
+        err_code = 1 if not os.path.isdir(local_data_dir) else 0
+        if err_code == 0:
+            err_code = 1 if not os.path.isdir(netdrive_dir) else 0
+        if err_code == 0:
+            err_code = self._wrap_local_data(local_data_dir)
+        if err_code == 0:
+            shutil.copytree(local_data_dir,
+                            os.path.join(netdrive_dir,
+                                         os.path.basename(local_data_dir)))
+        return err_code
 
+    def _wrap_local_data(self, fdir):
+        stem_csv_fn_pattern = '_SCAN.csv'
+        csv_file_list = [i for i in os.listdir(fdir) if i.endswith('.csv')]
+        stem_csv_fn = [i for i in csv_file_list if i.endswith(stem_csv_fn_pattern)]
+        if len(stem_csv_fn) != 1:
+            self.error('Error in wrapping local csv file: multiple SCAN.csv files found')
+            return -1
+        else:
+            stem_csv_fn = stem_csv_fn[0]
+            csv_file_list.remove(stem_csv_fn)
+
+        stem_csv = pd.read_csv(fdir + '/' + stem_csv_fn, index_col='Time')
+        csv_files = [pd.read_csv(fdir + '/' + i, index_col='Time') for i in csv_file_list]
+        merged = stem_csv.join(csv_files[0]).fillna(method='ffill')
+        for i in range(1, len(csv_files)):
+            merged = merged.join(csv_files[i]).fillna(method='ffill')
+        merged = merged.drop(columns='SCAN_timestamp', axis=1)
+        merged = merged.drop_duplicates()
+        merged.to_csv(fdir + '/' + stem_csv_fn[:-len(stem_csv_fn_pattern)] + '_UNIFIED.csv')
+        return 0
+
+    def _get_remote_file_list(self, remote_data_dir, remote_session_num):
+        sftp = self._ssh.open_sftp()
+        flist = [i for i in sftp.listdir(remote_data_dir) if f'exp{remote_session_num}_ch' in i]
+        if len(flist) < 0:
+            self.error('Error in getting remote file list: no file found')
+            return flist, -1
+        else:
+            return flist, 0
 
 # class DataIOApp(AbstractAPP):
 #     def __init__(self, *args, timer_minion=None, state_dict={}, buffer_dict={}, buffer_saving_opt={}, trigger=None, **kwargs):
