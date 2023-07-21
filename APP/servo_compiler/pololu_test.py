@@ -1,6 +1,6 @@
 from miniPoly.compiler.serial_devices import PololuServoInterface, SerialCommandCompiler
 from miniPoly.prototype.Logging import LoggerMinion
-from apps.servo_compiler.app_bin import ServoCompilerGUI
+from APP.servo_compiler.app_bin import ServoCompilerGUI
 
 if __name__ == '__main__':
     GUI = ServoCompilerGUI('GUI', refresh_interval=1)

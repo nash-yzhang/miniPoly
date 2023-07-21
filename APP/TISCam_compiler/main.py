@@ -1,4 +1,4 @@
-from apps.CaImg_App.app_bin import *
+from APP.CaImg_App.app_bin import *
 from miniPoly.prototype.cameras import TisCamApp
 from miniPoly.prototype.Logging import LoggerMinion
 

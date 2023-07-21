@@ -1,4 +1,4 @@
-from apps.IOS_Servo_App.app_bin_PCO import *
+from APP.IOS_Servo_App.app_bin_PCO import *
 from miniPoly.prototype.prototypes import AbstractAPP
 from miniPoly.prototype.Logging import LoggerMinion
 from miniPoly.prototype.GUI import AbstractGUIAPP

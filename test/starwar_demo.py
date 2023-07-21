@@ -237,7 +237,7 @@ class CanvasModule(AbstractGLAPP):
 
     def initialize(self):
         super().initialize()
-        self._win = GraphicProtocolCompiler(self,app=self._app,VS='../apps/protocol_compiler/test.VS',FS='../apps/protocol_compiler/test.FS',refresh_interval=5)
+        self._win = GraphicProtocolCompiler(self,app=self._app,VS='../APP/protocol_compiler/test.VS',FS='../APP/protocol_compiler/test.FS',refresh_interval=5)
         self.info('Starting display window')
         self._win.initialize()
         self._win.show()

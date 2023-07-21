@@ -150,7 +150,7 @@ class ProtocolCommander(qw.QMainWindow):
 
     # def loadfile(self):
     #     datafile = qw.QFileDialog.getOpenFileName(self, 'Open File',
-    #                                               'D:\\Yue Zhang\\OneDrive\\Bonhoeffer Lab\\PycharmProjects\\miniPoly\\apps\\protocol_compiler',
+    #                                               'D:\\Yue Zhang\\OneDrive\\Bonhoeffer Lab\\PycharmProjects\\miniPoly\\APP\\protocol_compiler',
     #                                               "Data file (*.xls *.xlsx *.h5)", "",
     #                                               qw.QFileDialog.DontUseNativeDialog)
     #     if datafile[0]:
