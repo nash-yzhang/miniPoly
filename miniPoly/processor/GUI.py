@@ -3,7 +3,7 @@ import sys
 from PyQt5 import QtWidgets as qw
 from qt_material import apply_stylesheet
 
-from miniPoly.process.minion import TimerMinion
+from miniPoly.core.minion import TimerMinion
 
 
 class AbstractGUIAPP(TimerMinion):

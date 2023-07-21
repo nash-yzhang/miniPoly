@@ -10,7 +10,7 @@ from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 from typing import Callable
 
-from miniPoly.process.buffer import *
+from miniPoly.core.buffer import *
 
 DEFAULT_LOGGING_CONFIG = {
     'version': 1,
@@ -44,7 +44,7 @@ class BaseMinion:
     def innerLoop(hook: 'BaseMinion'):
         '''
         A dirty way to put BaseMinion as a listener when suspended
-        :param hook: Insert self as a hook for using self logger, main process and shutdown method
+        :param hook: Insert self as a hook for using self logger, main core and shutdown method
         '''
         hook._pid = os.getpid()
         hook.prepare_shared_buffer()
@@ -302,7 +302,7 @@ class BaseMinion:
         :param minion_name: str, minion's name
         :param state_name: str, shared dictionary key
         :return:
-            obj: None if any error occurs in the process
+            obj: None if any error occurs in the core
         """
         state_val = None
         if minion_name == self.name:
@@ -650,7 +650,7 @@ class BaseMinion:
 
 class MinionLogHandler:
     """
-    A simple handler for logging events. It runs in the listener process and
+    A simple handler for logging events. It runs in the listener core and
     dispatches events to loggers based on the name in the received record,
     which then get dispatched, by the logging system, to the handlers
     configured for those loggers.
@@ -815,7 +815,7 @@ class TimerMinion(BaseMinion):
 
 class AbstractMinionMixin:
     '''
-    This class should serve as an compiler between Qt window and minion process handler,
+    This class should serve as an compiler between Qt window and minion core handler,
     All interaction rules between the two components should be defined here
     '''
     _processHandler: BaseMinion

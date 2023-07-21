@@ -4,7 +4,7 @@ import sys
 
 from vispy import gloo, app
 
-from miniPoly.process.minion import AbstractMinionMixin
+from miniPoly.core.minion import AbstractMinionMixin
 
 _default_plane_VS = """
     #version 130

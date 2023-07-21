@@ -2,7 +2,7 @@ import logging
 from logging.handlers import QueueListener
 from multiprocessing import Queue
 
-from miniPoly.process.minion import BaseMinion, MinionLogHandler, LOG_LVL_LOOKUP_TABLE
+from miniPoly.core.minion import BaseMinion, MinionLogHandler, LOG_LVL_LOOKUP_TABLE
 
 
 class LoggerMinion(BaseMinion, QueueListener):
@@ -71,7 +71,7 @@ class LoggerMinion(BaseMinion, QueueListener):
 
         logging.config.dictConfig(logger_config)
         self.logger = None
-        # Start logger after run() as logger object won't pass the pickling process and will be switched off
+        # Start logger after run() as logger object won't pass the pickling core and will be switched off
         self.queue = Queue()
         self.handlers = [MinionLogHandler()]
         self.respect_handler_level = False
@@ -118,7 +118,7 @@ class LoggerMinion(BaseMinion, QueueListener):
             self.hasConfig = True
 
         if self.logger is None:
-            # self.logger starts only after the process has started
+            # self.logger starts only after the core has started
             self.logger = logging.getLogger(self.name)
             self.logger.setLevel(logging.INFO)
             self.info('----------------- START LOGGING -----------------')

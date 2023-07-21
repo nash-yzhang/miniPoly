@@ -1,6 +1,6 @@
 import vispy
 
-from miniPoly.process.minion import TimerMinion
+from miniPoly.core.minion import TimerMinion
 
 
 class AbstractGLAPP(TimerMinion):

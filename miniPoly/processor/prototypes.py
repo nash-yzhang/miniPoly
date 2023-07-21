@@ -1,4 +1,4 @@
-from miniPoly.process.minion import TimerMinion
+from miniPoly.core.minion import TimerMinion
 
 
 # from miniPoly.gui import BaseGUI

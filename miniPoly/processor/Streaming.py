@@ -1,4 +1,4 @@
-from miniPoly.prototype.prototypes import AbstractAPP
+from miniPoly.processor.prototypes import AbstractAPP
 
 
 class StreamingAPP(AbstractAPP):

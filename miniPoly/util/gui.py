@@ -7,7 +7,7 @@ from importlib import util
 
 import pandas as pd
 
-from miniPoly.process.minion import BaseMinion, AbstractMinionMixin
+from miniPoly.core.minion import BaseMinion, AbstractMinionMixin
 
 class CustomizableCloseEventWidget(qw.QWidget):
 
@@ -24,7 +24,7 @@ class CustomizableCloseEventWidget(qw.QWidget):
 
 class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
     """
-    Base class serving as an compiler between "minion" process handler and Qt GUI
+    Base class serving as an compiler between "minion" core handler and Qt GUI
     """
 
     def __init__(self, processHandler: BaseMinion = None, windowSize=(400, 400), rendererPath=None):
@@ -65,11 +65,11 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
         self._menu_file.addAction(Exit)
         restartDisplay = qw.QAction("Restart Display", self)
         restartDisplay.setShortcut("Ctrl+Shift+R")
-        restartDisplay.setStatusTip("Restart display process")
+        restartDisplay.setStatusTip("Restart display core")
         restartDisplay.triggered.connect(self.restartDisplay)
         haltDisplay = qw.QAction("Suspend Display", self)
         haltDisplay.setShortcut("Ctrl+Shift+H")
-        haltDisplay.setStatusTip("Suspend display process")
+        haltDisplay.setStatusTip("Suspend display core")
         haltDisplay.triggered.connect(self.suspendDisplay)
         self._menu_display.addAction(restartDisplay)
         self._menu_display.addAction(haltDisplay)
@@ -134,7 +134,7 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
                         self.customWidget = self.imported.Widget(self)
                         self.boxlayout.addWidget(self.customWidget)
                 else:
-                    self._processHandler.log("Display process undefined")
+                    self._processHandler.log("Display core undefined")
         except Exception:
             self._processHandler.error(traceback.format_exc())
 
@@ -165,7 +165,7 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
             while self._processHandler.get_state_from(self._displayProcName, 'status') == 0:
                 self._processHandler.set_state_to(self._displayProcName, 'status', 1)
             self.reload()
-            self._processHandler.info("Restarted [{}] process".format(self._displayProcName))
+            self._processHandler.info("Restarted [{}] core".format(self._displayProcName))
         else:
             self._processHandler.error(f'Unknown Error. Please retry to restart.')
 
@@ -173,10 +173,10 @@ class BaseGUI(qw.QMainWindow, AbstractMinionMixin):
         try:
             while self._processHandler.get_state_from(self._displayProcName, 'status') > 0:
                 self._processHandler.set_state_to(self._displayProcName, 'status', 0)
-            self._processHandler.info("Suspended [{}] process".format(self._displayProcName))
+            self._processHandler.info("Suspended [{}] core".format(self._displayProcName))
             return 0
         except:
-            self._processHandler.error(f'Failed to suspend [{self._displayProcName}] process')
+            self._processHandler.error(f'Failed to suspend [{self._displayProcName}] core')
             return -1
 
     def shutdown(self):
