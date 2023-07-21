@@ -1,5 +1,5 @@
 from apps.CaImg_App.app_bin import *
-from bin.app.prototypes import AbstractGUIAPP, StreamingAPP, LoggerMinion
+from bin.app.prototypes import AbstractGUIAPP, AbstractAPP, StreamingAPP, LoggerMinion
 from bin.compiler import TISCameraCompiler, OMSInterface, MotorShieldCompiler
 
 VENDOR_ID = 0X046D
@@ -18,12 +18,31 @@ if __name__ == '__main__':
 
 
     # Set up functional minion
-    Cam = StreamingAPP('Cam1', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
-    Cam2 = StreamingAPP('Cam2', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
-    Cam3 = StreamingAPP('Cam3', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
-    Cam4 = StreamingAPP('Cam4', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI', save_option='movie', refresh_interval=10)
-    OMS = StreamingAPP('OMS', OMSInterface, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, VID=VENDOR_ID, PID=PRODUCT_ID, mw_size=5)
-    STIM = StreamingAPP('SERVO', MotorShieldCompiler, timer_minion='SCAN', trigger_minion='GUI', refresh_interval=1, port_name='COM16', motor_dict={'radius_servo': 1, 'flag_servo':2, 'azimuth_stepper': 1, 'light_pin':8})
+    Cam = StreamingAPP('Cam1', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI',
+                       save_option='movie', refresh_interval=10)
+
+    Cam2 = StreamingAPP('Cam2', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI',
+                        save_option='movie', refresh_interval=10)
+
+    Cam3 = StreamingAPP('Cam3', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI',
+                        save_option='movie', refresh_interval=10)
+
+    Cam4 = StreamingAPP('Cam4', TISCameraCompiler, timer_minion='SCAN', trigger_minion='GUI',
+                        save_option='movie', refresh_interval=10)
+
+    OMS = StreamingAPP('OMS', OMSInterface, timer_minion='SCAN', trigger_minion='GUI',
+                       refresh_interval=1, VID=VENDOR_ID, PID=PRODUCT_ID, mw_size=5)
+
+    STIM = StreamingAPP('SERVO', MotorShieldCompiler, timer_minion='SCAN', trigger_minion='GUI',
+                        refresh_interval=1, port_name='COM16',
+                        motor_dict={'radius_servo': 1,
+                                    'flag_servo':2,
+                                    'azimuth_stepper': 1,
+                                    'light_pin':8})
+
+    DW = AbstractAPP('DATAWRAPPER', DataWrapper, trigger_minion='GUI',
+                      remote_IP_address="192.168.233.66", remote_dir='D:\\data\\',
+                      netdrive_dir="\\\\nas3\\datastore_bonhoeffer_group$\\Yue Zhang\\CaData\\")
 
 
     Cam.connect(SCAN)
@@ -41,7 +60,10 @@ if __name__ == '__main__':
     STIM.connect(SCAN)
     STIM.connect(GUI)
 
+    DW.connect(GUI)
+
     GUI.attach_logger(logger)
+    DW.attach_logger(logger)
     SCAN.attach_logger(logger)
     Cam.attach_logger(logger)
     Cam2.attach_logger(logger)
@@ -55,6 +77,7 @@ if __name__ == '__main__':
     SCAN.run()
     OMS.run()
     STIM.run()
+    DW.run()
     Cam.run()
     Cam2.run()
     Cam3.run()

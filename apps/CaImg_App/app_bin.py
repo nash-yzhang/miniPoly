@@ -21,11 +21,24 @@ from bin.compiler.prototypes import StreamingCompiler, AbstractCompiler
 from serial import Serial
 
 
+class DirSelectorLineEdit(qw.QLineEdit):
+    dbClicked = qc.pyqtSignal()
+
+    def __init__(self, placeHolderText=''):
+        super().__init__()
+        self.setPlaceholderText(placeHolderText)
+
+    def event(self, event):
+        if event.type() == qc.QEvent.Type.MouseButtonDblClick:
+            self.dbClicked.emit()
+        return super().event(event)
+
 class MainGUI(QtCompiler):
 
     def __init__(self, *args, surveillance_state={}, **kwargs):
         super(MainGUI, self).__init__(*args, **kwargs)
 
+        self._wrapper_minion = 'DATAWRAPPER'
         self._IO_minion = 'IO'
         self._scanlistener_minion = 'SCAN'
         self._linked_minion_names = self.get_linked_minion_names()
@@ -64,6 +77,8 @@ class MainGUI(QtCompiler):
         self._update_surveillance_state_list()
 
         self._sessionNum = 0
+        self._lastSessionNum = 0
+        self._animalID = ''
 
         # Create stimulus related states
         self.create_state('runSignal', False, use_buffer=True)
@@ -75,8 +90,36 @@ class MainGUI(QtCompiler):
         self.create_state('SaveName', '')
         self.create_state('StreamToDisk', False, use_buffer=True)
 
+
         self._init_main_window()
         self._init_menu()
+
+        self.remotePC_login()
+
+
+    def remotePC_login(self):
+        self._login_win = qw.QWidget()
+        login_layout = qw.QVBoxLayout()
+        user_textbox = qw.QLineEdit()
+        user_textbox.setPlaceholderText('Username')
+        pw_textbox = qw.QLineEdit()
+        pw_textbox.setPlaceholderText('Password')
+        pw_textbox.setEchoMode(qw.QLineEdit.Password)
+        login_btn = qw.QPushButton('send')
+        login_btn.setShortcut('Return')
+        login_btn.clicked.connect(self.send_login_message)
+        login_layout.addWidget(user_textbox)
+        login_layout.addWidget(pw_textbox)
+        login_layout.addWidget(login_btn)
+        self._login_win.setLayout(login_layout)
+        self._login_win.setWindowModality(qc.Qt.ApplicationModal)
+        self._login_win.show()
+
+    def send_login_message(self):
+        user = self._login_win.layout().itemAt(0).widget().text()
+        pw = self._login_win.layout().itemAt(1).widget().text()
+        self._login_win.close()
+        self.send(self._wrapper_minion, 'connect', (user, pw))
 
     def _update_surveillance_state_list(self):
         for k, v_list in self.surveillance_state.items():
@@ -102,25 +145,27 @@ class MainGUI(QtCompiler):
         self.layout_SavePanel = qw.QVBoxLayout()
 
         self.layout_SaveConfig = qw.QHBoxLayout()
-        self._root_folder_textbox = qw.QLineEdit()
-        self._root_folder_textbox.setReadOnly(True)
-        self._root_folder_browse_btn = qw.QPushButton('Browse')
-        self._root_folder_browse_btn.clicked.connect(self._browse_root_folder)
+        self._root_folder_textbox = DirSelectorLineEdit()
+        self._root_folder_textbox.dbClicked.connect(self._browse_root_folder)
+        self._root_folder_textbox.textChanged.connect(self._update_root_folder)
         self.layout_SaveConfig.addWidget(qw.QLabel('Save Folder:'))
+        self._filename_textbox = qw.QLineEdit()
+        self._filename_textbox.setReadOnly(True)
         self.layout_SaveConfig.addWidget(self._root_folder_textbox)
-        self.layout_SaveConfig.addWidget(self._root_folder_browse_btn)
+        self.layout_SaveConfig.addWidget(qw.QLabel('Filename:'))
+        self.layout_SaveConfig.addWidget(self._filename_textbox)
 
         self.layout_SaveTrigger = qw.QHBoxLayout()
         self._sessionNum_textbox = qw.QLineEdit()
         self._sessionNum_textbox.textChanged.connect(self._update_session_num)
-        self._filename_textbox = qw.QLineEdit()
-        self._filename_textbox.setReadOnly(True)
+        self._sessionNum_textbox.setPlaceholderText('Session Number')
+        self._animalID_textbox = qw.QLineEdit()
+        self._animalID_textbox.textChanged.connect(self._update_animal_num)
+        self._animalID_textbox.setPlaceholderText('Animal ID')
         self._save_btn = qw.QPushButton('Start Recording')
         self._save_btn.clicked.connect(self._save_video)
-        self.layout_SaveTrigger.addWidget(qw.QLabel('Session Num:'))
         self.layout_SaveTrigger.addWidget(self._sessionNum_textbox)
-        self.layout_SaveTrigger.addWidget(qw.QLabel('Filename:'))
-        self.layout_SaveTrigger.addWidget(self._filename_textbox)
+        self.layout_SaveTrigger.addWidget(self._animalID_textbox)
         self.layout_SaveTrigger.addWidget(self._save_btn)
 
         self.layout_SavePanel.addLayout(self.layout_SaveConfig)
@@ -196,30 +241,19 @@ class MainGUI(QtCompiler):
         main_vert_splitter.addWidget(top_hori_splitter)
         main_vert_splitter.addWidget(self.widget_state_monitor)
         self.layout_main.addWidget(main_vert_splitter)
-        # self.layout_main.addLayout(self.layout_CamView, 0, 0, 2, 3)
-        # self.layout_main.addLayout(self.layout_SavePanel, 0, 3, 1, 2)
-        # self.layout_main.addLayout(self.layout_state_monitor)
-
-        # self.layout_main.setColumnStretch(0, 3)
-        # self.layout_main.setColumnStretch(3, 2)
-        # self.layout_main.setRowStretch(1, 2)
-        # self.layout_main.setRowStretch(2, 1)
 
         self.main_widget = qw.QWidget()
         self.main_widget.setLayout(self.layout_main)
         self.setCentralWidget(self.main_widget)
 
+    def _update_animal_num(self):
+        self._animalID = self._animalID_textbox.text()
+
     def _update_session_num(self):
         self._sessionNum = self._sessionNum_textbox.text()
-    # def _freeze_frame(self):
-    #     if self.btn_freeze_frame.text() == 'Freeze Frame!':
-    #         self.btn_freeze_frame.setStyleSheet('background-color: #dcf3ff')
-    #         self.btn_freeze_frame.setText('Unfreeze Frame!')
-    #         # self.set_state_to('SCAN', 'freeze', 1)
-    #     else:
-    #         self.btn_freeze_frame.setStyleSheet('background-color: light gray')
-    #         self.btn_freeze_frame.setText('Freeze')
-    #         # self.set_state_to('SCAN', 'freeze', 0)
+
+    def _update_root_folder(self):
+        self._root_folder = self._root_folder_textbox.text()
 
     def _browse_root_folder(self):
         self._root_folder = str(qw.QFileDialog.getExistingDirectory(self, 'Open Folder', '.',
@@ -227,33 +261,55 @@ class MainGUI(QtCompiler):
         # For some reason the native dialog doesn't work
         self._root_folder_textbox.setText(self._root_folder)
 
+    def _start_recording_check(self):
+        err = 0
+        if self._animalID == '':
+            err = 1
+        if self._sessionNum <= self._lastSessionNum:
+            err += 2
+
+        return err
+
     def _save_video(self):
         if self._save_btn.text() == 'Start Recording':
-            self._save_btn.setText('Stop Recording')
-            self._save_btn.setStyleSheet('background-color: yellow')
-            self._save_filename = time.strftime('%Y%m%d_%H%M%S')
-            if self._root_folder is None:
-                self._root_folder = os.getcwd()
-            self._save_dir = self._root_folder + '/' + self._save_filename
-            os.mkdir(self._save_dir)
-            self._filename_textbox.setText(self._save_filename)
+            err_code = self._start_recording_check()
+            if err_code == 0:
+                self._save_btn.setText('Stop Recording')
+                self._save_btn.setStyleSheet('background-color: yellow')
+                self._save_filename = time.strftime('%Y%m%d_%H%M%S')
+                if self._root_folder is None:
+                    self._root_folder = os.getcwd()
+                self._save_dir = self._root_folder + '/' + self._save_filename
+                os.mkdir(self._save_dir)
+                self._filename_textbox.setText(self._save_filename)
 
-            self._save_camera_list = []
-            for k, v in self._videoStreams.items():
-                if v[-1].isChecked():
-                    self._save_camera_list.append(k)
+                self._save_camera_list = []
+                for k, v in self._videoStreams.items():
+                    if v[-1].isChecked():
+                        self._save_camera_list.append(k)
 
-            self.set_state('SaveDir', self._save_dir)
-            self.set_state('SaveName', self._save_filename)
-            self.set_state('StreamToDisk', True)
+                self.set_state('SaveDir', self._save_dir)
+                self.set_state('SaveName', self._save_filename)
+                self.set_state('StreamToDisk', True)
+            elif err_code == 1:
+                # If no new session number, popup a warning and focus on the session number textbox
+                qw.QMessageBox.warning(self, 'Warning', 'Please enter the animal ID')
+                self._animalID_textbox.setFocus()
+            elif err_code == 2:
+                qw.QMessageBox.warning(self, 'Warning', 'Please enter the new session number!')
+                self._sessionNum_textbox.setFocus()
+            elif err_code == 3:
+                qw.QMessageBox.warning(self, 'Warning', 'Please enter the animal ID and the new session number!')
+                self._animalID_textbox.setFocus()
 
         else:
             self._save_btn.setText('Start Recording')
             self._save_btn.setStyleSheet('background-color: white')
+            self.set_state('StreamToDisk', False)
+            self.send(self._wrapper_minion, 'data', (self._save_dir, self._animalID, self._sessionNum))
+            self._lastSessionNum = self._sessionNum
             # for cam in self._save_camera_list:
             #     mi_name = self._connected_camera_minions[cam]
-            self.set_state('StreamToDisk', False)
-            self.send(self._wrapper_minion, 'data', (self._save_dir, self._sessionNum))
             # for servoM in self._servo_minion:
             #     self.set_state_to(servoM, 'StreamToDisk', False)
 
@@ -797,60 +853,109 @@ class ScanListener(StreamingCompiler):
 
 class DataWrapper(AbstractCompiler):
 
-    def __init__(self, *args, master_minion=None, remote_IP_address=None, remote_dir=None, netdrive_dir="\\\\nas3\\datastore_bonhoeffer_group$", **kwargs):
+    def __init__(self, *args, trigger_minion=None, remote_IP_address=None, remote_dir='D:\\data\\', netdrive_dir="\\\\nas3\\datastore_bonhoeffer_group$\\Yue Zhang\\CaData\\", **kwargs):
+
         super(DataWrapper, self).__init__(*args, **kwargs)
+        assert trigger_minion is not None, "trigger_minion must be specified"
+        self._master_minion = trigger_minion
 
-        assert master_minion is not None, "master_minion must be specified"
         assert remote_IP_address is not None, "remote_IP_address must be specified"
+        self._remote_IP_add = remote_IP_address
 
-        usr = getpass.getuser()
-        pwd = getpass.getpass()
-        self._master_minion = master_minion
-        self._ssh = paramiko.SSHClient()
-        self._remote_PC = self._ssh.connect(remote_IP_address, username=usr, password=pwd)
         self._remote_dir = remote_dir
-        netdrive_root = netdrive_dir.split('$')[0]+'$'
         self._netdrive_dir = netdrive_dir
-        self._ssh.exec_command(f'net use \"{netdrive_root}\"')
+        self._ssh = None
+        self._connected = False
+        self.info('Waiting for remote connection info....')
+
+    def _connect_remote_PC(self, usr, pwd):
+        err = 0
+        try:
+            self._ssh = paramiko.SSHClient()
+            self._ssh.load_system_host_keys()
+            self._ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self._ssh.connect(self._remote_IP_add, username=usr, password=pwd)
+            netdrive_root = self._netdrive_dir.split('$')[0]+'$'
+            _, stout, sterr = self._ssh.exec_command(f'net use \"{netdrive_root}\"')
+            if sterr.channel.recv_exit_status() != 0:
+                self.error(sterr.channel.recv_stderr(1000).decode('utf-8'))
+            else:
+                self.info(stout.channel.recv(1000).decode('utf-8'))
+                self._connected = True
+        except Exception as e:
+            self.error(e)
+            err = 1
+
+        if err != 0:
+            self.error('Failed to connect to remote PC, terminating the proces.....')
+            self._on_close()
 
     def on_time(self, t):
         self.get(self._master_minion)
         time.sleep(0.1)
 
+    def on_close(self):
+        if self._ssh is not None:
+            self._ssh.close()
+
 
     def parse_msg(self, msg_type, msg):
         if msg_type == 'data':
-            local_data_dir = msg[0]
-            remote_session_num = msg[2]
-            err_code = self._dump_data_to_netdrive(local_data_dir, remote_session_num)
-            if err_code == 0:
-                self.info(f"Data saved to {self._netdrive_dir}")
-            else:
-                self.error(f"Data save failed")
+            if self._connected:
+                local_data_dir = msg[0]
+                animal_id = msg[1]
+                remote_session_num = msg[2]
+                self.info(f"Data wrapping request received; local_data_dir: {local_data_dir}, remote_session_num: {remote_session_num}")
+                self.info("Waiting for the minion to finish saving and close the files...")
+                time.sleep(2)  # Wait for the minion to finish saving and close the files
+                err_code = self._dump_data_to_netdrive(local_data_dir, animal_id, remote_session_num)
+                if err_code == 0:
+                    self.info(f"Data saved to {self._netdrive_dir}")
+                else:
+                    self.error(f"Data save failed")
+        elif msg_type == 'connect':
+            usr,pwd = msg
+            self.info(f"Remote connection info received")
+            self._connect_remote_PC(usr,pwd)
         else:
             self.error(f"Unknown msg_type: {msg_type}")
 
-    def _dump_data_to_netdrive(self, local_data_dir, remote_session_num):
-        netdrive_session_dir, err_code = self._dump_local_data(local_data_dir, self._netdrive_dir)
+    def _dump_data_to_netdrive(self, local_data_dir, animal_id, remote_session_num):
+        self.info('Transferring stimulus and Aux data to the netdrive...')
+        netdrive_session_dir, err_code = self._dump_local_data(local_data_dir, animal_id)
         if err_code == 0:
+            self.info('Stimulus and Aux data have been copied to the netdrive...')
+            self.info(f'Get Ca Data file list from remote PC... (session num: {remote_session_num})')
             remote_file_list,err_code = self._get_remote_file_list(self._remote_dir, remote_session_num)
-        if err_code == 0:
-            self._ssh.exec_command(f'XCOPY \"{local_data_dir}\" \"{netdrive_session_dir}\" /E /I')
-            for f in remote_file_list:
-                self._ssh.exec_command(f'COPY \"{self._remote_dir}\\{f}\" \"{netdrive_session_dir}\"')
+            if err_code == 0:
+                for f in remote_file_list:
+                    _, stout, sterr = self._ssh.exec_command(f'COPY \"{self._remote_dir}\\{f}\" \"{netdrive_session_dir}\"')
+                    if sterr.channel.recv_exit_status() != 0:
+                        self.error(f'Failed to copy Ca Data file {f}')
+                        self.error(sterr.channel.recv_stderr(1000).decode('utf-8'))
+                        err_code = 1
+                    else:
+                        self.info(f'Ca Data file {f} has been copied to the netdrive')
+                self.info('All data have been copied to the netdrive')
+            else:
+                self.error('Error in copying Ca Data')
+        else:
+            self.error('Error in copying stimulus and Aux data to the netdrive, abort copying Ca Data')
         return err_code
 
-    def _dump_local_data(self, local_data_dir, netdrive_dir):
+    def _dump_local_data(self, local_data_dir, animal_id):
         err_code = 1 if not os.path.isdir(local_data_dir) else 0
         if err_code == 0:
-            err_code = 1 if not os.path.isdir(netdrive_dir) else 0
+            err_code = 1 if not os.path.isdir(self._netdrive_dir) else 0
         if err_code == 0:
             err_code = self._wrap_local_data(local_data_dir)
         if err_code == 0:
-            shutil.copytree(local_data_dir,
-                            os.path.join(netdrive_dir,
-                                         os.path.basename(local_data_dir)))
-        return err_code
+            save_dir = os.path.join(self._netdrive_dir,animal_id)
+            if not os.path.isdir(save_dir):
+                os.mkdir(save_dir)
+            netdrive_session_dir = os.path.join(save_dir,os.path.basename(local_data_dir))
+            shutil.copytree(local_data_dir,netdrive_session_dir)
+        return netdrive_session_dir, err_code
 
     def _wrap_local_data(self, fdir):
         stem_csv_fn_pattern = '_SCAN.csv'
@@ -876,11 +981,14 @@ class DataWrapper(AbstractCompiler):
     def _get_remote_file_list(self, remote_data_dir, remote_session_num):
         sftp = self._ssh.open_sftp()
         flist = [i for i in sftp.listdir(remote_data_dir) if f'exp{remote_session_num}_ch' in i]
+        sftp.close()
         if len(flist) < 0:
             self.error('Error in getting remote file list: no file found')
             return flist, -1
         else:
             return flist, 0
+
+
 
 # class DataIOApp(AbstractAPP):
 #     def __init__(self, *args, timer_minion=None, state_dict={}, buffer_dict={}, buffer_saving_opt={}, trigger=None, **kwargs):
