@@ -7,7 +7,7 @@ from vispy import app, gloo
 
 from bin.compiler.prototypes import AbstractCompiler
 from bin.minion import AbstractMinionMixin, BaseMinion
-from definition import ROOT_DIR
+from bin.definition import ROOT_DIR
 
 
 class QtCompiler(AbstractCompiler, qw.QMainWindow):
@@ -16,11 +16,11 @@ class QtCompiler(AbstractCompiler, qw.QMainWindow):
         AbstractCompiler.__init__(self, processHandler)
         qw.QMainWindow.__init__(self, **kwargs)
         self.setWindowTitle(self.name)
-        self.setWindowIcon(QIcon(ROOT_DIR + '/bin/minipoly.ico'))
+        self.setWindowIcon(QIcon(ROOT_DIR + '/minipoly.ico'))
         self.renderSplashScreen()
 
     def renderSplashScreen(self):
-        splash_pix = QPixmap(ROOT_DIR + '/bin/minipoly.ico')
+        splash_pix = QPixmap(ROOT_DIR + '/minipoly.ico')
         splash = qw.QSplashScreen(splash_pix, qc.Qt.WindowStaysOnTopHint)
         # add fade to splashscreen
         splash.show()
