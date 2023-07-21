@@ -4,7 +4,7 @@ import traceback
 from vispy import gloo
 import os
 import numpy as np
-from bin.display import GLRenderer
+from miniPoly.util.display import GLRenderer
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 from PyQt5.Qt import Qt as qt

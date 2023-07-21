@@ -1,6 +1,6 @@
 import numpy as np
-from bin.gui import DataframeTable
-from bin.compiler.graphics import QtCompiler, GLCompiler
+from miniPoly.util.gui import DataframeTable
+from miniPoly.compiler.graphics import QtCompiler, GLCompiler
 import PyQt5.QtWidgets as qw
 from vispy import gloo
 

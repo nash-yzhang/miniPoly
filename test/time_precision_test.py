@@ -1,9 +1,11 @@
 import traceback
 from time import perf_counter
 import numpy as np
-from bin.app.prototypes import AbstractGUIAPP, AbstractGLAPP, LoggerMinion
-from bin.gui import DataframeTable
-from bin.compiler.graphics import QtCompiler, GLCompiler
+from miniPoly.prototype.Logging import LoggerMinion
+from miniPoly.prototype.GL import AbstractGLAPP
+from miniPoly.prototype.GUI import AbstractGUIAPP
+from miniPoly.util.gui import DataframeTable
+from miniPoly.compiler.graphics import QtCompiler, GLCompiler
 import PyQt5.QtWidgets as qw
 from vispy import gloo
 

@@ -1,21 +1,18 @@
-import csv
 import ctypes
 import os
 import time
 import traceback
-from time import perf_counter
 
 import cv2
-import numpy as np
 import pco
 import tifffile as tifffile
 
-from bin.compiler.prototypes import AbstractCompiler, StreamingCompiler
-from src.tisgrabber import tisgrabber as tis
+from miniPoly.compiler.prototypes import AbstractCompiler, StreamingCompiler
+from miniPoly.tisgrabber import tisgrabber as tis
 
 
 class TISCameraCompiler(StreamingCompiler):
-    TIS_DLL_DIR = "../../src/tisgrabber/tisgrabber_x64.dll"
+    TIS_DLL_DIR = "../tisgrabber/tisgrabber_x64.dll"
     TIS_Width = ctypes.c_long()
     TIS_Height = ctypes.c_long()
     TIS_BitsPerPixel = ctypes.c_int()
@@ -172,7 +169,7 @@ class TISCameraCompiler(StreamingCompiler):
     #     else:
     #         if os.path.isdir(save_dir):
     #             if self.save_option == 'binary':
-    #                 BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.bin"
+    #                 BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.miniPoly"
     #                 BIN_Fulldir = os.path.join(save_dir, BIN_Fn)
     #             elif self.save_option == 'movie':
     #                 BIN_Fn = f"{self._camera_name}_{file_name}_{self.BINFile_Postfix}.avi"
@@ -223,7 +220,7 @@ class TISCameraCompiler(StreamingCompiler):
 
 
 class PCOCameraCompiler(AbstractCompiler):
-    TIS_DLL_DIR = "../src/tisgrabber/tisgrabber_x64.dll"
+    TIS_DLL_DIR = "../miniPoly/tisgrabber/tisgrabber_x64.dll"
     TIS_Width = ctypes.c_long()
     TIS_Height = ctypes.c_long()
     TIS_BitsPerPixel = ctypes.c_int()

@@ -1,8 +1,8 @@
 import PyQt5.QtWidgets as qw
 
-from bin.gui import DataframeTable
-from bin.compiler.graphics import QtCompiler
-from bin.app.prototypes import AbstractGUIAPP
+from miniPoly.util.gui import DataframeTable
+from miniPoly.compiler.graphics import QtCompiler
+from miniPoly.prototype.GUI import AbstractGUIAPP
 
 
 class ServoProtocolCommander(QtCompiler):

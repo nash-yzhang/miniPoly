@@ -5,9 +5,9 @@ from PyQt5 import QtWidgets as qw, QtCore as qc
 from PyQt5.QtGui import QIcon, QPixmap
 from vispy import app, gloo
 
-from bin.compiler.prototypes import AbstractCompiler
-from bin.minion import AbstractMinionMixin, BaseMinion
-from bin.definition import ROOT_DIR
+from miniPoly.compiler.prototypes import AbstractCompiler
+from miniPoly.process.minion import AbstractMinionMixin, BaseMinion
+from miniPoly.definition import ROOT_DIR
 
 
 class QtCompiler(AbstractCompiler, qw.QMainWindow):
@@ -35,7 +35,7 @@ class GLCompiler(app.Canvas, AbstractMinionMixin):
     def __init__(self, processHandler, *args, protocol_commander: BaseMinion = None,
                  VS=None, FS=None, refresh_interval=10, **kwargs):
         super().__init__(*args, **kwargs)
-        # app.Canvas.__init__(self, *args, **kwargs)
+        # prototype.Canvas.__init__(self, *args, **kwargs)
         self._processHandler = processHandler
         self.timers = {'default': app.Timer(refresh_interval / 1000, self._on_timer, start=True),
                        'protocol': app.Timer(refresh_interval / 1000, self._on_protocol, start=False)}

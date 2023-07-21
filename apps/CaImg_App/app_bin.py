@@ -1,5 +1,4 @@
 import os
-import getpass
 import shutil
 
 import numpy as np
@@ -13,11 +12,11 @@ import PyQt5.QtCore as qc
 import paramiko
 import pyqtgraph as pg
 
-from bin.compiler.graphics import QtCompiler
-from bin.gui import DataframeTable, DataframeModel, CustomizableCloseEventWidget
-from src.tisgrabber import tisgrabber as tis
+from miniPoly.compiler.graphics import QtCompiler
+from miniPoly.util.gui import DataframeTable, DataframeModel, CustomizableCloseEventWidget
+from miniPoly.tisgrabber import tisgrabber as tis
 
-from bin.compiler.prototypes import StreamingCompiler, AbstractCompiler
+from miniPoly.compiler.prototypes import StreamingCompiler, AbstractCompiler
 from serial import Serial
 
 

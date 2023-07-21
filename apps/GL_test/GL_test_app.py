@@ -1,4 +1,5 @@
-from bin.app.prototypes import APP, CanvasModule, LoggerMinion
+from miniPoly.prototype.prototypes import APP, CanvasModule
+from miniPoly.prototype.Logging import LoggerMinion
 from multiprocessing import Lock
 class GLapp:
     def __init__(self, name):

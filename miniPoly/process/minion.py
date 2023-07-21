@@ -1,5 +1,5 @@
 import os
-from time import sleep, time, perf_counter
+from time import time, perf_counter
 
 import multiprocessing as mp
 from multiprocessing import Queue
@@ -10,7 +10,7 @@ from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 from typing import Callable
 
-from bin.buffer import *
+from miniPoly.process.buffer import *
 
 DEFAULT_LOGGING_CONFIG = {
     'version': 1,

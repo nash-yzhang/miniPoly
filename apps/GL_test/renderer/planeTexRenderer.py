@@ -1,6 +1,6 @@
 from vispy import gloo
 import numpy as np
-from bin.display import GLRenderer
+from miniPoly.util.display import GLRenderer
 
 class Renderer(GLRenderer):
 

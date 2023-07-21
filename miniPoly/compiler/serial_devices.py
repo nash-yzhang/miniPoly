@@ -7,7 +7,7 @@ import serial
 import usb.core
 import usb.util
 
-from bin.compiler.prototypes import AbstractCompiler, StreamingCompiler
+from miniPoly.compiler.prototypes import AbstractCompiler, StreamingCompiler
 
 class PololuServoInterface(StreamingCompiler):
     MOUSE_SERVO_DISTANCE = 150 # distance between the mouse and the servo in mm

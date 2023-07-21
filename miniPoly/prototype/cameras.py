@@ -1,5 +1,5 @@
-from bin.app.prototypes import AbstractAPP
-from bin.compiler import TISCameraCompiler
+from miniPoly.prototype.prototypes import AbstractAPP
+from miniPoly.compiler import TISCameraCompiler
 
 
 class TisCamApp(AbstractAPP):

@@ -1,4 +1,5 @@
-from bin.app.prototypes import AbstractGUIAPP, AbstractGLAPP
+from miniPoly.prototype.GL import AbstractGLAPP
+from miniPoly.prototype.GUI import AbstractGUIAPP
 from compiler import GLProtocolCommander, GLProtocolCompiler
 
 

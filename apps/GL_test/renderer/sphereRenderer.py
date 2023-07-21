@@ -2,7 +2,7 @@ from vispy import gloo
 from vispy.util.transforms import translate, rotate, perspective
 import os
 from sphModel import *
-from bin.display import GLRenderer, DEFAULT_SPHERE_VS, DEFAULT_SPHERE_FS
+from miniPoly.util.display import GLRenderer, DEFAULT_SPHERE_VS, DEFAULT_SPHERE_FS
 import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 from utils import load_shaderfile

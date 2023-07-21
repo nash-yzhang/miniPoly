@@ -1,5 +1,7 @@
 from compiler import GLProtocolCompiler, GLProtocolCommander
-from bin.app.prototypes import AbstractGUIAPP, AbstractGLAPP, LoggerMinion
+from miniPoly.prototype.Logging import LoggerMinion
+from miniPoly.prototype.GL import AbstractGLAPP
+from miniPoly.prototype.GUI import AbstractGUIAPP
 
 if __name__ == '__main__':
     GUI = AbstractGUIAPP('GUI',GLProtocolCommander,refresh_interval=1)

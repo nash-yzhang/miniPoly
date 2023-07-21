@@ -1,7 +1,9 @@
 from apps.IOS_Servo_App.app_bin_PCO import *
-from bin.app.prototypes import AbstractGUIAPP, AbstractAPP, LoggerMinion
-from bin.compiler import IOStreamingCompiler
-from bin.compiler.cameras import PCOCameraCompiler
+from miniPoly.prototype.prototypes import AbstractAPP
+from miniPoly.prototype.Logging import LoggerMinion
+from miniPoly.prototype.GUI import AbstractGUIAPP
+from miniPoly.compiler import IOStreamingCompiler
+from miniPoly.compiler.cameras import PCOCameraCompiler
 
 
 class CameraInterface(AbstractGUIAPP):

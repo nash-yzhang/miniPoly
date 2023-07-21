@@ -3,14 +3,15 @@ import traceback
 import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
 
-from bin.app.prototypes import AbstractGUIAPP, LoggerMinion
-from bin.compiler.graphics import QtCompiler
-from src.tisgrabber import tisgrabber as tis
-from bin.minion import TimerMinion
+from miniPoly.prototype.Logging import LoggerMinion
+from miniPoly.prototype.GUI import AbstractGUIAPP
+from miniPoly.compiler.graphics import QtCompiler
+from miniPoly.tisgrabber import tisgrabber as tis
+from miniPoly.process.minion import TimerMinion
 
 
 class TISCamera(TimerMinion):
-    TIS_DLL_DIR = "../src/tisgrabber/tisgrabber_x64.dll"
+    TIS_DLL_DIR = "../miniPoly/tisgrabber/tisgrabber_x64.dll"
     TIS_Width = ctypes.c_long()
     TIS_Height = ctypes.c_long()
     TIS_BitsPerPixel = ctypes.c_int()

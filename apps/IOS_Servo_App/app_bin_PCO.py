@@ -12,9 +12,9 @@ import PyQt5.QtWidgets as qw
 from vispy import scene
 from vispy.io import load_data_file, read_png
 
-from bin.compiler.prototypes import AbstractCompiler
-from bin.compiler.graphics import QtCompiler
-from bin.gui import DataframeTable
+from miniPoly.compiler.prototypes import AbstractCompiler
+from miniPoly.compiler.graphics import QtCompiler
+from miniPoly.util.gui import DataframeTable
 
 import pyfirmata as fmt
 

@@ -7,7 +7,7 @@ ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 password = pwinput.pwinput('Enter password for remote directory: ')
 ssh.connect('192.168.233.66', username='yue.zhang', password=password)
 remote_dir = 'D:\\data\\'
-fn = 'exp27754_ch-525.bin'
+fn = 'exp27754_ch-525.miniPoly'
 netdrive_dir = "\\\\nas3\\datastore_bonhoeffer_group$"
 net_dir = netdrive_dir+'\\Yue Zhang\\CaData\\'
 _, stdout, _ = ssh.exec_command(f'net use \"{netdrive_dir}\"')

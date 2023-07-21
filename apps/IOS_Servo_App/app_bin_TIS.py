@@ -12,10 +12,10 @@ import traceback
 import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
 
-from bin.compiler.prototypes import AbstractCompiler
-from bin.compiler.graphics import QtCompiler
-from bin.gui import DataframeTable
-from src.tisgrabber import tisgrabber as tis
+from miniPoly.compiler.prototypes import AbstractCompiler
+from miniPoly.compiler.graphics import QtCompiler
+from miniPoly.util.gui import DataframeTable
+from miniPoly.tisgrabber import tisgrabber as tis
 
 import pyfirmata as fmt
 
@@ -909,7 +909,7 @@ class LightSaberStmulusCompiler(AbstractCompiler):
 
 
 class TISCameraCompiler(AbstractCompiler):
-    TIS_DLL_DIR = "../src/tisgrabber/tisgrabber_x64.dll"
+    TIS_DLL_DIR = "../miniPoly/tisgrabber/tisgrabber_x64.dll"
     TIS_Width = ctypes.c_long()
     TIS_Height = ctypes.c_long()
     TIS_BitsPerPixel = ctypes.c_int()

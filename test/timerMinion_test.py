@@ -1,8 +1,9 @@
 import traceback
 
-from bin.gui import DataframeTable
-from bin.compiler.graphics import QtCompiler
-from bin.app.prototypes import AbstractGUIAPP, LoggerMinion
+from miniPoly.util.gui import DataframeTable
+from miniPoly.compiler.graphics import QtCompiler
+from miniPoly.prototype.Logging import LoggerMinion
+from miniPoly.prototype.GUI import AbstractGUIAPP
 import PyQt5.QtWidgets as qw
 from time import sleep
 

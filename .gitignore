@@ -2,3 +2,6 @@
 imgui.ini
 .idea
 __pycache__
+__arc__
+apps
+external_tools

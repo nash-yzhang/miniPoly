@@ -4,7 +4,7 @@ import time
 
 import cv2
 
-from bin.minion import TimerMinionMixin, TimerMinion
+from miniPoly.process.minion import TimerMinionMixin, TimerMinion
 
 import traceback
 

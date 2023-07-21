@@ -7,7 +7,7 @@ def readBin(filename):
     return data
 
 a = readBin('D:/Yue Zhang/OneDrive/Bonhoeffer Lab/PycharmProjects/miniPoly/apps/TISCam_compiler/test/20230301_174925'
-        '/DMx_22BUC03_33010546_20230301_174925_IC_IMG.bin')
+        '/DMx_22BUC03_33010546_20230301_174925_IC_IMG.miniPoly')
 
 a = a.reshape(-1, 3, 480, 744)
 #%%

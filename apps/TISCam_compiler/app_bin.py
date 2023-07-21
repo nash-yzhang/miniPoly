@@ -1,16 +1,17 @@
 import os
 
-from bin.app.prototypes import AbstractGUIAPP, AbstractAPP
+from miniPoly.prototype.prototypes import AbstractAPP
+from miniPoly.prototype.GUI import AbstractGUIAPP
 import time
 import traceback
 
 import PyQt5.QtWidgets as qw
 import PyQt5.QtGui as qg
 
-from bin.compiler.graphics import QtCompiler
-from bin.compiler.serial_devices import PololuServoInterface, ArduinoCompiler
-from bin.gui import DataframeTable
-from src.tisgrabber import tisgrabber as tis
+from miniPoly.compiler.graphics import QtCompiler
+from miniPoly.compiler.serial_devices import PololuServoInterface, ArduinoCompiler
+from miniPoly.util.gui import DataframeTable
+from miniPoly.tisgrabber import tisgrabber as tis
 
 
 class CameraGUI(QtCompiler):

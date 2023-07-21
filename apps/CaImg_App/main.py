@@ -1,6 +1,9 @@
 from apps.CaImg_App.app_bin import *
-from bin.app.prototypes import AbstractGUIAPP, AbstractAPP, StreamingAPP, LoggerMinion
-from bin.compiler import TISCameraCompiler, OMSInterface, MotorShieldCompiler
+from miniPoly.prototype.prototypes import AbstractAPP
+from miniPoly.prototype.Streaming import StreamingAPP
+from miniPoly.prototype.Logging import LoggerMinion
+from miniPoly.prototype.GUI import AbstractGUIAPP
+from miniPoly.compiler import TISCameraCompiler, OMSInterface, MotorShieldCompiler
 
 VENDOR_ID = 0X046D
 PRODUCT_ID = 0xC24E
