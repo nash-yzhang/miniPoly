@@ -1,33 +1,27 @@
-import traceback
+import PyQt5.QtWidgets as qw
 
 from miniPoly.util.gui import DataframeTable
 from miniPoly.compiler.graphics import QtCompiler
-from miniPoly.prototype.Logging import LoggerMinion
 from miniPoly.prototype.GUI import AbstractGUIAPP
-import PyQt5.QtWidgets as qw
-from time import sleep
 
 
-class TestApp(AbstractGUIAPP):
+class ServoProtocolCommander(QtCompiler):
 
-    def initialize(self):
-        super().initialize()
-        self._compiler = ProtocolCommander(self)
-        self._compiler.show()
-
-class ProtocolCommander(QtCompiler):
-    def __init__(self, *args, **kwargs):
+    _SERVO_MIN = 2400
+    _SERVO_MAX = 9000
+    def __init__(self, *args, windowSize=(900, 300), **kwargs):
         super().__init__(*args, **kwargs)
-        self.add_timer('protocol_timer',self.on_protocol)
-        self.create_state('is_running',False)
+        self.add_timer('protocol_timer', self.on_protocol)
+        self.create_state('is_running', False)
 
         self._timer_started = False
         self.timer_switcher = qw.QPushButton('Start')
         self.timer_switcher.clicked.connect(self.switch_timer)
+        self.resize(*windowSize)
 
         self.frames = {}
         self.tables = {}
-        self.addTableBox('Visual')
+        self.addTableBox('Protocol')
         self.groupbox_layout = qw.QHBoxLayout()
         for val in self.frames.values():
             self.groupbox_layout.addWidget(val)
@@ -59,43 +53,47 @@ class ProtocolCommander(QtCompiler):
             self._startTimer()
 
     def _startTimer(self):
+        self.startTimer()
         self.start_timing('protocol_timer')
         self._timer_started = True
         self.timer_switcher.setText('Stop')
 
     def startTimer(self):
-        self.set_state('is_running',True)
+        self.set_state('is_running', True)
 
     def _stopTimer(self):
+        self.stopTimer()
         self.stop_timing('protocol_timer')
         self._timer_started = False  # self._time = self._time.elapsed()
         self.timer_switcher.setText('Start')
 
     def stopTimer(self):
-        self.set_state('is_running',False)
-        sleep(.1)
+        self.set_state('is_running', False)
 
-    def on_protocol(self,t):
+    def on_protocol(self, t):
         cur_time = t
-        try:
-            data = self.tables['Visual'].model()._data
+        if self.tables['Protocol'].model():
+            data = self.tables['Protocol'].model()._data
             time_col = data['time']
             if cur_time <= (time_col.max() + self.timerInterval()):
                 row_idx = None
-                for i,v in enumerate(time_col):
+                for i, v in enumerate(time_col):
                     if v >= cur_time:
-                        row_idx = i-1
+                        row_idx = i - 1
                         break
                 if row_idx is None:
                     self._stopTimer()
                 else:
-                    if self.watch_state('visual_row',row_idx):
-                        self.tables['Visual'].selectRow(row_idx)
+                    if self.watch_state('visual_row', row_idx):
+                        self.tables['Protocol'].selectRow(row_idx)
+                        for k in data.keys():
+                            if ":" in k:
+                                m,s = k.split(':')
+                                if m in self.get_linked_minion_names():
+                                    if s in self.get_shared_state_names(m):
+                                        state = float(data[k][row_idx]*(self._SERVO_MAX-self._SERVO_MIN)+self._SERVO_MIN)
+                                        self.set_state_to(m,s,state)
 
-        except:
-            print(traceback.format_exc())
-            for i in self.tables:
-                i.clearSelection()
 
     def _init_menu(self):
         self._menubar = self.menuBar()
@@ -106,13 +104,10 @@ class ProtocolCommander(QtCompiler):
         Exit.triggered.connect(self.close)
         self._menu_file.addAction(Exit)
 
-    def close(self) -> None:
-        pass
+class ServoCompilerGUI(AbstractGUIAPP):
 
-
-if __name__ == '__main__':
-    app = TestApp('testgui')
-    logger = LoggerMinion('TestApp logger')
-    app.attach_logger(logger)
-    logger.run()
-    app.run()
+    def initialize(self):
+        super().initialize()
+        self._win = ServoProtocolCommander(self)
+        self.info("Starting GUI")
+        self._win.show()

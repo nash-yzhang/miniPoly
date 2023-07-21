@@ -4,9 +4,11 @@ from time import sleep
 import numpy as np
 from pysinewave import SineWave
 
-from bin.app.prototypes import AbstractGUIAPP, AbstractGLAPP, LoggerMinion
-from bin.gui import DataframeTable
-from bin.compiler.graphics import QtCompiler, GLCompiler
+from miniPoly.prototype.Logging import LoggerMinion
+from miniPoly.prototype.GL import AbstractGLAPP
+from miniPoly.prototype.GUI import AbstractGUIAPP
+from miniPoly.util.gui import DataframeTable
+from miniPoly.compiler.graphics import QtCompiler, GLCompiler
 import PyQt5.QtWidgets as qw
 from vispy import gloo
 
@@ -235,7 +237,7 @@ class CanvasModule(AbstractGLAPP):
 
     def initialize(self):
         super().initialize()
-        self._win = GraphicProtocolCompiler(self,app=self._app,VS='../apps/protocol_compiler/test.VS',FS='../apps/protocol_compiler/test.FS',refresh_interval=5)
+        self._win = GraphicProtocolCompiler(self,app=self._app,VS='../APP/protocol_compiler/test.VS',FS='../APP/protocol_compiler/test.FS',refresh_interval=5)
         self.info('Starting display window')
         self._win.initialize()
         self._win.show()

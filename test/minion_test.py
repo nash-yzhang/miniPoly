@@ -1,5 +1,5 @@
-import bin.app.prototypes
-from bin import minion as mi
+import miniPoly.prototype.prototypes
+from miniPoly.process import minion as mi
 from time import sleep, time
 from multiprocessing import Lock
 import warnings
@@ -37,7 +37,7 @@ if __name__ == '__main__':
     v1 = Victim('Victim 1')
     v2 = Victim('Victim 2')
     k1 = Killer('Killer 1')
-    lm = bin.app.prototypes.LoggerMinion('MAIN LOGGER')
+    lm = miniPoly.app.Logging.LoggerMinion('MAIN LOGGER')
     v1.attach_logger(lm)
     v2.attach_logger(lm)
     k1.attach_logger(lm)
