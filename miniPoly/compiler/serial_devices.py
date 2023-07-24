@@ -305,8 +305,8 @@ class MotorShieldCompiler(SerialCommandCompiler):
         self.create_state('extended_arm_length', -1, use_buffer=True)
         self.watch_state('extended_arm_length', -1)
 
-        self.create_streaming_state('cmd_idx', '', shared=True, use_buffer=True)
         self.watch_state('cmd_idx',-1)
+        self.create_streaming_state('cmd_idx', '', shared=True, use_buffer=True)
         self._protocolFn = ''
         self._protocol = None
         self._protocol_start_time = None
