@@ -3,7 +3,6 @@ from logging.handlers import QueueListener
 from multiprocessing import Queue
 
 from miniPoly.core.minion import BaseMinion, MinionLogHandler, LOG_LVL_LOOKUP_TABLE
-import datetime
 
 
 class LoggerMinion(BaseMinion, QueueListener):
@@ -43,14 +42,14 @@ class LoggerMinion(BaseMinion, QueueListener):
             },
             'file': {
                 'class': 'logging.FileHandler',
-                'filename': '%Y%m%d_%H%M%S.log',
+                'filename': 'minions.log',
                 'mode': 'w',
                 'formatter': 'detailed',
                 'level': 'DEBUG'
             },
             'errors': {
                 'class': 'logging.FileHandler',
-                'filename': 'ERR_%Y%m%d_%H%M%S.log',
+                'filename': 'minions-errors.log',
                 'mode': 'w',
                 'formatter': 'detailed',
                 'level': 'ERROR'

@@ -1,3 +1,4 @@
+import datetime
 import os
 from time import time, perf_counter
 
@@ -661,6 +662,10 @@ class MinionLogHandler:
             logger = logging.getLogger()
         else:
             logger = logging.getLogger(record.name)
+        fh = logging.FileHandler("{:%Y-%m-%d}.log".format(datetime.datetime.now()))
+        formatter = logging.Formatter('%(asctime)-4s  %(name)-8s %(levelname)-8s %(processName)-10s %(message)s')
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
         if logger.isEnabledFor(record.levelno):
             record.processName = '%s (for %s)' % (mp.current_process().name, record.processName)
             logger.handle(record)
