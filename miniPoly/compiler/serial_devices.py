@@ -306,6 +306,7 @@ class MotorShieldCompiler(SerialCommandCompiler):
         self.watch_state('extended_arm_length', -1)
 
         self.watch_state('cmd_idx',-1)
+        self.create_streaming_state('cmd_idx', '', shared=True, use_buffer=True)
         self._protocolFn = ''
         self._protocol = None
         self._protocol_start_time = None
@@ -389,7 +390,7 @@ class MotorShieldCompiler(SerialCommandCompiler):
         self.info('Starting protocol')
         self.set_streaming_state('protocolFn', self._protocolFn)
         self._protocol_start_time = self.get_timestamp()
-        self.set_state_to(self._trigger_minion, 'cmd_idx', 0)
+        self.set_streaming_state('cmd_idx', 0)
         self._reset_servo_status()
 
     def _run_protocol(self):
@@ -433,7 +434,7 @@ class MotorShieldCompiler(SerialCommandCompiler):
                 self.set_stepper_motor_pos(azi_motor_name, azi_motor_vals, target_azi)
                 self.set_servo_motor_pos(radius_motor_name, radius_motor_vals, target_radius)
 
-            self.set_state_to(self._trigger_minion, 'cmd_idx', cmd_idx)
+            self.set_streaming_state('cmd_idx', cmd_idx)
             if cmd_idx >= len(self._time_index_col) - 1:
                 self._end_protocol()
 
@@ -473,7 +474,7 @@ class MotorShieldCompiler(SerialCommandCompiler):
                 for i in stepper_param:
                     self.set_stepper_motor_pos(*i)
         self._protocol_start_time = None
-        self.set_state_to(self._trigger_minion, 'cmd_idx', -1)
+        self.set_streaming_state('cmd_idx', -1)
         self.set_state_to(self._trigger_minion, 'runSignal', False)
         self._running_time = 0
         self.info('Protocol ended')
