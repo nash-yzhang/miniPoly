@@ -43,14 +43,14 @@ class LoggerMinion(BaseMinion, QueueListener):
             },
             'file': {
                 'class': 'logging.FileHandler',
-                'filename': f'{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',
+                'filename': f'logs/{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',
                 'mode': 'w',
                 'formatter': 'detailed',
                 'level': 'DEBUG'
             },
             'errors': {
                 'class': 'logging.FileHandler',
-                'filename': f'ERROR_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',
+                'filename': f'logs/ERROR_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',
                 'mode': 'w',
                 'formatter': 'detailed',
                 'level': 'ERROR'
