@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from logging.handlers import QueueListener
 from multiprocessing import Queue
 
@@ -42,14 +43,14 @@ class LoggerMinion(BaseMinion, QueueListener):
             },
             'file': {
                 'class': 'logging.FileHandler',
-                'filename': 'minions.log',
+                'filename': f'{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',
                 'mode': 'w',
                 'formatter': 'detailed',
                 'level': 'DEBUG'
             },
             'errors': {
                 'class': 'logging.FileHandler',
-                'filename': 'minions-errors.log',
+                'filename': f'ERROR_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',
                 'mode': 'w',
                 'formatter': 'detailed',
                 'level': 'ERROR'
