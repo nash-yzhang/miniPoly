@@ -5,6 +5,7 @@ from multiprocessing import Queue
 
 from miniPoly.core.minion import BaseMinion, MinionLogHandler, LOG_LVL_LOOKUP_TABLE
 
+import os
 
 class LoggerMinion(BaseMinion, QueueListener):
     DEFAULT_LOGGER_CONFIG = {
@@ -64,6 +65,9 @@ class LoggerMinion(BaseMinion, QueueListener):
 
     def __init__(self, name, logger_config=None, listener_config=None):
         super(LoggerMinion, self).__init__(name=name)
+
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
 
         if logger_config is None:
             logger_config = self.DEFAULT_LOGGER_CONFIG
