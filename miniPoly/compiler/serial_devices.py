@@ -287,7 +287,6 @@ class MotorShieldCompiler(SerialCommandCompiler):
         self._cmd_idx_lookup_table = None
         self._running_time = 0
 
-        self._buffered_stepper_pos = 0
         self._stepper_counter = 0
 
     def on_time(self,t):
@@ -379,7 +378,7 @@ class MotorShieldCompiler(SerialCommandCompiler):
                     if 'flag' in k:
                         flag_param = [k,v,180]
                     else:
-                        servo_param.append([k,v,0])
+                        servo_param.append([k,v,self.RADIUS_SERVO_MIN])
                 elif 'stepper' in k:
                     stepper_param.append([k,v,0])
                 elif 'pin' in k:
@@ -427,14 +426,13 @@ class MotorShieldCompiler(SerialCommandCompiler):
            self.error('Stepper position must be between 0 and 180 degrees')
            return False
        else:
-           delta_pos = target_pos - self._buffered_stepper_pos
-           delta_steps = int(delta_pos / 180 * self.STEPPER_180)
-           self._buffered_stepper_pos = self._buffered_stepper_pos + delta_steps / self.STEPPER_180 * 180
-           self._stepper_counter += delta_steps
+           target_step = int(target_pos / 180 * self.STEPPER_180)
+           delta_steps = target_step - self._stepper_counter
            if delta_steps > 0:
                self._port.write(f'f{stepper_idx}{delta_steps}\n'.encode())
            elif delta_steps < 0:
                self._port.write(f'b{stepper_idx}{-delta_steps}\n'.encode())
+           self._stepper_counter = target_step
            return True
 
 
