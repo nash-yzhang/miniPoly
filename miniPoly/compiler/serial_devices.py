@@ -261,12 +261,17 @@ class SerialCommandCompiler(StreamingCompiler):
         super().on_time(t)
 
 class MotorShieldCompiler(SerialCommandCompiler):
+    RADIUS_SERVO_MIN = 15
+    MASK_OFF_ANGLE = [0, 180]
+    MASK_ON_ANGLE = [170, 15]
 
     def __init__(self, processHandler, motor_dict={}, **kwargs):
         super(MotorShieldCompiler, self).__init__(processHandler, **kwargs)
         self._motor_dict = motor_dict
         for k in self._motor_dict.keys():
             self.create_streaming_state(k, 0, shared=False,use_buffer=False)
+
+        self._mask_status = np.array([False, False])
 
         self.watch_state('runSignal', False)
         self._running_protocol = False
@@ -372,6 +377,7 @@ class MotorShieldCompiler(SerialCommandCompiler):
             flag_param = []
             servo_param = []
             stepper_param = []
+            mask_param = []
             for k, v in self._cmd_idx_lookup_table.items():
                 if 'servo' in k:
                     # write serial command to set servo position
@@ -387,6 +393,10 @@ class MotorShieldCompiler(SerialCommandCompiler):
                         pin_param.append([k,f'pin0{pin_num}0\n'.encode()])
                     else:
                         pin_param.append([k,f'pin{pin_num}0\n'.encode()])
+                elif 'mask' in k:
+                    mask_param.append([k, f'm1{self.MASK_OFF_ANGLE[0]}\n'.encode()])
+                    mask_param.append([k, f'm2{self.MASK_OFF_ANGLE[1]}\n'.encode()])
+
             if pin_param != []:
                 for i in pin_param:
                     self._port.write(i[1])
@@ -399,6 +409,12 @@ class MotorShieldCompiler(SerialCommandCompiler):
             if stepper_param != []:
                 for i in stepper_param:
                     self.set_stepper_motor_pos(*i)
+            if mask_param != []:
+                for i in mask_param:
+                    self._port.write(i[1])
+                    self.set_streaming_state(i[0], 0)
+                self._mask_status = np.array([False, False])
+
         self._protocol_start_time = None
         self.set_streaming_state('cmd_idx', -1)
         self.set_state_to(self._trigger_minion, 'runSignal', False)
@@ -434,6 +450,25 @@ class MotorShieldCompiler(SerialCommandCompiler):
                self._port.write(f'b{stepper_idx}{-delta_steps}\n'.encode())
            self._stepper_counter = target_step
            return True
+
+    def toggle_mask_servo(self, mask_num):
+        # mask num is 0(left) or 1(right)
+        if mask_num in [0,1]:
+            if self._mask_status[mask_num]:
+                self._mask_status[mask_num] = False
+                self._port.write(f'm{mask_num+1}{self.MASK_OFF_ANGLE[mask_num]}\n'.encode())
+            else:
+                self._mask_status[mask_num] = True
+                if self._mask_status[1 -mask_num]:
+                    self._port.write(f'm{2-mask_num}{self.MASK_OFF_ANGLE[1-mask_num]}\n'.encode())
+                    self._mask_status[1-mask_num] = False
+                self._port.write(f'm{mask_num+1}{self.MASK_ON_ANGLE[mask_num]}\n'.encode())
+
+    def reset_mask_servo(self):
+        # mask num is 0(left) or 1(right)
+        for i in range(2):
+            self._mask_status[i] = False
+            self._port.write(f'm{i+1}{self.MASK_OFF_ANGLE[i]}\n'.encode())
 
 
 class ArduinoCompiler(AbstractCompiler):
