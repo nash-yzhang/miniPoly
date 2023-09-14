@@ -451,7 +451,7 @@ class MotorShieldCompiler(SerialCommandCompiler):
            self._stepper_counter = target_step
            return True
 
-    def toggle_mask_servo(self, mask_num):
+    def _toggle_mask_servo(self, mask_num):
         # mask num is 0(left) or 1(right)
         if mask_num in [0,1]:
             if self._mask_status[mask_num]:
@@ -463,6 +463,10 @@ class MotorShieldCompiler(SerialCommandCompiler):
                     self._port.write(f'm{2-mask_num}{self.MASK_OFF_ANGLE[1-mask_num]}\n'.encode())
                     self._mask_status[1-mask_num] = False
                 self._port.write(f'm{mask_num+1}{self.MASK_ON_ANGLE[mask_num]}\n'.encode())
+
+    def toggle_mask_servo(self, mask_num):
+        self._toggle_mask_servo(mask_num)
+        self.set_streaming_state(f'mask{mask_num+1}', self._mask_status[mask_num])
 
     def reset_mask_servo(self):
         # mask num is 0(left) or 1(right)
