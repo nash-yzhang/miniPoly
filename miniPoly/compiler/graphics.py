@@ -106,12 +106,14 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
             self.program['a_position'] = gloo.VertexBuffer(self._vpos)
             self.program['u_resolution'] = (self.size[0], self.size[1])
             self.program['u_time'] = 0
+            self.create_shared_uniform_state(type='uniform')
             rv, uv = self.check_variables()
             if uv:
-                self.error(f'Found {len(uv)} unsettled variables: {uv}')
+                self.warning(f'Found {len(uv)} unsettled variables: {uv}')
+                for i in uv:
+                    self.program[i] = self.get_streaming_state(i)  # Set the uniform to the value in the streaming state
             if rv:
                 self.warning(f'Found {len(rv)} pending variables: {rv}')
-            self.create_shared_uniform_state(type='uniform')
         else:
             self.error(f'Rendering program has not been built!')
 
