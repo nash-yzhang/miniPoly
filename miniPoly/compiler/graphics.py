@@ -118,6 +118,7 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
             self.error(f'Rendering program has not been built!')
 
     def create_shared_uniform_state(self, type='uniform'):
+        self._shared_uniform_states = []
         for i in self.program.variables:
             if i[2] not in ['u_resolution', 'u_time']:
                 if type != 'all':
@@ -125,7 +126,7 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
                         try:
                             self.create_streaming_state(i[2], list(self.program[i[2]].astype(float)))
                         except KeyError:
-                            self.warning(f'Uniform {i[2]} has not been set: {i[2]}\n{traceback.format_exc()}')
+                            self.warning(f'Uniform {i[2]} has not been set')
                             if i[1] == 'vec2':
                                 self.create_streaming_state(i[2], [0, 0])
                             elif i[1] == 'vec3':
