@@ -74,10 +74,6 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
         self.create_streaming_state('protocolFn', '', shared=False, use_buffer=False)
         self.watch_state('protocolFn', '')
 
-        # The following shared state are for debugging
-        self.create_state('serial_cmd', '')
-        self.watch_state('serial_cmd', '')
-
         self.watch_state('cmd_idx', -1)
         self.create_streaming_state('cmd_idx', -1, shared=True, use_buffer=True)
         self._protocolFn = ''
@@ -231,8 +227,6 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
             cmd = self._protocol.iloc[cmd_idx, :]
             for k, v in cmd.items():
                 self.update_stim_state(k, v)
-            self.set_streaming_state('serial_cmd', cmd['serial_cmd'])
-
             self.set_streaming_state('cmd_idx', cmd_idx)
             if cmd_idx >= len(self._time_index_col) - 1:
                 self._end_protocol()
