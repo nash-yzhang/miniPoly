@@ -121,23 +121,23 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
                 if type != 'all':
                     if i[0] == type:
                         try:
-                            self.create_state(i[2], list(self.program[i[2]].astype(float)))
+                            self.create_streaming_state(i[2], list(self.program[i[2]].astype(float)))
                         except KeyError:
                             self.warning(f'Uniform {i[2]} has not been set: {i[2]}\n{traceback.format_exc()}')
                             if i[1] == 'vec2':
-                                self.create_state(i[2], [0, 0])
+                                self.create_streaming_state(i[2], [0, 0])
                             elif i[1] == 'vec3':
-                                self.create_state(i[2], [0, 0, 0])
+                                self.create_streaming_state(i[2], [0, 0, 0])
                             elif i[1] == 'vec4':
-                                self.create_state(i[2], [0, 0, 0, 0])
+                                self.create_streaming_state(i[2], [0, 0, 0, 0])
                             else:
-                                self.create_state(i[2], 0)
+                                self.create_streaming_state(i[2], 0)
                         except:
                             self.error(f'Error in creating shared state for uniform: {i[2]}\n{traceback.format_exc()}')
                         self._shared_uniform_states.append(i[2])
                 else:
                     if i[0] not in ['varying', 'constant']:
-                        self.create_state(i[2], self.program[i[2]])
+                        self.create_streaming_state(i[2], self.program[i[2]])
                         self._shared_uniform_states.append(i[2])
 
     def check_variables(self):
@@ -227,12 +227,21 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
         if self.watch_state('cmd_idx', cmd_idx):
             cmd = self._protocol.iloc[cmd_idx, :]
             for k, v in cmd.items():
-                self.set_state(k, v)
-            self.set_state('serial_cmd', cmd['serial_cmd'])
+                self.update_stim_state(k, v)
+            self.set_streaming_state('serial_cmd', cmd['serial_cmd'])
 
             self.set_streaming_state('cmd_idx', cmd_idx)
             if cmd_idx >= len(self._time_index_col) - 1:
                 self._end_protocol()
+            self.exec_stim_cmd()
+
+    def exec_stim_cmd(self):
+        self.update()
+
+    def update_stim_state(self, k, v):
+        if k in self._shared_uniform_states:
+            self.program[k] = v
+            self.set_streaming_state(k, v)
 
     def _end_protocol(self):
         gloo.clear('black')
