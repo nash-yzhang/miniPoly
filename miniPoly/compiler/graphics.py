@@ -69,7 +69,6 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
 
         # Protocol execution related params
         self.watch_state('runSignal', False)  # create a runSignal watcher, runSignal is a shared state from GUI
-        self._running_protocol = False
 
         self.create_streaming_state('protocolFn', '', shared=False, use_buffer=False)
         self.watch_state('protocolFn', '')
@@ -201,15 +200,14 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
         if self._protocol is not None and self.FS is not None:  # Only execute if protocol and FS are loaded
             runSignal = self.get_state_from(self._trigger_minion, 'runSignal')
             if self.watch_state('runSignal', runSignal):
-                self._running_protocol = runSignal
-                if self._running_protocol:
+                if runSignal:
                     self._start_protocol()
                     return True
                 else:  # if self._running_protocol has been switched off, return False to stop protocal running and reset related params
                     self._end_protocol()
                     return False
             else:
-                return self._running_protocol
+                return runSignal
         else:
             return False
 
@@ -245,7 +243,7 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
         self.update()
 
         self._protocol_start_time = None
-        self.FS = None
+        # self.FS = None
         self.set_streaming_state('cmd_idx', -1)
         self.set_state_to(self._trigger_minion, 'runSignal', False)
         self._running_time = 0
