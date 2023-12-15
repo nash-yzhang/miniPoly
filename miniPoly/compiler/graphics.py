@@ -65,6 +65,13 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
         self.fullscreen = fullscreen
         self.watch_state('fullscreen', self.fullscreen)
 
+        # Create texture to render to
+        shape = self.physical_size[1], self.physical_size[0]
+        self._rendertex = gloo.Texture2D((shape + (3,)))
+        # Create FBO, attach the color buffer and depth buffer
+        self._fbo = gloo.FrameBuffer(self._rendertex, gloo.RenderBuffer(shape))
+        self.create_shared_buffer('FBO', self._fbo.read())
+
         self._shared_uniform_states = []
 
         # Protocol execution related params
@@ -166,8 +173,14 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
             self.fullscreen = fullscreen
 
     def on_draw(self, event):
-        gloo.clear()
         if self.program is not None:
+            with self._fbo:
+                gloo.clear()
+                gloo.set_viewport(0, 0, *self.physical_size)
+                self.program.draw('triangle_strip')
+            self.set_state('FBO', self._fbo.read())
+
+            gloo.clear()
             self.program.draw('triangle_strip')
 
     def get_protocol_fn(self):
