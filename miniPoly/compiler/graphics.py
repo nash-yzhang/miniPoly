@@ -1,5 +1,5 @@
 import traceback
-from time import sleep
+from time import sleep, time
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,29 @@ from miniPoly.core.minion import AbstractMinionMixin, BaseMinion
 from miniPoly.definition import ROOT_DIR
 from miniPoly.compiler.prototypes import StreamingCompiler
 
+import cv2
+
+def resize_with_padding(image_array, target_width, target_height, padding_color=(0, 0, 0)):
+    # Calculate the ratio and determine new dimensions
+    original_height, original_width = image_array.shape[:2]
+    ratio = min(target_width / original_width, target_height / original_height)
+    new_width = int(original_width * ratio)
+    new_height = int(original_height * ratio)
+
+    # Resize the image
+    resized_img = cv2.resize(image_array, (new_width, new_height), interpolation=cv2.INTER_NEAREST)
+
+    # Create a new image with the target size and padding color
+    padded_image = np.full((target_height, target_width, 3), padding_color, dtype=np.uint8)
+
+    # Calculate padding offsets
+    x_offset = (target_width - new_width) // 2
+    y_offset = (target_height - new_height) // 2
+
+    # Place the resized image onto the new image (centered)
+    padded_image[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = resized_img
+
+    return padded_image
 
 class QtCompiler(AbstractCompiler, qw.QMainWindow):
 
@@ -46,7 +69,7 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
     """
 
     def __init__(self, processHandler, *args, FSFn=None, fullscreen=False, timer_minion='SCAN', trigger_minion='GUI',
-                 refresh_interval=1, **kwargs):
+                 frame_preview_size=(150,200), **kwargs):
         super().__init__(*args, **kwargs)
         StreamingCompiler.__init__(self, processHandler, timer_minion=timer_minion,
                                    trigger_minion=trigger_minion)  # self.VS = None
@@ -66,11 +89,12 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
         self.watch_state('fullscreen', self.fullscreen)
 
         # Create texture to render to
-        shape = self.physical_size[1], self.physical_size[0]
-        self._rendertex = gloo.Texture2D((shape + (3,)))
+        self._rendertex = gloo.Texture2D((*self.physical_size[::-1], 3))
         # Create FBO, attach the color buffer and depth buffer
-        self._fbo = gloo.FrameBuffer(self._rendertex, gloo.RenderBuffer(shape))
-        self.create_shared_buffer('FBO', self._fbo.read())
+        self._fbo = gloo.FrameBuffer(color=self._rendertex, depth=gloo.RenderBuffer(self.physical_size[::-1]))
+
+        self._stream_out_size = frame_preview_size[::-1]
+        self.create_shared_buffer('FBO', np.zeros((*self._stream_out_size, 3), dtype=np.uint8))
 
         self._shared_uniform_states = []
 
@@ -174,14 +198,13 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
 
     def on_draw(self, event):
         if self.program is not None:
-            with self._fbo:
-                gloo.clear()
-                gloo.set_viewport(0, 0, *self.physical_size)
-                self.program.draw('triangle_strip')
-            self.set_state('FBO', self._fbo.read())
-
             gloo.clear()
+            gloo.set_viewport(0, 0, *self.physical_size)
             self.program.draw('triangle_strip')
+            thumbnail = resize_with_padding(self._fbo.read()[...,:-1], *self._stream_out_size[::-1])
+            self.set_state('FBO', thumbnail)
+            print(f"FPS: {1/(time()-self._frame_delta)}")
+            self._frame_delta = time()
 
     def get_protocol_fn(self):
         if self._protocol_start_time is None:  # Only execute if protocol is not running
@@ -266,6 +289,8 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
         # Define how should be rendered image should be resized by changing window size
         gloo.set_viewport(0, 0, *self.physical_size)
         self.program['u_resolution'] = self.size
+        self._fbo.resize(self.physical_size[::-1])
+
 
     def on_close(self):
         self.set_state('status', -1)
