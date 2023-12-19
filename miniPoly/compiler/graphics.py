@@ -69,7 +69,7 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
     """
 
     def __init__(self, processHandler, *args, FSFn=None, fullscreen=False, timer_minion='SCAN', trigger_minion='GUI',
-                 frame_preview_size=(150,200), **kwargs):
+                 max_screen_size=(1920,1080), **kwargs):
         super().__init__(*args, **kwargs)
         StreamingCompiler.__init__(self, processHandler, timer_minion=timer_minion,
                                    trigger_minion=trigger_minion)  # self.VS = None
@@ -88,12 +88,13 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
         self.fullscreen = fullscreen
         self.watch_state('fullscreen', self.fullscreen)
 
+        self._stream_out_size = max_screen_size
         # Create texture to render to
-        self._rendertex = gloo.Texture2D((*self.physical_size[::-1], 3))
+        self._rendertex = gloo.Texture2D((*self._stream_out_size, 3))
         # Create FBO, attach the color buffer and depth buffer
-        self._fbo = gloo.FrameBuffer(color=self._rendertex, depth=gloo.RenderBuffer(self.physical_size[::-1]))
+        self._fbo = gloo.FrameBuffer(color=self._rendertex, depth=gloo.RenderBuffer(self._stream_out_size))
+        self._frame_delta = time()
 
-        self._stream_out_size = frame_preview_size[::-1]
         self.create_shared_buffer('FBO', np.zeros((*self._stream_out_size, 3), dtype=np.uint8))
 
         self._shared_uniform_states = []
@@ -201,10 +202,10 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
             gloo.clear()
             gloo.set_viewport(0, 0, *self.physical_size)
             self.program.draw('triangle_strip')
-            thumbnail = resize_with_padding(self._fbo.read()[...,:-1], *self._stream_out_size[::-1])
-            self.set_state('FBO', thumbnail)
-            print(f"FPS: {1/(time()-self._frame_delta)}")
-            self._frame_delta = time()
+            # thumbnail = resize_with_padding(self._fbo.read()[...,:-1], *self._stream_out_size[::-1])
+            self.set_state('FBO', self._fbo.read()[...,:-1])
+            # print(f"FPS: {1/(time()-self._frame_delta)}")
+            # self._frame_delta = time()
 
     def get_protocol_fn(self):
         if self._protocol_start_time is None:  # Only execute if protocol is not running
@@ -289,7 +290,7 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
         # Define how should be rendered image should be resized by changing window size
         gloo.set_viewport(0, 0, *self.physical_size)
         self.program['u_resolution'] = self.size
-        self._fbo.resize(self.physical_size[::-1])
+        # self._fbo.resize(self.physical_size[::-1])
 
 
     def on_close(self):
