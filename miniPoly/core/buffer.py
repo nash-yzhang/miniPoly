@@ -304,12 +304,30 @@ class SharedBuffer:
 
 
 class SharedNdarray:
+    """
+    SharedNdarray allows efficient sharing of NumPy arrays between processes using shared memory. It is useful for large data
+    sets where duplicating data for each process is not feasible due to memory constraints.
+    """
+
     _CLASS_NAME = 'SharedNdarray'
     _MAX_BUFFER_SIZE = 2 ** 32  # Maximum shared memory: 4 GB
     _READ_OFFSET = 512  # The first 512 bytes represents the valid size of the shared buffer
     _LOCK_OFFSET = 1  # The next byte represents the lock status of the shared buffer
 
     def __init__(self, name, lock: Lock, data=None, create=True, use_RWLock=True):
+        """
+        Initializes a SharedNdarray object.
+
+        Parameters:
+            name (str): Unique identifier for the shared memory segment.
+            lock (Lock): Synchronization primitive to ensure thread-safe operations.
+            data (np.ndarray, optional): Initial array data to store in shared memory.
+            create (bool): Flag to indicate whether to create a new shared memory segment.
+            use_RWLock (bool): Flag to indicate the use of a read-write lock for thread safety.
+
+        Raises:
+            ValueError: If data is None when create is True.
+        """
 
         self._name = name
         self._lock = lock
@@ -375,11 +393,24 @@ class SharedNdarray:
         return self._size
 
     def _read_lockbyte(self):
+        """
+        Private method: Reads the lock status byte from the shared memory.
+
+        Returns:
+            str: The current lock status ('w', 'r', ' ', '\x00').
+        """
+
         byte_data = bytes(self._shared_memory.buf[self._READ_OFFSET:(self._READ_OFFSET + self._LOCK_OFFSET)])
         lock_status = byte_data.decode('utf-8')  # 'w' or 'r' or ' ' or '\x00'
         return lock_status
 
     def _write_lockbyte(self, lock_status):
+        """
+        Writes the lock status byte to the shared memory.
+
+        Parameters:
+            lock_status (str): The lock status to write ('w', 'r', ' ', '\x00').
+        """
         byte_data = lock_status.encode('utf-8')
         self._shared_memory.buf[self._READ_OFFSET:(self._READ_OFFSET + self._LOCK_OFFSET)] = byte_data
 
@@ -445,6 +476,9 @@ class SharedNdarray:
                 self._lock.release()
 
     def _write_header(self):
+        """
+        Writes the header information to the shared memory, including class name, shape, and dtype of the ndarray.
+        """
         header = json.dumps(f'{self._CLASS_NAME}~{self._shape}~{self._dtype}').encode('utf-8')
         place_holder = ' ' * (self._READ_OFFSET - len(header))
 
@@ -453,6 +487,10 @@ class SharedNdarray:
         self._lock.release()
 
     def _read_header(self):
+        """
+        Reads the header information from the shared memory to determine the array's shape and dtype.
+        """
+
         self._lock.acquire()
         _decoded_header = bytes(self._shared_memory.buf[:self._READ_OFFSET]).decode('utf-8').split('\x00')[0]
         self._lock.release()
@@ -467,9 +505,17 @@ class SharedNdarray:
             self._size = np.prod(self._shape) * bytesize
 
     def close(self):
+        """
+        Closes the shared memory segment and releases resources.
+        """
+
         self._shared_memory.close()
 
     def terminate(self):
+        """
+        Attempts to close and unlink the shared memory segment, ensuring clean-up.
+        """
+
         timeout = 0
         while self.is_alive() and timeout < 10:
             self._shared_memory.close()
@@ -479,6 +525,13 @@ class SharedNdarray:
             warnings.warn(f"An unknown error occurred that caused the SharedBuffer {self.name} cannot be destroyed.")
 
     def is_alive(self):
+        """
+        Checks if the shared memory segment is still accessible.
+
+        Returns:
+            bool: True if accessible, False otherwise.
+        """
+
         try:
             tmp_buffer = shared_memory.SharedMemory(name=self._name, create=False)
             is_alive = True
