@@ -1,19 +1,42 @@
 import json
+import numpy as np
 import traceback
-from time import sleep
 import warnings
 from multiprocessing import shared_memory, Lock
-
-import numpy as np
+from time import sleep
 
 
 class SharedBuffer:
+    """
+    The SharedBuffer class allows for the sharing of data with dynamic size and structure between processes.
+    It utilizes the multiprocessing.shared_memory.SharedMemory module. This class is ideal for creating a shared
+    data index where all data of a process and their addresses are listed. It's not optimized for high-speed or
+    high-frequency data transfers.
+
+    Used as the backend data structure of the SharedDict class .
+    """
+
     _CLASS_NAME = 'SharedBuffer'
     _MAX_BUFFER_SIZE = 2 ** 24  # Maximum shared memory: 16 MB
     _READ_OFFSET = len(_CLASS_NAME) + 1  # The first 30 bytes represents the valid size of the shared buffer
     _LOCK_OFFSET = 1  # The next byte represents the lock status of the shared buffer
 
-    def __init__(self, name, lock, use_RWLock = False, data=None, size=None, create=True):
+    def __init__(self, name, lock, use_RWLock=False, data=None, size=None, create=True):
+        """
+        Initializes the SharedBuffer object.
+
+        Parameters:
+            name (str): The name of the shared memory segment.
+            lock (multiprocessing.Lock): A lock object to ensure thread-safe operations.
+            use_RWLock (bool): If set to True, it enables the use of read-write lock mechanism.
+            data (any, optional): Initial data to write into the shared memory.
+            size (int, optional): The size of the shared memory. If not specified, it's calculated based on the data.
+            create (bool): If True, a new shared memory segment is created. Otherwise, an existing segment is used.
+
+        Raises:
+            ValueError: If required parameters are missing or incorrect.
+        """
+
         self._size = None
         self._name = name
         self._lock = lock
@@ -73,6 +96,11 @@ class SharedBuffer:
         self.close()
 
     def _write_header(self):
+        """
+        Writes the header information to the shared memory. This includes the class name and initial settings.
+        It's a private method, used internally during initialization and write operations.
+        """
+
         lock_acquired = self._lock.acquire(timeout=0.1)
         if not lock_acquired:
             warnings.warn(f'[{self._CLASS_NAME} - {self._name}] TIMEOUT ERROR; Failed to interact with shared memory')
@@ -80,6 +108,11 @@ class SharedBuffer:
         self._lock.release()
 
     def _read_header(self):
+        """
+        Reads the header information from the shared memory. This is used to verify the type of shared memory being interacted with.
+        It's a private method.
+        """
+
         lock_acquired = self._lock.acquire(timeout=0.1)
         if not lock_acquired:
             warnings.warn(
@@ -89,15 +122,35 @@ class SharedBuffer:
         return identity_string
 
     def _read_lockbyte(self):
+        # private method for reading the lock status of the shared memory in the buffer header (self._READ_OFFSET)
+
         byte_data = bytes(self._shared_memory.buf[self._READ_OFFSET:(self._READ_OFFSET + self._LOCK_OFFSET)])
         lock_status = byte_data.decode('utf-8')  # 'w' or 'r' or ' ' or '\x00'
         return lock_status
 
     def _write_lockbyte(self, lock_status):
+        # private method for updating buffer header (self._READ_OFFSET)
+
         byte_data = lock_status.encode('utf-8')
         self._shared_memory.buf[self._READ_OFFSET:(self._READ_OFFSET + self._LOCK_OFFSET)] = byte_data
 
+
     def aquire_RWlock(self, operation, timeout=1000):
+
+        """
+        Acquires the read-write lock for either reading or writing operations.
+
+        Parameters:
+            operation (str): 'w' for write, 'r' for read.
+            timeout (int): The maximum time to wait for acquiring the lock.
+
+        Returns:
+            bool: True if the lock is acquired, False otherwise.
+
+        Raises:
+            ValueError: If an invalid operation is specified.
+        """
+
         if operation not in ['w', 'r']:
             raise ValueError(f'[{self._CLASS_NAME} - {self._name}] Invalid lock status')
         spin_count = 0
@@ -121,17 +174,39 @@ class SharedBuffer:
         return lock_acquired
 
     def release_RWlock(self):
+        """
+        Releases the read-write lock. Should be called after completing a read or write operation.
+        """
+
         self._write_lockbyte(' ')
 
     @property
     def name(self):
+        """
+        Returns:
+            str: The name of the shared memory segment. Useful for identifying the shared buffer.
+        """
         return self._name
 
     @property
     def size(self):
+        """
+        Returns:
+            int: The size of the data area in the shared memory segment (excluding header and lock areas).
+        """
         return self._size
 
     def write(self, data):
+        """
+        Writes data to the shared memory.
+
+        Parameters:
+            data (any): The data to be written into the shared memory. It should be serializable.
+
+        Raises:
+            Warning: If there's a timeout or failure in acquiring the lock for writing.
+        """
+
         if not self._use_RWLock:
             lock_acquired = self._lock.acquire(timeout=0.1)
         else:
@@ -141,7 +216,8 @@ class SharedBuffer:
             self._shared_memory.buf[(self._READ_OFFSET + self._LOCK_OFFSET):] = b'\x00' * self._size
             if data is not None:
                 byte_data = json.dumps(data).encode('utf-8')
-                self._shared_memory.buf[(self._READ_OFFSET + self._LOCK_OFFSET):(self._READ_OFFSET + self._LOCK_OFFSET + len(byte_data))] = byte_data
+                self._shared_memory.buf[(self._READ_OFFSET + self._LOCK_OFFSET):(
+                            self._READ_OFFSET + self._LOCK_OFFSET + len(byte_data))] = byte_data
 
             if not self._use_RWLock:
                 self._lock.release()
@@ -150,8 +226,17 @@ class SharedBuffer:
         else:
             warnings.warn(f'[{self._CLASS_NAME} - {self._name}] TIMEOUT ERROR; Failed to write data from shared memory')
 
-
     def read(self):
+        """
+        Reads data from the shared memory.
+
+        Returns:
+            any: The data read from the shared memory, or None if no data is found or in case of a read error.
+
+        Raises:
+            Warning: If there's a timeout or failure in acquiring the lock for reading.
+        """
+
         data = None
         if not self._use_RWLock:
             lock_acquired = self._lock.acquire(timeout=0.1)
@@ -181,17 +266,35 @@ class SharedBuffer:
         return data
 
     def clear(self):
+        """
+        Clears the data in the shared memory. This is equivalent to writing None.
+        """
+
         self.write(None)
 
     def close(self):
+        """
+        Closes the shared memory segment. It should be called to free resources when the shared memory is no longer needed.
+        """
+
         self._shared_memory.close()
 
     def terminate(self):
+        """
+        Clears the shared memory and unlinks it. This should be used to completely remove the shared memory segment.
+        """
+
         self.clear()
         self.close()
         self._shared_memory.unlink()
 
     def is_alive(self):
+        """
+        Checks if the shared memory segment is still accessible.
+
+        Returns:
+            bool: True if the shared memory segment is accessible, False otherwise.
+        """
         try:
             tmp_buffer = shared_memory.SharedMemory(self._name)
             tmp_buffer.close()
