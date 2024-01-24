@@ -159,14 +159,18 @@ class StreamingCompiler(AbstractCompiler):
             self.error('{} is not registered for streaming'.format(buffer_name))
 
     def _streaming_setup(self):
-        if_streaming = self.get_state_from(self._trigger_minion, 'StreamToDisk')
-        if self.watch_state('StreamToDisk', if_streaming):  # Triggered at the onset and the end of streaming
-            if if_streaming:
-                err = self._prepare_streaming()
-                if not err:
-                    self._start_streaming()
-            else:  # close all files before streaming stops
-                self._stop_streaming()
+        is_streaming = self.get_state_from(self._trigger_minion, 'StreamToDisk')
+        if self._check_should_stream():  # check if the compiler should be involved in streaming
+            if self.watch_state('StreamToDisk', is_streaming):  # Triggered at the onset and the end of streaming
+                if is_streaming:
+                    err = self._prepare_streaming()
+                    if not err:
+                        self._start_streaming()
+                else:  # close all files before streaming stops
+                    self._stop_streaming()
+
+    def _check_should_stream(self):
+        return True
 
     def _prepare_streaming(self):
         err = False
