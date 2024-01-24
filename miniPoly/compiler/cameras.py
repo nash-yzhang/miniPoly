@@ -130,10 +130,14 @@ class TISCameraCompiler(StreamingCompiler):
             self.set_streaming_state('FrameCount', 0)
 
     def should_stream(self):
-        if self._params['CameraName'] in self.get_state_from(self._trigger_minion, 'SteamingDevices'):
-            return True
-        else:
+        device_list = self.get_state_from(self._trigger_minion, 'StreamingDevices')
+        if device_list is None:
             return False
+        else:
+            if self._params['CameraName'] in device_list:
+                return True
+            else:
+                return False
 
     # def _data_streaming(self, frame_time, frame):
     #     if self.streaming:
