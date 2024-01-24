@@ -160,7 +160,7 @@ class StreamingCompiler(AbstractCompiler):
 
     def _streaming_setup(self):
         is_streaming = self.get_state_from(self._trigger_minion, 'StreamToDisk')
-        if self._check_should_stream():  # check if the compiler should be involved in streaming
+        if self.should_stream():  # check if the compiler should be involved in streaming
             if self.watch_state('StreamToDisk', is_streaming):  # Triggered at the onset and the end of streaming
                 if is_streaming:
                     err = self._prepare_streaming()
@@ -169,7 +169,7 @@ class StreamingCompiler(AbstractCompiler):
                 else:  # close all files before streaming stops
                     self._stop_streaming()
 
-    def _check_should_stream(self):
+    def should_stream(self):
         return True
 
     def _prepare_streaming(self):
