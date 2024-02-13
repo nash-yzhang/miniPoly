@@ -151,7 +151,7 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
                 if type != 'all':
                     if i[0] == type:
                         try:
-                            self.create_streaming_state(i[2], list(self.program[i[2]].astype(float)))
+                            self.create_streaming_state(i[2], list(self.program[i[2]].astype(float)),shared=True)
                         except KeyError:
                             self.warning(f'Uniform {i[2]} has not been set')
                             if i[1] == 'vec2':
@@ -161,13 +161,13 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
                             elif i[1] == 'vec4':
                                 self.create_streaming_state(i[2], [0, 0, 0, 0])
                             else:
-                                self.create_streaming_state(i[2], 0)
+                                self.create_streaming_state(i[2], 0,shared=True)
                         except:
                             self.error(f'Error in creating shared state for uniform: {i[2]}\n{traceback.format_exc()}')
                         self._shared_uniform_states.append(i[2])
                 else:
                     if i[0] not in ['varying', 'constant']:
-                        self.create_streaming_state(i[2], self.program[i[2]])
+                        self.create_streaming_state(i[2], self.program[i[2]],shared=True)
                         self._shared_uniform_states.append(i[2])
 
     def check_variables(self):
