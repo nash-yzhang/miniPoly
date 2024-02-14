@@ -75,6 +75,7 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
                                    trigger_minion=trigger_minion)  # self.VS = None
         self.FS = None
         self.program = None
+        self._shared_uniform_states = []
 
         if FSFn is not None:
             self._FSFn = FSFn
@@ -97,7 +98,6 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
 
         self.create_shared_buffer('FBO', np.zeros((*self._stream_out_size, 3), dtype=np.uint8))
 
-        self._shared_uniform_states = []
 
         # Protocol execution related params
         self.watch_state('runSignal', False)  # create a runSignal watcher, runSignal is a shared state from GUI
@@ -129,6 +129,7 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
         self.FS = self.load_FS(self._FSFn)
         # if self.VS is not None and self.FS is not None:
         if self.FS is not None:
+            self.remove_shared_uniform_state()
             self.program = gloo.Program(self.VS, self.FS)
             self.program['a_position'] = gloo.VertexBuffer(self._vpos)
             self.program['u_resolution'] = (self.size[0], self.size[1])
@@ -169,6 +170,10 @@ class ShaderStreamer(app.Canvas, StreamingCompiler):
                     if i[0] not in ['varying', 'constant']:
                         self.create_streaming_state(i[2], self.program[i[2]],shared=True)
                         self._shared_uniform_states.append(i[2])
+
+    def remove_shared_uniform_state(self):
+        for i in self._shared_uniform_states:
+            self.remove_streaming_state(self.name,i)
 
     def check_variables(self):
         redundant_variables = list(self.program._pending_variables.keys())
