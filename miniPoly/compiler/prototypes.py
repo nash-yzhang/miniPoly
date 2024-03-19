@@ -237,14 +237,13 @@ class StreamingCompiler(AbstractCompiler):
 
     def _start_streaming(self):
         # reset buffered state
-        for state_name in self._streaming_states:
-            self.watch_state(state_name, None)
         # Create the state csv file
         self._state_stream_handler = open(self._state_stream_fn, 'w', newline='')
         self._state_stream_writer = csv.writer(self._state_stream_handler)
         name_row = ['Time']
         for state_name in self._streaming_states:
             name_row.append(f"{self.name}_{state_name}")
+            self.watch_state(state_name, None)
         self._state_stream_writer.writerow(name_row)
 
         # Create the buffer files
@@ -297,6 +296,7 @@ class StreamingCompiler(AbstractCompiler):
 
             if state_changed:
                 self._state_stream_writer.writerow(val_row)
+                self._state_stream_handler.flush()
                 for buf_name, v in self._streaming_buffers.items():
                     if v[1] is None or v[1] == 'binary':
                         self._buffer_streaming_handle[buf_name][0].write(bytearray(v[0]))
