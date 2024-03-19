@@ -305,7 +305,7 @@ class StreamingCompiler(AbstractCompiler):
             if self._timer_minion != self.name:
                 return self.get_state_from(self._timer_minion, 'timestamp') / 1000
             else:
-                return self.get_streaming_state('timestamp') / 1000
+                return self.get_state('timestamp') / 1000
         else:
             return time.perf_counter()
 
