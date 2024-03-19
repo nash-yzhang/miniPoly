@@ -284,21 +284,21 @@ class StreamingCompiler(AbstractCompiler):
         if self.streaming:
             t = self.get_timestamp() - self._streaming_start_time
             val_row = [t]
-            tt = time.perf_counter()
-            n = 0
+            state_changed = False
             for state_name in self._streaming_states:
-                val_row.append(self.get_streaming_state(state_name))
-                n += 1
-            self._state_stream_writer.writerow(val_row)
-            # print(f"Elapsed: {(time.perf_counter() - tt) * 1000} ms for {n} states")
+                state_val = self.get_streaming_state(state_name)
+                if self.watch_state(state_name, state_val):
+                    state_changed = True
+                val_row.append(state_val)
 
-            for buf_name, v in self._streaming_buffers.items():
-                if v[1] is None or v[1] == 'binary':
-                    self._buffer_streaming_handle[buf_name][0].write(bytearray(v[0]))
-                elif v[1] == 'movie':
-                    self._buffer_streaming_handle[buf_name][0].write(v[0].repeat(3,axis=2))
-                else:
-                    pass
+            if state_changed:
+                for buf_name, v in self._streaming_buffers.items():
+                    if v[1] is None or v[1] == 'binary':
+                        self._buffer_streaming_handle[buf_name][0].write(bytearray(v[0]))
+                    elif v[1] == 'movie':
+                        self._buffer_streaming_handle[buf_name][0].write(v[0].repeat(3,axis=2))
+                    else:
+                        pass
 
     def get_timestamp(self):
         if self._timer_minion is not None:
