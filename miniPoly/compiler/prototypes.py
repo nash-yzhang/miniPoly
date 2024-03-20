@@ -70,6 +70,8 @@ class StreamingCompiler(AbstractCompiler):
         self._shared_states = []
         self._shared_buffers = []
 
+        self._last_flush_time = 0
+
         # Initializing saving parameters and create the corresponding shared state to receive GUI control
         self.saving_param = {'StreamToDisk': False,
                              'SaveDir': None,
@@ -296,7 +298,9 @@ class StreamingCompiler(AbstractCompiler):
 
             if state_changed:
                 self._state_stream_writer.writerow(val_row)
-                self._state_stream_handler.flush()
+                if t-self._last_flush_time > 1:  # flush every second
+                    self._state_stream_handler.flush()
+                    self._last_flush_time = t
                 for buf_name, v in self._streaming_buffers.items():
                     if v[1] is None or v[1] == 'binary':
                         self._buffer_streaming_handle[buf_name][0].write(bytearray(v[0]))
