@@ -83,6 +83,7 @@ class TISCameraCompiler(StreamingCompiler):
         buffer_name = f"frame_{self._params['VideoFormat']}".replace(' ', '_')
         self.camera.SetContinuousMode(0)
         self.camera.StartLive(0)
+        self.camera.SetFrameRate(200)
         self.camera.SnapImage()
         frame = self.camera.GetImage()
 
