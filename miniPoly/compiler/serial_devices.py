@@ -8,6 +8,8 @@ import usb.core
 import usb.util
 
 from miniPoly.compiler.prototypes import AbstractCompiler, StreamingCompiler
+from miniPoly.util.qnum import qn
+
 
 class PololuServoInterface(StreamingCompiler):
     MOUSE_SERVO_DISTANCE = 150 # distance between the mouse and the servo in mm
@@ -580,6 +582,92 @@ class OMSInterface(StreamingCompiler):
         except:
             self.debug('OMS device timeout')
             return None, None
+
+    def on_close(self):
+        self.set_state('status', -1)
+
+
+class OMSDuo(StreamingCompiler):
+
+    def __init__(self, *args, VID=[], PID=[], device_coordinates=[], timeout=1, mw_size=1, **kwargs):
+        # device_coordinates: Nx3 array, N == len(VID) == len(PID)
+        super(OMSDuo, self).__init__(*args, **kwargs)
+        if any([len(VID) == 0, len(PID) == 0, len(device_coordinates) == 0]):
+            raise ValueError('VID and PID must be set')
+        else:
+            if len(VID) != len(PID) != len(device_coordinates):
+                raise ValueError('VID, PID and device_coordinate must have the same length')
+            else:
+                self._VID = VID
+                self._PID = PID
+                self._d_coord = qn.qn(device_coordinates)
+                self._d_vec_up = self._d_coord.up.normalize
+                self._d_vec_right = self._d_coord.right.normalize
+                self.n_device = len(VID)
+
+        self.devices = []
+        self._endpoints = []
+
+        for v, p in zip(self._VID, self._PID):
+            device = usb.core.find(idVendor=v, idProduct=p)
+            if device is not None:
+                device.set_configuration()
+                endpoint = device[0][(0, 0)][0]
+                self.devices.append(device)
+                self._endpoints.append(endpoint)
+            else:
+                raise ValueError(f'Device not found. VID: {v}, PID: {p}')
+
+        self._timeout = timeout
+        self._mw_size = mw_size
+        self._pos_buffer = np.zeros((self._mw_size, 2,self.n_device))
+
+        # self.create_streaming_state('rotation', [0., 0., 0., 1.], shared=False, use_buffer=False)  # [speed, x, y, z]
+
+    def on_time(self, t):
+        try:
+            xs, ys = self._read_devices()
+            if len(xs) == len(ys) == self.n_device:
+                self._pos_buffer = np.roll(self._pos_buffer, -1, axis=0)
+                p = 0
+                for x,y in zip(xs, ys):
+                    self._pos_buffer[-1, 0, p] = x
+                    self._pos_buffer[-1, 1, p] = y
+                    p += 1
+                xPos, yPos = np.nanmean(self._pos_buffer, axis=0)  # xPos: n_device, yPos: n_device
+                motion_vecs = xPos * self._d_vec_right + yPos * self._d_vec_up
+                rotation_axis, rotation_angle = qn.compute_rotation_from_motions(motion_vecs, self._d_coord)
+                rotation_axis = rotation_axis[0].normalize
+                # self.set_streaming_state('rotation', [rotation_angle, rotation_axis['x'][0], rotation_axis['y'][0], rotation_axis['z'][0]])
+                self.info(f'Rotation: {rotation_angle}, {rotation_axis}')
+            else:
+                self.error(f'OMS device data length mismatch: {len(xs)}, {len(ys)}')
+        except:
+            print(traceback.format_exc())
+
+        super().on_time(t)
+
+    def _read_devices(self):
+        xs, ys = [], []
+        try:
+            for device,endpoint in zip(self.devices, self._endpoints):
+                data = device.read(endpoint.bEndpointAddress, endpoint.wMaxPacketSize, self._timeout)
+                if data is not None:
+                    x = data[2]
+                    y = data[4]
+                    if x > 127:
+                        x = (x - 256) / 128
+                    else:
+                        x = (x + 1) / 128
+                    if y > 127:
+                        y = (y - 256) / 128
+                    else:
+                        y = (y + 1) / 128
+                    xs.append(x)
+                    ys.append(y)
+        except:
+            self.info(traceback.format_exc())
+        return xs, ys
 
     def on_close(self):
         self.set_state('status', -1)
