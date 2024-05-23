@@ -8,7 +8,7 @@ import usb.core
 import usb.util
 
 from miniPoly.compiler.prototypes import AbstractCompiler, StreamingCompiler
-from miniPoly.util.qnum import qn
+import miniPoly.util.qnum as qn
 
 
 class PololuServoInterface(StreamingCompiler):
