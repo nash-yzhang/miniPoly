@@ -683,7 +683,6 @@ class OMSDuo(StreamingCompiler):
                 rotation_axis, rotation_angle = qn.compute_rotation_from_motions(speed_qn_arr, self._d_coord)
                 self.rotation_vec = [rotation_angle, rotation_axis['x'][0], rotation_axis['y'][0],
                                      rotation_axis['z'][0]]
-                print(self.rotation_vec)
                 return True
             else:
                 return False
