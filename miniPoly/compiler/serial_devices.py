@@ -601,6 +601,8 @@ class OMSDuo(StreamingCompiler):
             self._d_vec_up = self._d_coord.up.normalize
             self._d_vec_right = self._d_coord.right.normalize
             self.rotation_vec = np.array([0,0,0,0])
+            self.rotation_axis = qn.qn([0,0,0])
+            self.rotation_speed = 0
 
         self.device = [usb.core.find(idVendor=self._VID[0], idProduct=self._PID[0]),
                        usb.core.find(idVendor=self._VID[1], idProduct=self._PID[1])]
@@ -689,6 +691,8 @@ class OMSDuo(StreamingCompiler):
                 rotation_axis, rotation_angle = qn.compute_rotation_from_motions(speed_qn_arr, self._d_coord)
                 self.rotation_vec = [rotation_angle, rotation_axis['x'][0], rotation_axis['y'][0],
                                      rotation_axis['z'][0]]
+                self.rotation_axis = rotation_axis[0]
+                self.rotation_speed = rotation_angle
                 return True
             else:
                 return False
