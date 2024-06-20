@@ -615,6 +615,9 @@ class OMSDuo(StreamingCompiler):
         self._mw_size = mw_size
         self._pos_buffer = np.zeros((self._mw_size, 4))
 
+        self._init_states()
+
+    def _init_states(self):
         self.create_streaming_state('Rs',0, shared=True, use_buffer=False)
         self.create_streaming_state('Rx',0, shared=True, use_buffer=False)
         self.create_streaming_state('Ry',0, shared=True, use_buffer=False)
@@ -624,14 +627,17 @@ class OMSDuo(StreamingCompiler):
         try:
             should_update = self._read_device()
             if should_update:
-                self.set_streaming_state('Rs', self.rotation_vec[0])
-                self.set_streaming_state('Rx', self.rotation_vec[1])
-                self.set_streaming_state('Ry', self.rotation_vec[2])
-                self.set_streaming_state('Rz', self.rotation_vec[3])
+                self._update_states()
         except:
             print(traceback.format_exc())
 
         super().on_time(t)
+
+    def _update_states(self):
+        self.set_streaming_state('Rs', self.rotation_vec[0])
+        self.set_streaming_state('Rx', self.rotation_vec[1])
+        self.set_streaming_state('Ry', self.rotation_vec[2])
+        self.set_streaming_state('Rz', self.rotation_vec[3])
 
     def _read_device(self):
         should_update = np.array([0, 0])
