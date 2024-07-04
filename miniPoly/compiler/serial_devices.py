@@ -600,7 +600,10 @@ class OMSDuo(StreamingCompiler):
             self._d_coord = qn.qn(device_coordinates)
             self._d_vec_up = self._d_coord.up.normalize
             self._d_vec_right = self._d_coord.right.normalize
+            self.raw_vec = np.array([0,0,0,0])
             self.rotation_vec = np.array([0,0,0,0])
+            self.rotation_axis = qn.qn([0,0,0])
+            self.rotation_speed = 0
 
         self.device = [usb.core.find(idVendor=self._VID[0], idProduct=self._PID[0]),
                        usb.core.find(idVendor=self._VID[1], idProduct=self._PID[1])]
@@ -615,74 +618,97 @@ class OMSDuo(StreamingCompiler):
         self._mw_size = mw_size
         self._pos_buffer = np.zeros((self._mw_size, 4))
 
+        self._init_states()
+
+    def _init_states(self):
         self.create_streaming_state('Rs',0, shared=True, use_buffer=False)
         self.create_streaming_state('Rx',0, shared=True, use_buffer=False)
         self.create_streaming_state('Ry',0, shared=True, use_buffer=False)
         self.create_streaming_state('Rz',0, shared=True, use_buffer=False)
+        self.create_streaming_state('M1x',0, shared=True, use_buffer=False)
+        self.create_streaming_state('M1y',0, shared=True, use_buffer=False)
+        self.create_streaming_state('M2x',0, shared=True, use_buffer=False)
+        self.create_streaming_state('M2y',0, shared=True, use_buffer=False)
 
     def on_time(self, t):
         try:
             should_update = self._read_device()
             if should_update:
-                self.set_streaming_state('Rs', self.rotation_vec[0])
-                self.set_streaming_state('Rx', self.rotation_vec[1])
-                self.set_streaming_state('Ry', self.rotation_vec[2])
-                self.set_streaming_state('Rz', self.rotation_vec[3])
+                self._update_states()
         except:
             print(traceback.format_exc())
 
         super().on_time(t)
 
+    def _update_states(self):
+        self.set_streaming_state('Rs', self.rotation_vec[0])
+        self.set_streaming_state('Rx', self.rotation_vec[1])
+        self.set_streaming_state('Ry', self.rotation_vec[2])
+        self.set_streaming_state('Rz', self.rotation_vec[3])
+        self.set_streaming_state('M1x', self.raw_vec[0])
+        self.set_streaming_state('M1y', self.raw_vec[1])
+        self.set_streaming_state('M2x', self.raw_vec[2])
+        self.set_streaming_state('M2y', self.raw_vec[3])
+
     def _read_device(self):
+        self._pos_buffer = np.roll(self._pos_buffer, -1, axis=0)
+        self._pos_buffer[-1,:] = [0,0,0,0]
         should_update = np.array([0, 0])
         try:
             dev0_data = self.device[0].read(self._endpoint[0].bEndpointAddress, self._endpoint[0].wMaxPacketSize, self._timeout)
             if dev0_data is not None:
                 x0 = dev0_data[2]
+                xs = dev0_data[3]
                 y0 = dev0_data[4]
-                if x0 > 127:
-                    x0 = (x0 - 256)/128
+                ys = dev0_data[5]
+                if xs < 127:
+                    x0 = x0/255
                 else:
-                    x0 = (x0+1)/128
-                if y0 > 127:
-                    y0 = (y0 - 256)/128
+                    x0 = (x0-255)/255
+                if ys < 127:
+                    y0 = -y0/255
                 else:
-                    y0 = (y0+1)/128
+                    y0 = (255-y0)/255
 
                 self._pos_buffer[-1, 0] = x0
                 self._pos_buffer[-1, 1] = y0
                 should_update[0] = 1
             else:
-                self._pos_buffer[-1, :2] = self._pos_buffer[-2, :2]
+                # x0, y0 = 0, 0
+                self._pos_buffer[-1, :2] = 0#self._pos_buffer[-2, :2]
 
             dev1_data = self.device[1].read(self._endpoint[1].bEndpointAddress, self._endpoint[1].wMaxPacketSize, self._timeout)
             if dev1_data is not None:
                 x1 = dev1_data[2]
+                xs = dev1_data[3]
                 y1 = dev1_data[4]
-                if x1 > 127:
-                    x1 = (x1 - 256)/128
+                ys = dev1_data[5]
+                if xs < 127:
+                    x1 = x1/255
                 else:
-                    x1 = (x1+1)/128
-                if y1 > 127:
-                    y1 = (y1 - 256)/128
+                    x1 = (x1-255)/255
+                if ys < 127:
+                    y1 = -y1/255
                 else:
-                    y1 = (y1+1)/128
+                    y1 =  (255-y1)/255
 
                 self._pos_buffer[-1, 2] = x1
                 self._pos_buffer[-1, 3] = y1
                 should_update[1] = 1
             else:
-                self._pos_buffer[-1, 2:] = self._pos_buffer[-2, 2:]
+                self._pos_buffer[-1, 2:] = 0
 
-            if np.sum(should_update)>0:
-                self._pos_buffer = np.roll(self._pos_buffer, -1, axis=0)
+            if np.sum(should_update)>0 or np.sum(self._pos_buffer) != 0:
                 xPos0, yPos0 = np.nanmean(self._pos_buffer[:, :2], axis=0)
                 xPos1, yPos1 = np.nanmean(self._pos_buffer[:, 2:], axis=0)
+                self.raw_vec = [xPos0, yPos0, xPos1, yPos1]
 
                 speed_qn_arr = np.array([[xPos0], [xPos1]]) * self._d_vec_right + np.array([[yPos0], [yPos1]]) * self._d_vec_up
                 rotation_axis, rotation_angle = qn.compute_rotation_from_motions(speed_qn_arr, self._d_coord)
                 self.rotation_vec = [rotation_angle, rotation_axis['x'][0], rotation_axis['y'][0],
                                      rotation_axis['z'][0]]
+                self.rotation_axis = rotation_axis[0]
+                self.rotation_speed = rotation_angle
                 return True
             else:
                 return False

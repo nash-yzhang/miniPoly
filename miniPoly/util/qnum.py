@@ -489,8 +489,8 @@ def compute_rotation_from_motions(motion_qn_arr, location_qn_arr):
         motion_qn_arr = motion_qn_arr[:2]
         location_qn_arr = location_qn_arr[:2]
 
-    rec_rotation_axis = qcross(motion_qn_arr[1], motion_qn_arr[0]).normalize
-    rot_angle = np.arcsin(1./np.nanmean(rec_rotation_axis.component_at(location_qn_arr).matrixform/motion_qn_arr.matrixform))*2
+    rec_rotation_axis = qcross(motion_qn_arr[1].imag, motion_qn_arr[0].imag).normalize
+    rot_angle = np.nanmean(rec_rotation_axis.component_at(location_qn_arr).matrixform/motion_qn_arr.matrixform)*np.pi
     return rec_rotation_axis, float(rot_angle)
 
 
