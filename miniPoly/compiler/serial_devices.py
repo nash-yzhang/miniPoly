@@ -618,9 +618,9 @@ class OMSDuo(StreamingCompiler):
         self._init_states()
 
     def _init_states(self):
-        self.create_streaming_state('Vr',0, shared=True, use_buffer=False)
-        self.create_streaming_state('Vx',0, shared=True, use_buffer=False)
-        self.create_streaming_state('Vy',0, shared=True, use_buffer=False)
+        self.create_streaming_state('sR',0, shared=True, use_buffer=False)
+        self.create_streaming_state('sX',0, shared=True, use_buffer=False)
+        self.create_streaming_state('sY',0, shared=True, use_buffer=False)
         self.create_streaming_state('M1x',0, shared=True, use_buffer=False)
         self.create_streaming_state('M1y',0, shared=True, use_buffer=False)
         self.create_streaming_state('M2x',0, shared=True, use_buffer=False)
