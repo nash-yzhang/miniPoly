@@ -8,7 +8,6 @@ import usb.core
 import usb.util
 
 from miniPoly.compiler.prototypes import AbstractCompiler, StreamingCompiler
-import miniPoly.util.qnum as qn
 
 
 class PololuServoInterface(StreamingCompiler):
@@ -590,20 +589,18 @@ class OMSInterface(StreamingCompiler):
 
 class OMSDuo(StreamingCompiler):
 
-    def __init__(self, *args, VID=[], PID=[], device_coordinates=[], timeout=1, mw_size=1, **kwargs):
+    def __init__(self, *args, VID=[], PID=[], device_coordinates=[], device_scale_fac = [1, 1], timeout=1, mw_size=1, **kwargs):
         super(OMSDuo, self).__init__(*args, **kwargs)
         if any([len(VID) != 2,len(PID)!= 2,len(device_coordinates)!= 2]):
             raise ValueError('VID, PID and device_coordinate must have the same length')
         else:
             self._VID = VID
             self._PID = PID
-            self._d_coord = qn.qn(device_coordinates)
-            self._d_vec_up = self._d_coord.up.normalize
-            self._d_vec_right = self._d_coord.right.normalize
+            self._device_scale_fac = device_scale_fac
             self.raw_vec = np.array([0,0,0,0])
-            self.rotation_vec = np.array([0,0,0,0])
-            self.rotation_axis = qn.qn([0,0,0])
-            self.rotation_speed = 0
+            self.sX = 0
+            self.sY = 0
+            self.sR = 0
 
         self.device = [usb.core.find(idVendor=self._VID[0], idProduct=self._PID[0]),
                        usb.core.find(idVendor=self._VID[1], idProduct=self._PID[1])]
@@ -621,10 +618,9 @@ class OMSDuo(StreamingCompiler):
         self._init_states()
 
     def _init_states(self):
-        self.create_streaming_state('Rs',0, shared=True, use_buffer=False)
-        self.create_streaming_state('Rx',0, shared=True, use_buffer=False)
-        self.create_streaming_state('Ry',0, shared=True, use_buffer=False)
-        self.create_streaming_state('Rz',0, shared=True, use_buffer=False)
+        self.create_streaming_state('Vr',0, shared=True, use_buffer=False)
+        self.create_streaming_state('Vx',0, shared=True, use_buffer=False)
+        self.create_streaming_state('Vy',0, shared=True, use_buffer=False)
         self.create_streaming_state('M1x',0, shared=True, use_buffer=False)
         self.create_streaming_state('M1y',0, shared=True, use_buffer=False)
         self.create_streaming_state('M2x',0, shared=True, use_buffer=False)
@@ -641,10 +637,9 @@ class OMSDuo(StreamingCompiler):
         super().on_time(t)
 
     def _update_states(self):
-        self.set_streaming_state('Rs', self.rotation_vec[0])
-        self.set_streaming_state('Rx', self.rotation_vec[1])
-        self.set_streaming_state('Ry', self.rotation_vec[2])
-        self.set_streaming_state('Rz', self.rotation_vec[3])
+        self.set_streaming_state('sR', self.sR)
+        self.set_streaming_state('sX', self.sX)
+        self.set_streaming_state('sY', self.sY)
         self.set_streaming_state('M1x', self.raw_vec[0])
         self.set_streaming_state('M1y', self.raw_vec[1])
         self.set_streaming_state('M2x', self.raw_vec[2])
@@ -674,7 +669,6 @@ class OMSDuo(StreamingCompiler):
                 self._pos_buffer[-1, 1] = y0
                 should_update[0] = 1
             else:
-                # x0, y0 = 0, 0
                 self._pos_buffer[-1, :2] = 0#self._pos_buffer[-2, :2]
 
             dev1_data = self.device[1].read(self._endpoint[1].bEndpointAddress, self._endpoint[1].wMaxPacketSize, self._timeout)
@@ -703,12 +697,10 @@ class OMSDuo(StreamingCompiler):
                 xPos1, yPos1 = np.nanmean(self._pos_buffer[:, 2:], axis=0)
                 self.raw_vec = [xPos0, yPos0, xPos1, yPos1]
 
-                speed_qn_arr = np.array([[xPos0], [xPos1]]) * self._d_vec_right + np.array([[yPos0], [yPos1]]) * self._d_vec_up
-                rotation_axis, rotation_angle = qn.compute_rotation_from_motions(speed_qn_arr, self._d_coord)
-                self.rotation_vec = [rotation_angle, rotation_axis['x'][0], rotation_axis['y'][0],
-                                     rotation_axis['z'][0]]
-                self.rotation_axis = rotation_axis[0]
-                self.rotation_speed = rotation_angle
+                # Adapted from https://github.com/sn-lab/MouseGoggles/blob/main/Other%20Hardware/Spherical%20Treadmill/ADNS3080_Mouse_Controller_V5/ADNS3080_Mouse_Controller_V5.ino
+                self.sX = yPos0 * self._device_scale_fac[0]
+                self.sY = yPos1 * self._device_scale_fac[1]
+                self.sR = (xPos0 * self._device_scale_fac[1] + xPos1 * self._device_scale_fac[1])*0.5
                 return True
             else:
                 return False
