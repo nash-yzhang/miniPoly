@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 
-with open('requirements.txt', encoding='utf-16-le') as rqr:
+with open('requirements.txt', encoding='utf-8') as rqr:
     pkg_rqr = rqr.read().lstrip('\ufeff').split('\n')
 
 
