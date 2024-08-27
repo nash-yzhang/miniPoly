@@ -37,5 +37,5 @@ qt-material==2.14
 
 tifffile==2023.3.15
 Pillow==9.5.0
-scipy==1.10.0
+scipy>=1.10.0
 matplotlib==3.7.1
