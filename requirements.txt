@@ -20,7 +20,7 @@ pytz==2022.7.1
 six==1.16.0
 virtualenv==20.17.1
 
-numpy==2.1.0
+numpy
 opencv-python==4.7.0.72
 openpyxl==3.0.10
 pandas==1.5.2
