@@ -7,6 +7,24 @@ from miniPoly.core.minion import BaseMinion, MinionLogHandler, LOG_LVL_LOOKUP_TA
 
 import os
 
+class ColorFormatter(logging.Formatter):
+    # Define color codes for different log levels
+    COLORS = {
+        'DEBUG': '\033[92m',    # Green
+        'INFO': '\033[97m',     # Default color
+        'WARNING': '\033[93m',  # Yellow
+        'ERROR': '\033[91m',    # Red
+        'CRITICAL': '\033[95m'  # Magenta
+    }
+    RESET = '\033[0m'  # Reset color
+
+    def format(self, record):
+        log_color = self.COLORS.get(record.levelname, self.RESET)
+        record.levelname = f"{log_color}{record.levelname}{self.RESET}"
+        record.name = f"{log_color}{record.name}{self.RESET}"
+        record.msg = f"{log_color}{record.msg}{self.RESET}"
+        return super().format(record)
+
 class LoggerMinion(BaseMinion, QueueListener):
     DEFAULT_LOGGER_CONFIG = {
         'version': 1,
@@ -28,12 +46,14 @@ class LoggerMinion(BaseMinion, QueueListener):
         'respect_handler_level': True,
         'formatters': {
             'detailed': {
-                'class': 'logging.Formatter',
+                # 'class': 'logging.Formatter',
+                '()': ColorFormatter,
                 'format': '%(asctime)-4s  %(name)-8s %(levelname)-8s %(processName)-10s %(message)s'
             },
             'simple': {
-                'class': 'logging.Formatter',
-                'format': '%(name)-8s %(levelname)-8s %(processName)-10s %(message)s'
+                # 'class': 'logging.Formatter',
+                '()': ColorFormatter,
+                'format': '%(asctime)-4s   %(levelname)-8s %(name)-8s   %(message)s'
             }
         },
         'handlers': {
