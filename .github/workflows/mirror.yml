@@ -1,0 +1,40 @@
+# Mirrors this repository to the MPCDF GitLab instance after every push to main.
+#
+# Direction matters: GitHub is the only place anyone commits to, and this job pushes
+# outward. The reverse arrangement -- GitLab pulling from GitHub -- is GitLab's "pull
+# mirroring" feature, which requires a Premium licence, so it cannot be relied on for
+# an institutional instance whose tier is not ours to choose. Pushing from here works
+# on any tier.
+#
+# Because the push is one-way and forced, never commit to the GitLab copy: anything
+# committed there is overwritten on the next push to GitHub.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   MPCDF_GITLAB_TOKEN  a GitLab project access token with the `write_repository`
+#                       scope and at least the Maintainer role
+#   MPCDF_GITLAB_PATH   the project path without the .git suffix, e.g. "yzhang/miniPoly"
+name: mirror to MPCDF GitLab
+
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: a shallow clone cannot be pushed to a fresh remote.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push branch and tags to GitLab
+        env:
+          GITLAB_TOKEN: ${{ secrets.MPCDF_GITLAB_TOKEN }}
+          GITLAB_PATH: ${{ secrets.MPCDF_GITLAB_PATH }}
+        run: |
+          remote="https://oauth2:${GITLAB_TOKEN}@gitlab.mpcdf.mpg.de/${GITLAB_PATH}.git"
+          git push --force "$remote" HEAD:refs/heads/main
+          git push --force --tags "$remote"

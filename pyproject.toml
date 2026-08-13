@@ -1,0 +1,147 @@
+[project]
+name = "miniPoly"
+version = "0.1.0"
+description = "A minimalistic Python package for multipurpose multiprocessing program building"
+readme = "README.md"
+license = { file = "LICENSE" }
+# 3.11, for `tomllib`: miniPoly/launcher/config.py reads a rig configuration with it, and
+# the alternative -- a `tomli` dependency plus a version-switched import for the benefit
+# of 3.9 and 3.10 -- buys compatibility nobody was using. The floor was already 3.11 in
+# everything but this line: .python-version, the README badge and the one application
+# built on this library all say 3.11.
+requires-python = ">=3.11"
+authors = [{ name = "Yue Zhang", email = "yue.zhang@bi.mpg.de" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "numpy",
+    # pd.read_excel is called from compiler/graphics.py and util/gui.py, so a
+    # base install could not open an .xlsx protocol file.
+    "openpyxl>=3.0",
+    "opencv-python>=4.7",
+    "pandas>=1.5",
+    "pyfirmata2>=2.4",
+    "PyQt5>=5.15",
+    "pyserial>=3.5",
+    "pyusb>=1.2",
+    # Capped at 2.14, which is the last release that supports PyQt5. From 2.15 the
+    # binding detection in qt_material/__init__.py only has PySide6 and PyQt6 branches
+    # and PyQt5 falls into the `else`, which sets GUI = False and warns. It does not
+    # raise: apply_stylesheet still "succeeds", but no fonts load and the `icon:` search
+    # path is never registered, so every themed icon fails to open at runtime. Lifting
+    # this cap means porting AbstractGUIAPP and the application's GUIs to PyQt6.
+    "qt-material==2.14",
+    "vispy>=0.12",
+    # core/minion.py: BaseMinion's heartbeat counter (roadmap item 16) increments through
+    # atomics.atomicview so a peer can read it with a plain, lock-free byte slice. Moved
+    # here from [dependency-groups] dev on 2026-08-05, when item 16 became the first
+    # thing in this codebase to actually run atomics rather than only measure it.
+    "atomics>=1.0",
+]
+
+[project.optional-dependencies]
+# Not imported by miniPoly itself, but shipped with the old requirements.txt and
+# commonly used by the scripts built on top of it (APP/, external_tools/).
+full = [
+    "h5py>=3.8",
+    "matplotlib>=3.6",
+    "paramiko>=3.2",
+    "Pillow>=9.5",
+    "pyqtgraph>=0.13",
+    "scipy>=1.10",
+    "tifffile>=2023.3.15",
+]
+
+[project.urls]
+Homepage = "https://github.com/nash-yzhang/miniPoly"
+Repository = "https://github.com/nash-yzhang/miniPoly"
+
+# The pin removed with miniPoly/tisgrabber is back, for a different reason.
+#
+# It first existed because tisgrabber shipped a vendor DLL for TISCameraCompiler; both
+# moved out to miniPolyApp (CaImg_App.core.tiscamera), and with them went the only
+# Windows-only binary this library carried. The note left here said to reinstate the pin
+# if a dependency ever reintroduced one. One has, from the other direction: `pyqt5-qt5`
+# stopped publishing `win_amd64` wheels after 5.15.2, so an unconstrained resolution picks
+# a recent version that has manylinux and macOS wheels and *no* Windows wheel at all.
+#
+# The failure is not at resolution time, which is what makes it worth a comment: `uv lock`
+# succeeds, the lockfile looks fine, and `uv sync` then fails on Windows -- the only
+# platform this library is developed and run on -- with "doesn't have a source distribution
+# or wheel for the current platform". Declaring Windows a required environment makes uv
+# resolve a version that actually installs there, and makes a future recurrence a lock
+# failure instead of an install failure.
+[tool.uv]
+required-environments = ["sys_platform == 'win32' and platform_machine == 'AMD64'"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["miniPoly"]
+
+[tool.hatch.build.targets.sdist]
+include = ["miniPoly", "README.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+# The codecs are not imported by miniPoly. They are the candidates
+# tests/test_serialization.py measures for roadmap item 11, and orjson is declared here
+# so `uv sync` cannot prune it -- without it that module still passes but silently stops
+# reporting the comparison the item 11 decision rests on. `atomics` moved to
+# [project.dependencies] with item 16; it is still measured for item 15's lock-correctness
+# comparison in tests/test_core_multiprocess.py, but that no longer needs a dev-only
+# declaration since the base install already carries the package.
+#
+# orjson stays here rather than moving to [dependencies]: roadmap item 11 was settled
+# **against** adopting it. It fixes the same eight numpy dtypes as the `default` hook
+# core/buffer.py now uses, and encodes ~7x faster, but it maps NaN and +-Infinity to
+# `null` -- so they return as None, which is reachable through OMS's np.nanmean states
+# and raises inside dockableGUI.rotate_sphere's np.isnan. `check_non_finite_floats`
+# keeps that comparison on the record, which is the only reason the package is still
+# needed. So miniPoly gained no runtime dependency from Stage 2.
+#
+# msgspec carries a marker because it requires Python >= 3.10 while this project still
+# supports 3.9; like orjson it was measured and *rejected* (item 11), so losing it on
+# a 3.9 interpreter costs nothing.
+dev = [
+    "pytest>=8.0",
+    "orjson>=3.11",
+    "msgspec>=0.21; python_version >= '3.10'",
+]
+
+# Declared so the set has one home, but do NOT install it with `uv sync --only-group
+# docs`: that syncs the project's own .venv down to just these three and takes pytest
+# and PyQt5 out of it. The site is meant to build *without* the project installed --
+# mkdocstrings reads the source through griffe's static analysis rather than importing
+# it, so none of PyQt5, VisPy, OpenCV or pyusb is needed -- so build it in a throwaway
+# environment and leave .venv alone:
+#
+#     uvx --with mkdocs-material --with "mkdocstrings[python]" --with black mkdocs serve
+#
+# Both CI jobs (.github/workflows/docs.yml, .gitlab-ci.yml) install exactly this set
+# with pip, so keep the three in step if you change them.
+#
+# black is not really a docs dependency: mkdocstrings uses it only to pretty-print the
+# rendered signatures, and logs an INFO line when it is absent.
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.24",
+    "black>=24.0",
+]
+
+# An `app-compat` group pinning the rig's numpy 1.26 / pandas 1.5.2 lived here for one day
+# (2026-08-05 to 2026-08-06), with a CI matrix running the suite against both stacks. It
+# is gone because the gap it bridged is gone: the application's protocol parser no longer
+# depends on pandas 1.x `inplace=True` semantics, the rig moved to the same stack the
+# library is developed on, and one environment that is actually shared beats two that are
+# tested separately. See docs/PROJECT_OVERVIEW.md 5.1.

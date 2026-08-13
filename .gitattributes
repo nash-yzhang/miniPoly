@@ -1,0 +1,46 @@
+# Line-ending policy, declared in the repository rather than left to each
+# machine's core.autocrlf.
+#
+# Why this file exists: miniPoly/core/minion.py accumulated *mixed* line endings
+# in the working tree (some lines LF, some CRLF) because an editor wrote LF into
+# a file that had been checked out as CRLF. `git status` reported it as modified
+# while `git diff` showed nothing, since the content is identical once
+# normalised. Pinning the working-tree ending to LF removes the mismatch that
+# makes such a mix possible.
+#
+# The index has always stored LF for every text file here, so this declares the
+# existing state rather than changing it.
+
+# Default: let Git decide what is text, and normalise it to LF in the index.
+* text=auto
+
+# Source and data kept as LF in the working tree too, so a tool that writes LF
+# cannot produce a mixed file.
+*.py        text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.toml      text eol=lf
+*.lock      text eol=lf
+# mkdocs.yml, .gitlab-ci.yml and .github/workflows/*.yml. Added when `git add` warned
+# "LF will be replaced by CRLF" for all four: without a rule here they are checked out
+# CRLF on Windows, which is precisely the state that produced the mixed endings this
+# file exists to prevent. The CI parsers accept either, so this is about the working
+# tree, not the runners.
+*.yml       text eol=lf
+*.yaml      text eol=lf
+.gitignore  text eol=lf
+.python-version text eol=lf
+LICENSE     text eol=lf
+
+# Windows batch files would break with LF endings. None are tracked today; the
+# rule is here so that adding one later does not require remembering this.
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Never touch these. The camera bindings ship prebuilt Windows libraries.
+*.dll       binary
+*.lib       binary
+*.ico       binary
+*.xlsx      binary
+*.avi       binary
+*.bin       binary

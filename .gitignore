@@ -1,0 +1,28 @@
+# byte code and build artefacts
+*.pyc
+__pycache__
+dist
+build
+*.egg-info
+
+# environments and tool state
+.venv
+.pytest_cache
+.idea
+imgui.ini
+
+# runtime output, never source
+#
+# `logs` has no trailing slash on purpose: it matches at any depth, so it covers the
+# repository root, `examples/logs/` from running an example, and anywhere else a
+# LoggerMinion is pointed at a relative default.
+logs
+
+# built docs. mkdocs.yml sets no `site_dir`, so `mkdocs build` writes ./site -- and both
+# CI jobs publish from a throwaway environment, so a local copy is never the one served.
+site
+
+# local-only trees
+__arc__
+APP
+external_tools

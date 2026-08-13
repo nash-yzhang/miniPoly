@@ -1,0 +1,36 @@
+# The suite the README badge points at.
+#
+# Windows, not Linux. This is not a portability compromise -- it is where the library
+# actually runs: PyQt5 GUIs, Dynamixel COM ports, and (until recently) a vendor DLL for
+# the TIS cameras. The 35 checks have only ever been verified on Windows, and running them
+# on ubuntu-latest would mean installing libGL/libEGL/xkbcommon and an X server to test a
+# configuration nobody uses. If the library ever grows a POSIX consumer, add a matrix then.
+#
+# `--frozen` deliberately fails rather than re-resolving: a CI run that silently upgraded a
+# dependency would no longer be testing the environment the lockfile describes.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # No python-version pin: .python-version says 3.11 and uv reads it.
+      - run: uv sync --frozen --group dev
+
+      # Several checks spawn real processes and time them (JOIN_TIMEOUT, DECLARE_DELAY in
+      # tests/test_failure_paths.py). A shared runner is slower and more variable than a
+      # workstation, so if this job goes flaky the timing constants are the first suspect,
+      # not the framework.
+      - run: uv run pytest -q

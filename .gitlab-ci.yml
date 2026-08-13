@@ -1,0 +1,33 @@
+# GitLab Pages build for the MPCDF mirror.
+#
+# This repository's canonical home is GitHub, and .github/workflows/mirror.yml pushes
+# every commit on main here. This job then builds the *same* MkDocs site from the *same*
+# commit, so the MPCDF page and the GitHub page are always the same content -- the two
+# sites cannot say different things, which is the only reason hosting twice is safe.
+#
+# `mpcdf-shared` is the tag carried by every MPCDF-managed shared runner. Without it the
+# job stays queued forever, because MPCDF's runners do not pick up untagged jobs.
+# See https://docs.mpcdf.mpg.de/doc/data/gitlab/gitlabrunners.html
+default:
+  tags:
+    - mpcdf-shared
+
+pages:
+  # MPCDF's default runner image is already Python 3.12; naming it explicitly means the
+  # build does not silently change when their default moves.
+  image: python:3.12
+  script:
+    # Same set as .github/workflows/docs.yml and the `docs` group in pyproject.toml.
+    # No `pip install -e .`: mkdocstrings analyses the source statically through griffe,
+    # so PyQt5, VisPy, OpenCV and pyusb are not needed to render the reference pages.
+    - pip install --quiet mkdocs-material 'mkdocstrings[python]' black
+    # GitLab Pages serves whatever lands in `public/`. Not `--strict`: griffe emits 7
+    # missing-return-annotation warnings that would abort a strict build.
+    - mkdocs build --site-dir public
+  artifacts:
+    paths:
+      - public
+  rules:
+    # Only the default branch publishes. A tag or a stray branch arriving through the
+    # mirror must not overwrite the live site.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

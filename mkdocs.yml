@@ -1,0 +1,84 @@
+site_name: miniPoly
+site_description: A minimalistic Python package for multipurpose multiprocessing program building
+repo_url: https://github.com/nash-yzhang/miniPoly
+
+# The site is published twice -- GitHub Pages and the MPCDF GitLab mirror -- from the
+# same commit. `site_url` names the GitHub one because that is the canonical address:
+# it is what the sitemap and the rel=canonical links point at, so search engines index
+# one of the two rather than treating them as duplicates.
+site_url: https://nash-yzhang.github.io/miniPoly/
+
+theme:
+  name: material
+  logo: assets/minipoly.png
+  favicon: assets/minipoly.png
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - search.suggest
+
+extra_css:
+  - stylesheets/extra.css
+
+docs_dir: docs
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+  # Reads the docstrings straight out of the source, so reference/*.md stays a few
+  # `:::` directives rather than prose that has to be kept in sync by hand.
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            members_order: source
+            docstring_section_style: list
+            separate_signature: true
+            filters: ["!^_"]  # private helpers stay out of the public reference
+
+# PROJECT_OVERVIEW.md stays in docs/ as a repository document, read on GitHub and
+# reviewed alongside the code, but is not part of the site: it is maintainer-facing
+# (defect inventory, roadmap) rather than reader-facing, and its many
+# `../../miniPolyApp/...` links only resolve in a GitHub checkout, not in a built site.
+exclude_docs: |
+  PROJECT_OVERVIEW.md
+
+nav:
+  - Home: index.md
+  - Tutorial: tutorial.md
+  - Architecture: architecture.md
+  - How-to guides:
+      - Write a new device compiler: howto/write-a-compiler.md
+      - Choose a state kind: howto/state-vs-streaming-state.md
+      - Share frame data (SharedNdarray): howto/shared-ndarray-buffers.md
+      - Detect a crashed minion: howto/detect-a-crashed-minion.md
+      - Read multi-process logs: howto/reading-multi-process-logs.md
+      - Shut down a rig cleanly: howto/graceful-shutdown.md
+      - Timer and trigger minions: howto/timer-and-trigger-minions.md
+  - Reference:
+      - core: reference/core.md
+      - compiler: reference/compiler.md
+      - processor: reference/processor.md
+      - launcher: reference/launcher.md
+      - util: reference/util.md

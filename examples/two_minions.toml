@@ -1,0 +1,44 @@
+##############################################################################
+# The rig from examples/two_minions.py, as a configuration file.
+#
+# Same two processes, same tick rate, same connect graph. What changed is that none
+# of it is Python any more: reading one [minion.X] section tells you everything about
+# X, and adding a third minion is four lines here instead of four edits spread across
+# a construct call, a connect call, an attach_logger loop and a run order.
+#
+# Launch:  uv run python examples/two_minions_config.py
+##############################################################################
+
+[app]
+logger = "LOGGER"
+
+# The order processes start in, stated rather than inferred. There is no safe order to
+# guess: entry scripts for the same rig have been observed to disagree about where the
+# logger goes, and inferring one would silently change the other.
+run_order = ["LOGGER", "SENSOR", "FOLLOWER"]
+
+# Where the two log files go, relative to *this file* -- not to whatever directory the
+# process happened to start in. That distinction is the whole reason the key is
+# required; LoggerMinion's own default is the working directory, which is how 463 files
+# totalling 1.3 GB once accumulated inside a source tree.
+log_dir = "logs"
+
+
+[minion.SENSOR]
+# "app" is a plain AbstractAPP: a process with a tick and no GUI, no GL context and no
+# stream. The other kinds are gui, streaming, gl and display.
+kind = "app"
+# "module:ClassName". A string, not an import, so this file can be read and validated
+# on a machine where the compiler's own dependencies are not installed.
+compiler = "examples.two_minions:Sensor"
+refresh_interval = 1        # milliseconds
+
+
+[minion.FOLLOWER]
+kind = "app"
+compiler = "examples.two_minions:Follower"
+# Directional: FOLLOWER may read SENSOR's states, not the other way around. Declared on
+# one side only, because BaseMinion.connect is symmetric and idempotent -- it recurses
+# into the peer and checks for an existing queue first.
+connect = ["SENSOR"]
+refresh_interval = 1

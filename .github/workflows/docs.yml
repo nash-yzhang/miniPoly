@@ -1,0 +1,60 @@
+# Builds the MkDocs site and publishes it to GitHub Pages, which is this project's
+# canonical documentation host. The MPCDF GitLab copy builds the same site from the
+# same commit via .gitlab-ci.yml; because that copy is a mirror and never edited
+# directly, the two sites cannot drift apart.
+#
+# Why no `pip install -e .`: mkdocstrings reads the source through griffe, which is a
+# static AST analysis -- it does not import miniPoly, so none of PyQt5, VisPy, OpenCV
+# or pyusb has to be installable on the runner. Verified by building the whole site in
+# an environment where none of them were present.
+name: docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Serialise deploys without cancelling one midway: a half-published site is worse
+# than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Kept in step with the `docs` dependency group in pyproject.toml. `black` is
+      # not a docs dependency as such: mkdocstrings uses it only to pretty-print the
+      # rendered signatures, and logs an INFO line if it is missing.
+      - run: pip install mkdocs-material 'mkdocstrings[python]' black
+
+      # Deliberately not `--strict`: griffe emits 7 "No type or annotation for
+      # returned value" warnings for core/buffer.py and core/minion.py, and --strict
+      # turns those into a failed build. Add it once those annotations exist.
+      - run: mkdocs build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
