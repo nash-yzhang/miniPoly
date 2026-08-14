@@ -30,6 +30,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      # An unset secret expands to an empty string rather than failing, so a missing
+      # MPCDF_GITLAB_PATH builds the URL `https://oauth2:<token>@gitlab.mpcdf.mpg.de/.git`.
+      # GitLab redirects that to its sign-in page and git reports "unable to update url base
+      # from redirection", which names neither the secret nor the cause -- it reads like an
+      # authentication failure. Checking here costs a second and says what is actually wrong.
+      - name: Check the mirror secrets are set
+        env:
+          GITLAB_TOKEN: ${{ secrets.MPCDF_GITLAB_TOKEN }}
+          GITLAB_PATH: ${{ secrets.MPCDF_GITLAB_PATH }}
+        run: |
+          : "${GITLAB_PATH:?is not set. Add a repository secret MPCDF_GITLAB_PATH holding the GitLab project path, e.g. yuzha/minipoly -- no .git suffix, no leading slash.}"
+          : "${GITLAB_TOKEN:?is not set. Add a repository secret MPCDF_GITLAB_TOKEN holding a GitLab project access token with the write_repository scope and the Maintainer role.}"
+
       # Fast-forward, not forced. GitLab protects a project's default branch as soon as it
       # exists and rejects force pushes to it, so the first push here succeeded (creating
       # `main`) and every one after it was declined. A plain push cooperates with that
