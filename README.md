@@ -64,9 +64,11 @@ if __name__ == '__main__':
 Runnable as [examples/two_minions.py](examples/two_minions.py).
 
 Those last five lines — construct, `connect`, `attach_logger`, `run` — are the same for
-every rig, so a real application does not write them. `miniPoly.launcher` builds the same
-thing from a TOML file naming the minions, their compilers, the connect graph and the
-start order; see [examples/two_minions_config.py](examples/two_minions_config.py) and
+every rig, so a real application does not write them. **An application is a TOML file**:
+`miniPoly.launcher` builds the same thing from a file naming the minions, their compilers,
+the connect graph and the start order, and `Application.launch(path)` is the whole of the
+Python. There is no class to subclass — as of 1.1, not even for the two things that used
+to need one. See [examples/two_minions_config.py](examples/two_minions_config.py) and
 [examples/two_minions.toml](examples/two_minions.toml).
 
 Note what is passed to `AbstractAPP`: the compiler **class**, not an instance. It is

@@ -33,8 +33,9 @@ graph TB
         qnum["qnum.py<br/>qn (quaternion, standalone)"]
     end
     subgraph launcher["launcher — what an application is, and how it starts"]
-        lconfig["config.py<br/>RigConfig / MinionSpec / load_rig"]
+        lconfig["config.py<br/>RigConfig / MinionSpec / load_rig<br/>Writeback / WritebackDecl"]
         lapp["application.py<br/>Application"]
+        lrun["run.py<br/>launch_config / resolve_config / report"]
     end
 
     buffer --> minion
@@ -52,6 +53,7 @@ graph TB
     minion --> ugui
     lconfig --> lapp
     logging_ --> lapp
+    lapp --> lrun
 ```
 
 `qnum.py` has no internal miniPoly imports — it is pure quaternion math, consumed by the

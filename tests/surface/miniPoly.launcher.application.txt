@@ -1,7 +1,6 @@
 Any
 Application
 ConfigError
-MinionSpec
 Path
 RigConfig
 annotations

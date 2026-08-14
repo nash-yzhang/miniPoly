@@ -66,9 +66,11 @@ Runnable as
 Walk through it step by step, then change it yourself, in the [Tutorial](tutorial.md).
 
 Those last five lines — construct, `connect`, `attach_logger`, `run` — are the same for
-every rig, so a real application does not write them. `miniPoly.launcher` builds the same
-thing from a TOML file naming the minions, their compilers, the connect graph and the
-start order; see
+every rig, so a real application does not write them. **An application is a TOML file**:
+`miniPoly.launcher` builds the same thing from a file naming the minions, their compilers,
+the connect graph and the start order, and `Application.launch(path)` is the whole of the
+Python. There is no class to subclass — as of 1.1, not even for the two things that used
+to need one. See
 [examples/two_minions_config.py](https://github.com/nash-yzhang/miniPoly/blob/main/examples/two_minions_config.py)
 and the [launcher reference](reference/launcher.md).
 

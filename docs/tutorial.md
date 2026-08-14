@@ -178,10 +178,7 @@ refresh_interval = 1
 # examples/two_minions_config.py
 from miniPoly.launcher import Application
 
-class TwoMinions(Application):
-    """This rig adds nothing to the framework, so there is nothing here to write."""
-
-TwoMinions.launch("examples/two_minions.toml")
+Application.launch("examples/two_minions.toml")
 ```
 
 ```
@@ -208,21 +205,32 @@ formality:
   is that a typo is no longer caught by your editor, which is why every path is resolved
   up front, before a single process starts.
 
-What an application still has to declare in Python is whatever the file cannot know about
-it. For this rig, nothing. For a real one, usually two things:
+A real rig usually declares two more things. Both go in the file as well — there is no
+Python for an application to write:
 
-```python
-class MyRig(Application):
-    #: Compiler keywords holding a path that ships beside the config file, resolved
-    #: against it. Everything else passes through exactly as written -- a data drive or
-    #: a UNC share must not be rewritten, and no rule can tell those apart from a
-    #: stimulus folder, so this is a list rather than a rule.
-    PATH_KEYS = frozenset({"stimulus_folder", "shader_path"})
+```toml
+[app]
+# Compiler keywords holding a path that ships beside this config file, resolved against
+# it. Everything else passes through exactly as written -- a data drive or a UNC share
+# must not be rewritten, and no rule can tell those apart from a stimulus folder, so
+# this is a list rather than a rule.
+path_keys = ["stimulus_folder", "shader_path"]
 
-    @classmethod
-    def customise(cls, spec, config_dir):
-        """Whatever merging is this application's business and no other's."""
+# The half of this configuration the *program* writes rather than a human: a measurement
+# the rig saves and reads back. It goes in its own JSON file, because tomllib cannot
+# write and a machine-rewritten TOML loses the comments the hand-written half needs.
+[app.writeback]
+key        = "calibration"
+target     = "motor_dict"
+path_param = "motor_config"
+payload    = "motors"
+fields     = ["min_pos", "max_pos", "offset"]
 ```
+
+Until 1.1 these were a `PATH_KEYS` frozenset and a `customise()` hook on an `Application`
+subclass — one subclass per application, holding nothing else. A list of names is data, so
+it moved into the file, and the subclasses had nothing left in them. If you have one,
+delete it: `Application.launch(path)` works directly.
 
 ## Where to go next
 

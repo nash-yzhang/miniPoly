@@ -25,6 +25,8 @@ Standalone:  python tests/test_launcher.py
 pytest:      pytest tests/test_launcher.py
 """
 
+import json
+import pickle
 import sys
 import tempfile
 from pathlib import Path
@@ -34,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from miniPoly.launcher import (  # noqa: E402
     Application,
     ConfigError,
+    Writeback,
     apply_overrides,
     load_rig,
 )
@@ -260,20 +263,28 @@ def check_log_dir_resolves_and_never_stays_relative():
     return problems
 
 
+#: `[app] path_keys` is declared by the config file itself, so the fixtures below carry it
+#: in the TOML rather than passing it to `load_rig`. It was an `Application.PATH_KEYS`
+#: frozenset until 1.1.0; a list of keyword names is data, so it moved into the file.
+DECLARES_PATH_KEY = 'path_keys = ["stimulus_folder"]\n'
+
+
 def check_path_keys_resolve_against_the_config_file_and_must_exist():
     """The bug this whole mechanism exists for, in one test.
 
-    Every key an application puts in `PATH_KEYS` was once a bare or `../`-prefixed path
+    Every key a config puts in `[app] path_keys` was once a bare or `../`-prefixed path
     resolved by a compiler against the **process working directory** -- so it worked only
     from one folder, and moving the launcher took a minion down at startup.
     """
     problems = []
-    path_keys = frozenset({"stimulus_folder"})
+    declared = MINIMAL.replace("[app]\n", "[app]\n" + DECLARES_PATH_KEY, 1)
+    if DECLARES_PATH_KEY not in declared:
+        return ["the MINIMAL fixture no longer has an [app] table to declare path_keys in"]
+
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "stimuli").mkdir()
-        text = MINIMAL + '\nstimulus_folder = "stimuli"\n'
 
-        config = _load(tmp, text, path_keys=path_keys)
+        config = _load(tmp, declared + '\nstimulus_folder = "stimuli"\n')
         got = config.minions["A"].params["stimulus_folder"]
         want = str((Path(tmp) / "stimuli").resolve())
         if got != want:
@@ -284,25 +295,42 @@ def check_path_keys_resolve_against_the_config_file_and_must_exist():
         if not isinstance(got, str):
             problems.append(f"a resolved path key came back as {type(got).__name__}, not str")
 
+        # The declared set also reaches --set, so `apply_overrides` resolves the same keys
+        # the file's own values were resolved against. Carried on the parsed config for
+        # that reason; before 1.1.0 it was a class attribute both halves read.
+        if config.path_keys != frozenset({"stimulus_folder"}):
+            problems.append(f"RigConfig.path_keys is {set(config.path_keys)}, not the declared set")
+
         # Existence is checked here rather than in the compiler's own process, which for
         # a nine-minion rig may be the eighth to start.
         problems += _expect_error(
-            tmp, MINIMAL + '\nstimulus_folder = "no_such_dir"\n',
-            "does not exist", "a path key naming something absent", path_keys=path_keys,
+            tmp, declared + '\nstimulus_folder = "no_such_dir"\n',
+            "does not exist", "a path key naming something absent",
         )
 
         # A null path key is a real setting, not an omission: a shader that is not loaded
         # at startup, a database this rig does not write to.
-        config = _load(tmp, MINIMAL + '\nstimulus_folder = "@none"\n', path_keys=path_keys)
+        config = _load(tmp, declared + '\nstimulus_folder = "@none"\n')
         if config.minions["A"].params.get("stimulus_folder", "unset") is not None:
             problems.append("a null path key was not left as None")
 
         # A key that is not declared must pass through untouched, however path-like it
         # looks: savedir, remote_dir and netdrive_dir are a data drive, a host and a UNC
         # share, and rewriting any of them would break the rig.
-        config = _load(tmp, MINIMAL + '\nsavedir = "D:\\\\data\\\\"\n', path_keys=path_keys)
+        config = _load(tmp, declared + '\nsavedir = "D:\\\\data\\\\"\n')
         if config.minions["A"].params["savedir"] != "D:\\data\\":
             problems.append("an undeclared path-like key was rewritten")
+
+        # And a config that declares nothing resolves nothing, which is the safe default:
+        # resolving a key nobody asked about would turn a UNC share into a failing check.
+        config = _load(tmp, MINIMAL + '\nstimulus_folder = "no_such_dir"\n')
+        if config.minions["A"].params["stimulus_folder"] != "no_such_dir":
+            problems.append("an undeclared path key was resolved anyway")
+
+        problems += _expect_error(
+            tmp, MINIMAL.replace("[app]\n", '[app]\npath_keys = "stimulus_folder"\n', 1),
+            "must be a list", "path_keys given as a bare string",
+        )
     return problems
 
 
@@ -323,34 +351,147 @@ light_pin = 6
     return problems
 
 
-def check_the_customise_hook_runs_and_can_reject():
-    """The one extension point: an application's own merge step.
+#: `[app.writeback]`, plus a minion that opts in and something to overlay onto. This is
+#: what the `customise` hook became in 1.1.0: the hook was the one extension point, and
+#: across every application built on this framework its only implementation was this
+#: merge. The five names below were the only part of it that belonged to a rig.
+WRITEBACK = MINIMAL.replace(
+    "[defaults.streaming]",
+    """[app.writeback]
+key = "calibration"
+target = "motor_dict"
+path_param = "motor_config"
+payload = "motors"
+fields = ["min_pos", "offset"]
 
-    Called once per minion with the config file's directory, after everything generic has
-    happened -- so a hook can rely on defaults being applied and path keys resolved.
+[defaults.streaming]""",
+    1,
+) + """calibration = "calib.json"
+
+[minion.A.motor_dict]
+light_pin = 6
+
+[minion.A.motor_dict.axis_x]
+ID = 1
+min_pos = 0
+"""
+
+
+def _calib(tmp, entries, **extra):
+    (Path(tmp) / "calib.json").write_text(
+        json.dumps({**extra, "motors": entries}), encoding="utf-8"
+    )
+
+
+def check_the_write_back_file_is_merged_and_the_handle_injected():
+    """The half of a configuration the program writes, read back and overlaid.
+
+    Applied last, after defaults, null substitution and path keys, so a write-back file
+    overlays values that are already current -- the ordering the `customise` hook this
+    replaced also relied on.
     """
     problems = []
-    seen = []
-
-    def hook(spec, config_dir):
-        seen.append((spec.name, config_dir))
-        spec.params["added_by_hook"] = True
-
     with tempfile.TemporaryDirectory() as tmp:
-        config = _load(tmp, MINIMAL, customise=hook)
-        if [name for name, _ in seen] != ["A"]:
-            problems.append(f"customise was called for {[n for n, _ in seen]}, expected ['A']")
-        elif seen[0][1] != Path(tmp):
-            problems.append(f"customise got config_dir={seen[0][1]}, expected {Path(tmp)}")
-        if not config.minions["A"].params.get("added_by_hook"):
-            problems.append("customise's mutation did not reach the built spec")
+        _calib(tmp, {"axis_x": {"min_pos": 11, "offset": 3.5}}, note="a human wrote this")
+        spec = _load(tmp, WRITEBACK).minions["A"]
+        axis = spec.params["motor_dict"]["axis_x"]
 
-        def rejecting_hook(spec, config_dir):
-            raise ConfigError("the hook said no")
+        if axis.get("min_pos") != 11:
+            problems.append(f"the file did not overwrite the TOML's min_pos: {axis.get('min_pos')!r}")
+        if axis.get("offset") != 3.5:
+            problems.append("a field only the write-back file has was not added")
+        if axis.get("ID") != 1:
+            problems.append("merging clobbered a field only the TOML has")
+        if spec.params["motor_dict"].get("light_pin") != 6:
+            problems.append("a non-entry value in the target table was disturbed")
+        if "calibration" in spec.params:
+            problems.append("the opt-in key was passed through to the compiler")
 
+        handle = spec.params.get("motor_config")
+        if not isinstance(handle, Writeback):
+            problems.append(f"path_param holds {type(handle).__name__}, not a Writeback")
+            return problems
+        if handle.path != (Path(tmp) / "calib.json").resolve():
+            problems.append("the injected handle does not point at the file that was read")
+        # The compiler puts this in log lines, where the two names are noise.
+        if str(handle) != str(handle.path):
+            problems.append("str() on the handle is not the path")
+
+        # Frozen and carrying only a path and two names, because on Windows a minion is
+        # spawned rather than forked and every parameter is pickled on the way in.
+        if pickle.loads(pickle.dumps(handle)) != handle:
+            problems.append("the handle does not survive a pickle round trip")
+
+        # A minion that does not opt in is untouched, so one rig can have a calibrated
+        # servo and an uncalibrated camera.
+        plain = _load(tmp, WRITEBACK.replace('calibration = "calib.json"', "", 1)).minions["A"]
+        if "motor_config" in plain.params:
+            problems.append("a minion that declared no write-back file got a handle anyway")
+    return problems
+
+
+def check_the_write_back_file_saves_atomically_and_keeps_metadata():
+    """The write half. Nothing else in this suite reaches it, and no rig does until an
+    operator presses Save -- at which point the file is the only record of a measurement."""
+    problems = []
+    with tempfile.TemporaryDirectory() as tmp:
+        _calib(tmp, {"axis_x": {"min_pos": 0, "offset": 0.0}}, note="keep me", rig="bench")
+        handle = _load(tmp, WRITEBACK).minions["A"].params["motor_config"]
+
+        handle.save({"axis_x": {"min_pos": 7, "offset": -1.25}})
+        document = json.loads(handle.path.read_text(encoding="utf-8"))
+
+        if document.get("motors", {}).get("axis_x", {}).get("min_pos") != 7:
+            problems.append("the saved value is not on disk")
+        if document.get("note") != "keep me" or document.get("rig") != "bench":
+            problems.append("a machine rewrite dropped the hand-written metadata")
+        if "saved" not in document:
+            problems.append("no 'saved' timestamp was stamped")
+        if list(Path(tmp).glob("*.tmp")):
+            problems.append("the atomic write left its temporary file behind")
+        if handle.load() != {"axis_x": {"min_pos": 7, "offset": -1.25}}:
+            problems.append("what was written does not read back")
+    return problems
+
+
+def check_the_write_back_file_refuses_what_it_cannot_mean():
+    """Four rejections, each preferred over a failure that surfaces far from its cause."""
+    problems = []
+    with tempfile.TemporaryDirectory() as tmp:
+        # A field outside `fields`. A typo'd key that is quietly dropped is
+        # indistinguishable from a good save.
+        _calib(tmp, {"axis_x": {"offest": 1.0}})
+        problems += _expect_error(tmp, WRITEBACK, "offest", "a misspelled write-back field")
+
+        # An entry the target table does not declare. Adding it would let a stale file
+        # resurrect hardware that was deliberately removed from the setup.
+        _calib(tmp, {"axis_q": {"offset": 1.0}})
+        problems += _expect_error(tmp, WRITEBACK, "axis_q", "an entry absent from the target")
+
+        # Parsing stops rather than falling back to the TOML's own values, or the rig
+        # would run on the wrong measurements without saying so.
+        (Path(tmp) / "calib.json").unlink()
+        problems += _expect_error(tmp, WRITEBACK, "not found", "a missing write-back file")
+
+        _calib(tmp, {"axis_x": {"min_pos": 1}})
+        handle = _load(tmp, WRITEBACK).minions["A"].params["motor_config"]
+        try:
+            handle.save({"axis_x": {"min_pos": 1, "torque": True}})
+        except ConfigError as exc:
+            if "torque" not in str(exc):
+                problems.append(f"save rejected, but without naming the field: {exc}")
+        else:
+            problems.append("save accepted a field outside the declared set")
+
+        # All five names required: a guessed payload key would write a file the reader
+        # cannot read back.
         problems += _expect_error(
-            tmp, MINIMAL, "the hook said no", "a customise hook that rejects",
-            customise=rejecting_hook,
+            tmp, WRITEBACK.replace('payload = "motors"\n', "", 1),
+            "missing", "an [app.writeback] table with a name left out",
+        )
+        problems += _expect_error(
+            tmp, WRITEBACK.replace('fields = ["min_pos", "offset"]', "fields = []", 1),
+            "non-empty list", "an [app.writeback] with no fields",
         )
     return problems
 
@@ -544,7 +685,12 @@ CHECKS = (
     ("path keys resolve against the config file and must exist",
      check_path_keys_resolve_against_the_config_file_and_must_exist),
     ("the null sentinel becomes None", check_the_null_sentinel_becomes_none),
-    ("the customise hook runs and can reject", check_the_customise_hook_runs_and_can_reject),
+    ("the write-back file is merged and its handle injected",
+     check_the_write_back_file_is_merged_and_the_handle_injected),
+    ("the write-back file saves atomically and keeps metadata",
+     check_the_write_back_file_saves_atomically_and_keeps_metadata),
+    ("the write-back file refuses what it cannot mean",
+     check_the_write_back_file_refuses_what_it_cannot_mean),
     ("overrides are typed and validated", check_overrides_are_typed_and_validated),
     ("build constructs the declared minions without starting them",
      check_build_constructs_the_declared_minions_without_starting_them),

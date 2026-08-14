@@ -36,7 +36,6 @@ from typing import Any
 
 from miniPoly.launcher.config import (
     ConfigError,
-    MinionSpec,
     RigConfig,
     apply_overrides,
     load_rig,
@@ -46,14 +45,15 @@ from miniPoly.launcher.config import (
 
 
 class Application:
-    """A built, not-yet-running application: subclass this to define one.
+    """A built, not-yet-running application.
 
-    The class attributes below are the contract.  An application declares what a config
-    file cannot say about itself and inherits everything else, which is what keeps two
-    applications built on this framework legible to the same reader::
-
-        class GLApplication(Application):
-            PATH_KEYS = frozenset({"renderer_path", "shader_path"})
+    Not subclassed.  Both class attributes below are tables of *framework* classes and
+    *framework* keywords, so they are the same for every application; everything that
+    varies between applications is in its config file.  Until 2026-08-14 there was a
+    subclass per application, each declaring one or two lists of names -- which keywords
+    hold a neighbouring file's path, and what the running program writes back.  Both lists
+    moved into the config, since a list of names is data, and both subclasses then had
+    nothing left in them.
 
     Kept as an object rather than a single ``launch()`` function so that a test, or a dry
     run, can build the minions and inspect their parameters without starting any process.
@@ -97,15 +97,6 @@ class Application:
         "trigger_minion",
     })
 
-    #: Compiler keywords naming a file or directory that ships *beside the config file*,
-    #: resolved against it before being passed on.
-    #:
-    #: Empty here, and deliberately so: every such key is application vocabulary -- a
-    #: stimulus folder, a credential file, a renderer script. The library owns the
-    #: mechanism (see `resolve_path_keys`, which explains what it is defending against);
-    #: an application owns the list.
-    PATH_KEYS: frozenset[str] = frozenset()
-
     def __init__(self, config: RigConfig):
         self.config = config
         self.logger: Any = None
@@ -114,44 +105,30 @@ class Application:
         #: otherwise, so the names a config declares are the names the OS sees.
         self.suffix = ""
 
-    # -- the hook an application overrides ---------------------------------------------
-
-    @classmethod
-    def customise(cls, spec: MinionSpec, config_dir: Path) -> None:
-        """Adjust one minion's spec after parsing, before it is constructed.
-
-        Called once per minion, with the directory the config file lives in.  Mutate
-        `spec` in place; return value is ignored.
-
-        This is where an application does whatever merging is its own business and no
-        other application's -- overlaying a machine-written calibration file onto the
-        parameters a human wrote, say.  Everything generic has already happened by this
-        point: defaults applied, null sentinels substituted, `PATH_KEYS` resolved.
-
-        Raise :class:`~miniPoly.launcher.config.ConfigError` to reject the config; it will
-        be reported like any other structural error, before any process starts.
-        """
-
     # -- loading -----------------------------------------------------------------------
 
     @classmethod
     def load(cls, path: str | Path) -> RigConfig:
-        """Parse a config file under this application's declared vocabulary."""
-        return load_rig(
-            path,
-            kinds=frozenset(cls.KINDS),
-            ref_keys=cls.REF_KEYS,
-            path_keys=cls.PATH_KEYS,
-            customise=cls.customise,
-        )
+        """Parse a config file, validating it against the framework's own vocabulary.
+
+        There used to be a `customise` hook here, called once per minion so an application
+        could overlay a machine-written file onto the parameters a human wrote.  Its only
+        implementation was that overlay, so the overlay became `[app.writeback]` and
+        :func:`~miniPoly.launcher.config.load_rig` does it directly.  An application needing
+        a merge of some other shape overrides this method.
+        """
+        return load_rig(path, kinds=frozenset(cls.KINDS), ref_keys=cls.REF_KEYS)
 
     @classmethod
     def from_file(cls, path: str | Path, overrides: list[str] | None = None) -> "Application":
         """Parse `path`, apply any ``MINION.key=value`` overrides, and return an instance."""
         config = cls.load(path)
         if overrides:
+            # `config.path_keys` rather than a class attribute: the file declared them, and
+            # a `--set` value has to be resolved against the same set the file's own values
+            # were, or the two halves of one keyword would follow different rules.
             apply_overrides(
-                config, overrides, ref_keys=cls.REF_KEYS, path_keys=cls.PATH_KEYS
+                config, overrides, ref_keys=cls.REF_KEYS, path_keys=config.path_keys
             )
         return cls(config)
 

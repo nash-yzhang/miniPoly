@@ -17,17 +17,27 @@ This module is deliberately stdlib-only.  It imports no miniPoly, so a configura
 be parsed and validated on a machine with no framework and no hardware installed; turning
 a parsed config into live minions is :mod:`miniPoly.launcher.application`.
 
-The three sets that vary between applications -- which kinds exist, which keywords name a
-peer minion, which keywords name a neighbouring file -- are parameters here rather than
-constants, and :class:`~miniPoly.launcher.application.Application` is where an application
-declares them.
+Both halves of that split live here.  Reading is :func:`load_rig`; the write-back file is
+:class:`Writeback`, declared in the config as ``[app.writeback]`` and handed to the compiler
+that owns it.  They were in two places until 2026-08-14 -- the read half here, the write
+half as a 163-line module inside one application -- and the write half turned out to be
+this one's mechanism with five of that application's names embedded in it.  The names moved
+into the config file; the mechanism moved here, beside the reader it is the counterpart of.
+
+Which kinds exist and which keywords name a peer minion are parameters here rather than
+constants, declared by :class:`~miniPoly.launcher.application.Application` because every
+class in those tables is the framework's own.  Which keywords name a neighbouring file, and
+what the program writes back, are declared by the config file itself -- both are lists of
+names, and a list of names is data.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import tomllib
-from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from importlib import import_module
 from pathlib import Path
 from typing import Any
@@ -63,6 +73,170 @@ class MinionSpec:
     params: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class Writeback:
+    """A handle on one write-back file: the config values the *program* writes.
+
+    Constructed by :class:`WritebackDecl` during parsing and injected into the parameters
+    of the one minion that owns the file, so the compiler that writes it never has to know
+    where it is or what shape it has -- it calls `save` with the values it measured.
+
+    Frozen, and carrying nothing but a path and two names, so it survives being handed to a
+    process: on Windows a minion is spawned rather than forked, which means every parameter
+    is pickled.  A bound method or a closure would not survive that; this does.
+
+    The file is JSON rather than TOML for the reason this module's own header gives --
+    ``tomllib`` cannot write, and a machine-rewritten TOML loses the comments that the
+    hand-written half most needs.  That is why the two halves are two files.
+    """
+
+    #: Absolute path of the JSON file.  Resolved against the config file's directory at
+    #: parse time, so a config directory can be moved as a unit.
+    path: Path
+    #: Top-level key in that JSON holding the entries, e.g. ``"motors"``.
+    payload: str
+    #: The only per-entry fields this file may carry.  An unknown key is an error rather
+    #: than a silent no-op, because a typo'd key that is quietly dropped is
+    #: indistinguishable from a good save.
+    fields: frozenset[str]
+
+    def load(self) -> dict[str, dict[str, Any]]:
+        """Read the file and return its entries.
+
+        Raises rather than returning a partial result: a write-back file that cannot be
+        read must stop the launch, not silently fall back to the values in the TOML, or the
+        application would run on the wrong measurements without saying so.
+        """
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise ConfigError(f"write-back file not found: {self.path}") from exc
+        except json.JSONDecodeError as exc:
+            raise ConfigError(f"write-back file {self.path} is not valid JSON: {exc}") from exc
+
+        if not isinstance(raw, dict) or self.payload not in raw:
+            raise ConfigError(
+                f"write-back file {self.path} must be an object with a "
+                f"{self.payload!r} key"
+            )
+        entries = raw[self.payload]
+        if not isinstance(entries, dict):
+            raise ConfigError(
+                f"{self.payload!r} in {self.path} must be an object, "
+                f"got {type(entries).__name__}"
+            )
+        for name, values in entries.items():
+            if not isinstance(values, dict):
+                raise ConfigError(f"{self.payload}[{name!r}] in {self.path} must be an object")
+            self._check_fields(name, values, f"{self.payload}[{name!r}] in {self.path} has")
+        return entries
+
+    def save(self, entries: dict[str, dict[str, Any]]) -> None:
+        """Write `entries`, atomically, preserving whatever metadata the file already had.
+
+        Atomically because this file is the only record of a measurement: a crash or a
+        power cut partway through a plain write would leave a truncated file and no values,
+        and they cannot be recovered by re-reading any code.
+
+        Every top-level key other than `payload` is read back and carried over, so a human
+        comment survives a machine rewrite.  Only `payload` and ``saved`` are replaced.
+        """
+        for name, values in entries.items():
+            self._check_fields(name, values, f"refusing to save {name!r} with")
+
+        document: dict[str, Any] = {}
+        if self.path.exists():
+            try:
+                existing = json.loads(self.path.read_text(encoding="utf-8"))
+                if isinstance(existing, dict):
+                    document = {k: v for k, v in existing.items() if k != self.payload}
+            except (OSError, json.JSONDecodeError):
+                # An unreadable existing file must not block the save -- the values in hand
+                # are worth more than the metadata that would be preserved.
+                document = {}
+
+        document["saved"] = datetime.now().isoformat(timespec="seconds")
+        document[self.payload] = entries
+
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        tmp.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+        os.replace(tmp, self.path)
+
+    def _check_fields(self, name: str, values: dict[str, Any], prefix: str) -> None:
+        unknown = sorted(set(values) - self.fields)
+        if unknown:
+            raise ConfigError(
+                f"{prefix} unknown field(s) {unknown}; only {sorted(self.fields)} belong "
+                f"in a write-back file"
+            )
+
+    def __str__(self) -> str:
+        # Compilers put this in log lines and error messages, where the path is the useful
+        # half and the two names are noise.
+        return str(self.path)
+
+
+@dataclass(frozen=True)
+class WritebackDecl:
+    """``[app.writeback]``: the five names that make :class:`Writeback` this app's.
+
+    The mechanism is generic; what is not is the vocabulary -- what the opt-in key is
+    called, which parameter the values land on, what the JSON's payload key is, and which
+    fields are measurements rather than configuration.  Those are five strings, so they are
+    declared in the config file rather than in a Python subclass.
+    """
+
+    #: The ``[minion.X]`` key a minion opts in with, whose value is the file's path.
+    key: str
+    #: The parameter the loaded entries are overlaid onto, e.g. ``"motor_dict"``.
+    target: str
+    #: The parameter the :class:`Writeback` handle is injected as, for the compiler to
+    #: write through.  Derived rather than declared twice in the TOML: a second path key
+    #: could drift, and then the file that was read would stop being the file written.
+    path_param: str
+    #: Passed to :attr:`Writeback.payload`.
+    payload: str
+    #: Passed to :attr:`Writeback.fields`.
+    fields: frozenset[str]
+
+    def apply(self, spec: MinionSpec, config_dir: Path) -> None:
+        """Overlay this minion's write-back file onto `target`, if it declares one."""
+        declared = spec.params.pop(self.key, None)
+        if declared is None:
+            return
+
+        where = f"[minion.{spec.name}]"
+        if not isinstance(declared, str):
+            raise ConfigError(f"{where}: {self.key} must be a path string")
+
+        target = spec.params.get(self.target)
+        if not isinstance(target, dict):
+            raise ConfigError(
+                f"{where} declares {self.key} but has no {self.target} to merge it into"
+            )
+
+        handle = Writeback(
+            path=(config_dir / declared).resolve(), payload=self.payload, fields=self.fields
+        )
+        for name, values in handle.load().items():
+            if name not in target:
+                raise ConfigError(
+                    f"{where}: {self.key} names {name!r}, which is not in {self.target} "
+                    f"(has {sorted(k for k, v in target.items() if isinstance(v, dict))})"
+                )
+            # The tempting alternative -- add it -- would let a write-back file resurrect an
+            # entry that was deliberately removed from the config, and the failure would
+            # surface only when the compiler addressed hardware that is not on the bus.
+            if not isinstance(target[name], dict):
+                raise ConfigError(
+                    f"{where}: {self.target}[{name!r}] is {type(target[name]).__name__}, "
+                    "not a table, so it cannot take write-back values"
+                )
+            target[name].update(values)
+
+        spec.params[self.path_param] = handle
+
+
 @dataclass
 class RigConfig:
     """A parsed rig file, ready for :mod:`miniPoly.launcher.application` to build."""
@@ -91,6 +265,10 @@ class RigConfig:
     #: application that must not be started twice is better served by the second launch
     #: failing on a name collision than by two of them fighting over one serial port.
     unique_names: bool = False
+    #: The effective ``[app] path_keys``, kept because ``--set`` has to resolve the same
+    #: keys the file did.  Stored on the parsed config rather than re-read from the file:
+    #: `apply_overrides` runs after parsing and would otherwise need the raw TOML again.
+    path_keys: frozenset[str] = frozenset()
 
     def compiler_paths(self) -> dict[str, str]:
         return {name: spec.compiler for name, spec in self.minions.items()}
@@ -112,19 +290,17 @@ def load_rig(
     *,
     kinds: frozenset[str] | set[str],
     ref_keys: frozenset[str] = frozenset(),
-    path_keys: frozenset[str] = frozenset(),
-    customise: Callable[[MinionSpec, Path], None] | None = None,
 ) -> RigConfig:
     """Parse a rig TOML file into a :class:`RigConfig`.
 
     Every structural error is raised here, before any minion is constructed and therefore
     before any serial port is opened or any motor moves.
 
-    `kinds`, `ref_keys` and `path_keys` come from the
-    :class:`~miniPoly.launcher.application.Application` subclass being launched; see there
-    for what each means.  `customise` is that class's per-minion hook, called once per
-    minion with its spec and the directory the config file lives in, after everything
-    generic has been resolved.
+    `kinds` and `ref_keys` name framework classes and framework keywords, so they come from
+    :class:`~miniPoly.launcher.application.Application`.  The two things that are the
+    application's own vocabulary -- ``[app] path_keys`` and ``[app.writeback]`` -- are read
+    out of the file itself.  Both are lists of names; declaring them in Python bought a
+    subclass per application and nothing else.
     """
     path = Path(path)
     try:
@@ -152,9 +328,12 @@ def load_rig(
                 f"expected one of {sorted(kinds)}"
             )
 
+    path_keys = _parse_path_keys(app_table, path)
+    writeback = _parse_writeback(app_table, path)
+
     minions: dict[str, MinionSpec] = {}
     for name, table in minion_tables.items():
-        minions[name] = _build_spec(name, table, defaults, path, kinds, path_keys, customise)
+        minions[name] = _build_spec(name, table, defaults, path, kinds, path_keys, writeback)
 
     # Every connect target must exist.  Left unchecked, a typo produces an
     # AttributeError deep inside the builder naming the wrong object.
@@ -226,6 +405,62 @@ def load_rig(
         run_order=run_order,
         log_dir=log_path.resolve(),
         unique_names=unique_names,
+        path_keys=path_keys,
+    )
+
+
+def _parse_path_keys(app_table: dict[str, Any], path: Path) -> frozenset[str]:
+    """``[app] path_keys``: which compiler keywords name a file beside the config file.
+
+    Absent means none, which is the right default: resolving a key that was not asked about
+    would turn a data drive or a UNC share into a path check that fails.  See
+    :func:`resolve_path_keys` for why this is a list rather than a rule.
+    """
+    declared = app_table.get("path_keys", [])
+    if not isinstance(declared, list) or not all(isinstance(k, str) for k in declared):
+        raise ConfigError(f"{path}: [app] path_keys must be a list of keyword names")
+    return frozenset(declared)
+
+
+def _parse_writeback(app_table: dict[str, Any], path: Path) -> WritebackDecl | None:
+    """``[app.writeback]``: the five names for the half of the config the program writes.
+
+    Absent means this application has no write-back file, which most do not.  All five keys
+    are required when the table is present: there is no sensible default for any of them,
+    and a guessed payload key would write a file the reader cannot read back.
+    """
+    table = app_table.get("writeback")
+    if table is None:
+        return None
+    if not isinstance(table, dict):
+        raise ConfigError(f"{path}: [app.writeback] must be a table")
+
+    required = ("key", "target", "path_param", "payload", "fields")
+    missing = [k for k in required if k not in table]
+    if missing:
+        raise ConfigError(
+            f"{path}: [app.writeback] is missing {missing}; all of {list(required)} "
+            "are required when the table is present"
+        )
+    unknown = sorted(set(table) - set(required))
+    if unknown:
+        raise ConfigError(f"{path}: [app.writeback] has unknown key(s) {unknown}")
+
+    for key in required[:-1]:
+        if not isinstance(table[key], str) or not table[key]:
+            raise ConfigError(f"{path}: [app.writeback] {key} must be a non-empty string")
+    fields = table["fields"]
+    if not isinstance(fields, list) or not fields or not all(isinstance(f, str) for f in fields):
+        raise ConfigError(
+            f"{path}: [app.writeback] fields must be a non-empty list of field names"
+        )
+
+    return WritebackDecl(
+        key=table["key"],
+        target=table["target"],
+        path_param=table["path_param"],
+        payload=table["payload"],
+        fields=frozenset(fields),
     )
 
 
@@ -236,7 +471,7 @@ def _build_spec(
     path: Path,
     kinds: frozenset[str] | set[str],
     path_keys: frozenset[str],
-    customise: Callable[[MinionSpec, Path], None] | None,
+    writeback: WritebackDecl | None,
 ) -> MinionSpec:
     where = f"{path}: [minion.{name}]"
     if not isinstance(table, dict):
@@ -273,8 +508,10 @@ def _build_spec(
         connect=list(connect),
         params=params,
     )
-    if customise is not None:
-        customise(spec, path.parent)
+    # Last, so the write-back file overlays values that have already had defaults applied,
+    # null sentinels substituted and path keys resolved.
+    if writeback is not None:
+        writeback.apply(spec, path.parent)
     return spec
 
 
@@ -299,10 +536,11 @@ def resolve_path_keys(
     means at that shell, and one written in a config file means what it means beside that
     file.  Both are anchors that were chosen; neither is the accident this prevents.
 
-    An application declares this set explicitly rather than inheriting a rule, because
-    every obvious rule is wrong.  Matching a `_dir`/`_folder` suffix would also catch a
-    data drive, a remote host and a UNC share, which must pass through exactly as written.
-    Adding a key is a deliberate act, which is the point.
+    The set is declared explicitly -- in ``[app] path_keys``, by the config file itself --
+    rather than inherited from a rule, because every obvious rule is wrong.  Matching a
+    `_dir`/`_folder` suffix would also catch a data drive, a remote host and a UNC share,
+    which must pass through exactly as written.  Adding a key is a deliberate act, which is
+    the point.
     """
     for key in sorted(path_keys & set(params)):
         value = params[key]

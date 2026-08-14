@@ -76,6 +76,7 @@ nav:
       - Read multi-process logs: howto/reading-multi-process-logs.md
       - Shut down a rig cleanly: howto/graceful-shutdown.md
       - Timer and trigger minions: howto/timer-and-trigger-minions.md
+      - Config the program writes back: howto/config-the-program-writes-back.md
   - Reference:
       - core: reference/core.md
       - compiler: reference/compiler.md
