@@ -30,11 +30,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Fast-forward, not forced. GitLab protects a project's default branch as soon as it
+      # exists and rejects force pushes to it, so the first push here succeeded (creating
+      # `main`) and every one after it was declined. A plain push cooperates with that
+      # protection instead of requiring it to be torn off a mirror nobody commits to.
+      #
+      # The cost is explicit: if GitHub's history is ever rewritten, this step fails rather
+      # than silently overwriting the mirror. That is the better failure -- run one manual
+      # `git push --force` to the GitLab remote and this resumes. Silent divergence is what
+      # a mirror must never do.
       - name: Push branch and tags to GitLab
         env:
           GITLAB_TOKEN: ${{ secrets.MPCDF_GITLAB_TOKEN }}
           GITLAB_PATH: ${{ secrets.MPCDF_GITLAB_PATH }}
         run: |
           remote="https://oauth2:${GITLAB_TOKEN}@gitlab.mpcdf.mpg.de/${GITLAB_PATH}.git"
-          git push --force "$remote" HEAD:refs/heads/main
-          git push --force --tags "$remote"
+          git push "$remote" HEAD:refs/heads/main
+          git push --tags "$remote"
