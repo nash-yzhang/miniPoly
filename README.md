@@ -63,6 +63,12 @@ if __name__ == '__main__':
 
 Runnable as [examples/two_minions.py](examples/two_minions.py).
 
+Those last five lines — construct, `connect`, `attach_logger`, `run` — are the same for
+every rig, so a real application does not write them. `miniPoly.launcher` builds the same
+thing from a TOML file naming the minions, their compilers, the connect graph and the
+start order; see [examples/two_minions_config.py](examples/two_minions_config.py) and
+[examples/two_minions.toml](examples/two_minions.toml).
+
 Note what is passed to `AbstractAPP`: the compiler **class**, not an instance. It is
 constructed inside the child process, which is what lets Qt / vispy / ctypes objects
 live inside a minion at all under Windows `spawn`. That split — process shell in the
@@ -85,9 +91,12 @@ everything else follows from it.
 - **No fixed roles.** `timer_minion` (the clock) and `trigger_minion` (the control
   source) are constructor arguments, not types. Any minion can be either, and a rig with
   neither is legal.
-- **Batteries for real hardware**: The Imaging Source cameras (bundled ctypes bindings),
-  Dynamixel servos with a closed loop, optical-mouse displacement sensors, serial
-  devices, a Qt GUI toolkit, a vispy/OpenGL renderer and a logging process.
+- **Batteries for real hardware**: Dynamixel servos with a closed loop, optical-mouse
+  displacement sensors, serial devices, a Qt GUI toolkit, a vispy/OpenGL renderer and a
+  logging process. Cameras come as `AbstractCameraCompiler`, which owns the streaming,
+  buffering and recording and leaves six hooks for a vendor SDK — the concrete
+  The Imaging Source implementation, with its bundled DLLs, lives in the application
+  repository rather than here, since a vendor binary is not rig-agnostic.
 
 ## Measured, on the rig
 

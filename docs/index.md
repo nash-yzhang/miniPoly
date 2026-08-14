@@ -94,9 +94,13 @@ everything else follows from it.
 - **No fixed roles.** `timer_minion` (the clock) and `trigger_minion` (the control
   source) are constructor arguments, not types. Any minion can be either, and a rig with
   neither is legal. See [Timer and trigger minions](howto/timer-and-trigger-minions.md).
-- **Batteries for real hardware**: The Imaging Source cameras (bundled ctypes bindings),
-  Dynamixel servos with a closed loop, optical-mouse displacement sensors, serial
-  devices, a Qt GUI toolkit, a vispy/OpenGL renderer and a logging process.
+- **Batteries for real hardware**: Dynamixel servos with a closed loop, optical-mouse
+  displacement sensors, serial devices, a Qt GUI toolkit, a vispy/OpenGL renderer and a
+  logging process. Cameras come as `AbstractCameraCompiler`, which owns the streaming,
+  buffering and recording and leaves six hooks for a vendor SDK — see
+  [Write a new device compiler](howto/write-a-compiler.md). The concrete The Imaging
+  Source implementation, with its bundled DLLs, lives in the application repository
+  rather than here, since a vendor binary is not rig-agnostic.
 
 ## Measured, on the rig
 
